@@ -58,14 +58,19 @@
 - The current Python stack is for development velocity; whisper.cpp is for shipping.
 
 ## Versioning
-- Current version line: **v0.3.0** -- Dashboard and theme system added.
+- Current version line: **v0.3.1** -- Dashboard polish, custom dropdowns, public release prep.
 - Tag releases as `vMAJOR.MINOR.PATCH` when publishing milestones.
 
-## Public release strategy
-- The repo will eventually go public. Internal docs (SOUL.md, AGENTS.md, ROADMAP.md, TODO.md) are **not** for public eyes.
-- When ready: strip internal docs, write a clean public README, and package a release binary.
-- Until then, develop normally with the full doc set.
+## Repository setup
+- **Two GitHub repos, one local folder:**
+  - `origin` → `github.com/DanielMevit/Eqho` — **PUBLIC** repo. Only gets stable, polished updates.
+  - `private` → `github.com/DanielMevit/Eqho-private` — **Private** repo. Gets all work-in-progress commits.
+- **Two branches:**
+  - `dev` — daily working branch. Default push goes to `private/dev`.
+  - `main` — public-facing branch. Only merge from `dev` when ready to release.
+- Agent instruction files live in `agent-instructions/` (not in repo root).
 
 ## Commit & push
 - Commit message format: `type(scope): short description` (conventional commits).
-- Always push to `origin main` after a passing build/verification.
+- Daily work: commit to `dev`, push to `private` repo (`git push`).
+- Public release: `git checkout main` → `git merge dev` → `git push origin main` → `git checkout dev`. Only do this when Daniel explicitly says to publish.
