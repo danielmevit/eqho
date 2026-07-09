@@ -247,7 +247,7 @@ class App:
     def quit(self) -> None:
         log.info("Shutting down...")
         # Close dashboard first to avoid tkinter Variable.__del__ errors
-        from .dashboard import shutdown_dashboard
+        from .ui import shutdown_dashboard
         shutdown_dashboard()
         self._restore_volume()  # always unmute on exit
         self.hotkey.unregister()

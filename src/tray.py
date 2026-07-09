@@ -11,7 +11,7 @@ import pystray
 
 from .settings import Settings, SUPPORTED_LANGUAGES, WHISPER_MODELS, VOLUME_DUCK_OPTIONS, OVERLAY_POSITIONS
 from .audio import list_input_devices
-from .dashboard import open_dashboard
+from .ui import open_dashboard
 
 log = logging.getLogger(__name__)
 
