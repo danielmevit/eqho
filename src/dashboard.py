@@ -26,6 +26,7 @@ from .theme import (
     RADIUS_SM, RADIUS_MD, RADIUS_LG, RADIUS_XL,
     FONT_SIZES, SPACING, ACCENT,
 )
+from .version import __version__
 
 log = logging.getLogger(__name__)
 
@@ -1558,7 +1559,7 @@ class Dashboard(ctk.CTkToplevel):
         inner.pack(fill="x", padx=SPACING["lg"], pady=SPACING["lg"])
 
         details = [
-            ("Version", "0.3.0"),
+            ("Version", __version__),
             ("Engine", "faster-whisper (CTranslate2)"),
             ("Default Model", "Distil Large v3"),
             ("GPU", "CUDA (NVIDIA) with CPU fallback"),

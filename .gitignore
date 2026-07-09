@@ -23,3 +23,6 @@ Thumbs.db
 # App data (not secrets, but local)
 *.log
 settings.json
+
+# CodeGraph index (local, per-machine — rebuild with `codegraph init`)
+.codegraph/

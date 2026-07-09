@@ -131,57 +131,9 @@ The app auto-detects CUDA. If `cublas64_12.dll` is not found, it logs a warning 
 
 ## Structure
 
-```
-Eqho/
-  README.md            -- this file
-  CHANGELOG.md         -- timestamped release notes
-  ROADMAP.md           -- planned features & milestones
-  COMMANDS.md          -- PowerShell command reference
-  LICENSE              -- AGPL-3.0 license
-  requirements.txt     -- Python dependencies
-  run.py               -- top-level launcher
-  Eqho.spec            -- PyInstaller config
-  build.ps1            -- build script for standalone .exe
-  agent-instructions/  -- internal agent guidance (SOUL, AGENTS, TODO)
-  src/
-    __init__.py
-    __main__.py         -- python -m src support
-    main.py             -- entry point, wires all modules
-    settings.py         -- config persistence (%AppData%\Eqho)
-    transcriber.py      -- faster-whisper wrapper with energy-based VAD
-    audio.py            -- microphone device enumeration
-    overlay.py          -- floating transcription preview (tkinter)
-    hotkey.py           -- global hotkey listener
-    injector.py         -- text injection into active app (with window focus restore)
-    tray.py             -- system tray icon & menu
-    settings_ui.py      -- legacy hotkey capture window
-    dashboard.py        -- settings dashboard (customtkinter)
-    theme.py            -- design tokens, color palettes, theme system
-    fonts.py            -- Inter font loader (Windows AddFontResourceEx)
-  assets/
-    icon_64.png         -- legacy tray icon (full brightness)
-    icon_64_active.png  -- legacy tray icon (active/listening)
-    icon_64_inactive.png -- legacy tray icon (dimmed/idle)
-    logo_62_dark.png    -- tray icon (62px "e" mark, blue on transparent)
-    logo_62_white.png   -- tray icon (62px "e" mark, white on transparent)
-    logo_32_dark.png    -- small logo (32px "e" mark, blue)
-    logo_32_white.png   -- small logo (32px "e" mark, white)
-    logo_horizontal_dark.png  -- wordmark (140x60, dark text for light theme)
-    logo_horizontal_light.png -- wordmark (140x60, light text for dark theme)
-    eqho.ico            -- Windows .ico for packaged .exe
-    fonts/
-      Inter-*.otf       -- Inter font family (Regular, Medium, SemiBold, Bold)
-      LICENSE-Inter.txt  -- SIL Open Font License
-  logo/
-    eqho_logo.svg       -- project logo (vector source)
-    eqho_logo.ai        -- project logo (Illustrator source)
-    logo_horizontal_dark.png  -- wordmark for light backgrounds
-    logo_horizontal_light.png -- wordmark for dark backgrounds
-    logo_32_dark.png    -- 32px mark (blue)
-    logo_32_white.png   -- 32px mark (white)
-    logo_62_dark.png    -- 62px mark (blue)
-    logo_62_white.png   -- 62px mark (white)
-```
+Top level: `run.py` (launcher) · `src/` (application modules) · `assets/` (icons, wordmarks, bundled Inter fonts) · `logo/` (vector sources) · `docs/ai/` + `AGENTS.md` (agent onboarding docs) · `CHANGELOG.md` / `ROADMAP.md` / `COMMANDS.md` / `TODO.md`.
+
+For code structure, the repo is CodeGraph-indexed: run `codegraph init` after cloning, then `codegraph explore "..."` to navigate symbols and call paths.
 
 ## Building a Standalone .exe
 

@@ -4,6 +4,17 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.3.2] - 2026-07-09
+
+### Added
+- **CodeGraph index** — repo is now CodeGraph-indexed for structural navigation (`codegraph init`; `.codegraph/` gitignored). Markdown no longer hand-maintains file maps.
+- **`src/version.py`** — single source of truth for the version; the About tab reads it (fixes the displayed "0.3.0" lagging the documented 0.3.1).
+
+### Changed
+- **Docs restructured per the `_refs` AI-setup playbook** — new root `AGENTS.md` (short router) + `docs/ai/` intent files (`START_HERE`, `DESIGN_SYSTEM`, `DECISIONS`, `GOTCHAS`). `SOUL.md` and `TODO.md` moved to repo root; `agent-instructions/` removed (its rulebook content absorbed into the router + GOTCHAS + DECISIONS). TODO de-staled (license + docs-relocation items were long done).
+- **ROADMAP renumbered** for the 2026-07 overhaul: Phase 3 = engine hardening (v0.3.x), Phase 4 = UI overhaul + Windows packaging (v0.4.x), Phase 5 = local features (v0.5.x), Phase 6 = cross-platform (v0.6.x), Phase 7 = public launch (→1.0), Phase 8 = whisper.cpp native engine (future).
+- README structure tree replaced with a short pointer (CodeGraph owns structure); build.ps1 header no longer hardcodes a version.
+
 ## [0.3.1] - 2026-04-01
 
 ### Added

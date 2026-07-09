@@ -1,6 +1,6 @@
 # Roadmap
 
-Planned features and milestones for Eqho.
+Planned features and milestones for Eqho. Renumbered 2026-07-09 for the overhaul plan (see CHANGELOG 0.3.2).
 
 ## Phase 1 -- Core Dictation (v0.1.x) [done]
 - [x] faster-whisper integration with energy-based VAD and streaming transcription
@@ -16,47 +16,67 @@ Planned features and milestones for Eqho.
 - [x] Tray icon from project logo (active/inactive states)
 - [x] Distil-Whisper as default (English-optimized, fastest high-quality model)
 
-## Phase 2 -- Polish & Reliability (v0.2.x) [done]
-- [x] Audio device selector in tray menu (pick which microphone)
-- [x] Volume while speaking (mute/50%/25%/10%/off via pycaw)
-- [x] Hotkey rewrite — hold mode uses keyboard.hook() to avoid library bug, toggle has 400ms debounce
-- [x] Window focus capture/restore for correct paste target
-- [x] Rename from Ekho to Eqho (code, docs, config paths, build scripts)
-- [x] Hotkey customization UI (press-to-capture in a settings window)
-- [x] Startup with Windows toggle (registry-based)
-- [x] Notification on model download progress (first run)
-- [x] Graceful error handling for missing microphone
-- [x] Overlay position preference (bottom-center, top-center, corner)
-- [x] Tray tooltip showing current hotkey and language
-- [x] **Dashboard** — customtkinter settings window with sidebar nav, theme system, model cards, singleton behavior
-- [x] **Inter font** bundled as standard app typeface
-- [x] **Theme system** — dark, light, system (auto-detect from Windows registry)
-- [x] **Responsive dashboard** — resizable window, 2→3 column grid layout with breakpoints
-- [x] **New logo assets** — horizontal wordmark, 32px/62px "e" mark variants
-- [x] **Overlay rounded corners** — Windows 11 DWM API
-- [x] **Light theme contrast** — improved bg/fg hierarchy, darker text, visible borders
-- [x] **Custom dropdown widget** — ThemedDropdown replaces native tkinter.Menu popups
-- [x] **Dashboard not always-on-top** — dashboard window no longer stays above all windows
-- [x] **About tab responsive** — 2-column grid layout on wider windows
-- [x] **Tray icon theme detection** — reads Windows registry for taskbar light/dark mode
-- [x] **Window title bar icon** — set from new logo PNGs via iconphoto()
+## Phase 2 -- Polish & Reliability (v0.2.x–v0.3.1) [done]
+- [x] Audio device selector, volume ducking (pycaw), hotkey rewrite, focus capture/restore
+- [x] Ekho→Eqho rename, hotkey customization UI, start-with-Windows, download notification
+- [x] Overlay position preference, tray tooltip, mic error handling
+- [x] **Dashboard** (customtkinter, sidebar nav, model cards, singleton)
+- [x] Inter font bundled · theme system (dark/light/system) · responsive 1→2→3 col grid
+- [x] New logo assets, overlay DWM rounded corners, light-theme contrast pass
+- [x] ThemedDropdown widget, dashboard not-always-on-top, About tab responsive
+- [x] Tray icon theme detection, window title bar icon (both shipped with known issues → Phase 4)
 
-## Phase 3 -- Advanced Features (v0.3.x)
-- [ ] Transcript history log (save past dictations to a local file)
-- [ ] Voice commands (e.g. "new line", "period", "delete that")
-- [ ] Per-application paste mode rules (some apps need typing, not clipboard)
-- [ ] Sound feedback (subtle chime on start/stop)
-- [ ] Whisper prompt/prefix for domain-specific vocabulary
+## Phase 3 -- Engine Hardening (v0.3.x)
+- [ ] `platformdirs` for config + model cache (kills hardcoded `D:\EqhoModels`; migrates existing installs)
+- [ ] Model-load race fixes; model loading off the hotkey thread ("Loading model…" overlay state)
+- [ ] O(n²) audio buffer fix (chunk list); partials transcribe a bounded tail only
+- [ ] Hallucination gating (`no_speech_prob`/`avg_logprob`/peak-RMS + artifact blocklist)
+- [ ] Clipboard failure guards (fall back to simulated typing)
+- [ ] CPU warm-up transcribe (parity with the CUDA smoke test)
+- [ ] `run.py --smoke` headless verification gate (used by every later milestone + CI)
 
-## Phase 4 -- whisper.cpp Migration & Native App (v0.4.x)
-Migrate from Python + faster-whisper to a native engine for a clean, distributable product.
-- [ ] Replace faster-whisper with **whisper.cpp** (C++ engine, zero Python dependency)
-- [ ] Evaluate Tauri (Rust) or C#/WPF for the app shell (replacing tkinter overlay + pystray)
-- [ ] Dynamic model download on first launch (keep installer small)
-- [ ] Ship as a single lightweight installer (MSI, MSIX, or Inno Setup)
-- [ ] Signed Windows binary
-- [ ] Auto-update mechanism
-- [ ] Plugin system for custom post-processing (e.g. punctuation cleanup, formatting)
+## Phase 4 -- UI Overhaul + Windows Packaging (v0.4.x)
+Toolcraft-inspired restyle (original code only — see DECISIONS.md) + consumer-grade Windows installs.
+- [ ] Split `dashboard.py` into `src/ui/` (widgets / layout / tabs / orchestrator) with pub-sub context
+- [ ] New token system: near-black dark ramp, hairline 1px borders, compact radii (4/6/8/12), `font()` helper
+- [ ] Fix the 5 deferred v0.3.1 issues (dropdown polish, title-bar icon, tray theme refresh, responsive rebuild, unified padding)
+- [ ] Dark title bar (DWM), new logo assets adoption, overlay restyle (pulse + fade)
+- [ ] `packaging/windows/`: onedir PyInstaller spec + Inno Setup installer + portable zip
+- [ ] GitHub Actions release workflow (tag → installer + zip artifacts)
+
+## Phase 5 -- Local Features (v0.5.x)
+All 100% local — no cloud, no server.
+- [ ] Transcript history log (JSONL) + functional History tab (search, copy, delete, export)
+- [ ] Whisper `initial_prompt` custom vocabulary setting
+- [ ] Text replacements (user-defined, applied before injection)
+- [ ] Voice commands ("new line", "period", "delete that") — opt-in
+- [ ] Sound feedback chime (synthesized, cross-platform via sounddevice)
+
+## Phase 6 -- Cross-Platform (v0.6.x)
+Core dictation on Linux + macOS with graceful degradation.
+- [ ] `src/oskit/` platform abstraction (volume duck, hotkeys, focus, autostart, fonts, theme)
+- [ ] pynput hotkey backend (Linux/macOS; Windows keeps `keyboard` until validated)
+- [ ] Platform-marked requirements; pystray backends per OS
+- [ ] Linux tar.gz + AppImage · macOS .app + unsigned dmg
+- [ ] CI build matrix (windows/ubuntu/macos) with headless `--smoke`
+
+## Phase 7 -- Public Launch (→ v1.0)
+- [x] Relocate internal docs (now root AGENTS/SOUL/TODO + docs/ai/)
+- [x] Add AGPL-3.0 license
+- [ ] Clean public README with screenshots, feature highlights, install instructions
+- [ ] GitHub Releases page with pre-built installer
+- [ ] winget manifest (needs public release) · MSIX/Store (needs signing) 
+- [ ] CONTRIBUTING.md if accepting community contributions
+- [ ] Optional: landing page, demo GIF/video
+- [ ] Final QA pass on a clean Windows install
+- [ ] Flip repo from private to public
+
+## Phase 8 -- Native Engine (future)
+Migrate off the Python runtime for a lean commercial-grade product.
+- [ ] Replace faster-whisper with **whisper.cpp** (zero Python dependency; Metal on macOS)
+- [ ] Evaluate Tauri (Rust) or C#/WPF for the app shell (replacing tkinter + pystray)
+- [ ] Signed binaries, auto-update mechanism
+- [ ] Plugin system for custom post-processing (punctuation cleanup, formatting)
 
 ### Why whisper.cpp for distribution
 - Pure C/C++, no Python runtime, no 200MB+ PyInstaller bundle
@@ -65,20 +85,12 @@ Migrate from Python + faster-whisper to a native engine for a clean, distributab
 - End-user experience: install and run, no venv, no pip, no CUDA Toolkit headaches
 - Current faster-whisper stack is ideal for development velocity; whisper.cpp is for shipping
 
-## Phase 5 -- Public Launch Prep (v1.0)
-- [x] Relocate internal docs to `agent-instructions/`
-- [x] Add AGPL-3.0 license
-- [ ] Write a clean public README with screenshots, feature highlights, and install instructions
-- [ ] Create a GitHub Releases page with pre-built installer
-- [ ] Add CONTRIBUTING.md if accepting community contributions
-- [ ] Optional: simple landing page (GitHub Pages or standalone)
-- [ ] Optional: demo GIF / video showing Eqho in action
-- [ ] Final QA pass -- test on a clean Windows install
-- [ ] Flip repo from private to public
-
-## Stretch Goals
+## Stretch Goals / Backlog
+- [ ] silero-VAD streaming segmenter (replace fixed RMS threshold)
+- [ ] Streaming partials (LocalAgreement) with live injection
+- [ ] Per-application paste mode rules (some apps need typing, not clipboard)
+- [ ] Wayland-native hotkeys/injection
 - [ ] Speaker identification (who's talking)
 - [ ] Real-time translation (transcribe in one language, output in another)
 - [ ] System audio capture (transcribe meetings/calls, not just mic)
-- [ ] macOS support
 - [ ] REST API mode for integration with other tools

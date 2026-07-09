@@ -1,4 +1,4 @@
-# Build Eqho v0.3.0 (Dashboard) into a standalone .exe
+# Build Eqho into a standalone .exe (version lives in src/version.py)
 # Run from the Eqho directory:
 #   powershell -ExecutionPolicy Bypass -File build.ps1
 
