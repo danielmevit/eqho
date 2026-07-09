@@ -26,14 +26,14 @@ Planned features and milestones for Eqho. Renumbered 2026-07-09 for the overhaul
 - [x] ThemedDropdown widget, dashboard not-always-on-top, About tab responsive
 - [x] Tray icon theme detection, window title bar icon (both shipped with known issues → Phase 4)
 
-## Phase 3 -- Engine Hardening (v0.3.x)
-- [ ] `platformdirs` for config + model cache (kills hardcoded `D:\EqhoModels`; migrates existing installs)
-- [ ] Model-load race fixes; model loading off the hotkey thread ("Loading model…" overlay state)
-- [ ] O(n²) audio buffer fix (chunk list); partials transcribe a bounded tail only
-- [ ] Hallucination gating (`no_speech_prob`/`avg_logprob`/peak-RMS + artifact blocklist)
-- [ ] Clipboard failure guards (fall back to simulated typing)
-- [ ] CPU warm-up transcribe (parity with the CUDA smoke test)
-- [ ] `run.py --smoke` headless verification gate (used by every later milestone + CI)
+## Phase 3 -- Engine Hardening (v0.3.x) [done]
+- [x] `platformdirs` for config + model cache (kills hardcoded `D:\EqhoModels`; migrates existing installs)
+- [x] Model-load race fixes; model loading off the hotkey thread ("Loading model…" overlay state)
+- [x] O(n²) audio buffer fix (chunk list); partials transcribe a bounded tail only
+- [x] Hallucination gating (`no_speech_prob`/`avg_logprob`/peak-RMS + artifact blocklist)
+- [x] Clipboard failure guards (fall back to simulated typing)
+- [x] CPU warm-up transcribe (parity with the CUDA smoke test)
+- [x] `run.py --smoke` headless verification gate (used by every later milestone + CI)
 
 ## Phase 4 -- UI Overhaul + Windows Packaging (v0.4.x)
 Toolcraft-inspired restyle (original code only — see DECISIONS.md) + consumer-grade Windows installs.

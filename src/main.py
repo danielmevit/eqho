@@ -66,12 +66,14 @@ class App:
         self.transcriber.set_callbacks(
             on_partial=self._on_partial,
             on_complete=self._on_complete,
+            on_status=self._on_status,
         )
 
         self.hotkey = HotkeyManager(
             self.settings,
             on_activate=self.activate,
             on_deactivate=self.deactivate,
+            on_toggle=self.toggle,  # toggle-mode state authority lives here
         )
 
         self.tray = TrayApp(
@@ -89,8 +91,12 @@ class App:
     def _on_complete(self, text: str) -> None:
         with self._lock:
             self._pending_text.append(text)
-        full_so_far = " ".join(self._pending_text)
+            full_so_far = " ".join(self._pending_text)
         self.overlay.update_text(full_so_far)
+
+    def _on_status(self, message: str) -> None:
+        """Transcriber lifecycle messages (e.g. model finished loading)."""
+        self.overlay.update_text(message)
 
     # -- Activation control ----------------------------------------------------
 
@@ -105,43 +111,54 @@ class App:
             ctl = _get_volume_ctl()
             if not ctl:
                 return
-            self._saved_volume = ctl.GetMasterVolumeLevelScalar()
+            saved = ctl.GetMasterVolumeLevelScalar()
+            with self._lock:
+                self._saved_volume = saved
             if multiplier == 0.0:
                 ctl.SetMute(True, _GUID_NULL)
             else:
-                ctl.SetMasterVolumeLevelScalar(self._saved_volume * multiplier, _GUID_NULL)
-            log.info("Volume ducked: %.0f%% → %s", self._saved_volume * 100,
-                     "muted" if multiplier == 0.0 else f"{self._saved_volume * multiplier * 100:.0f}%")
+                ctl.SetMasterVolumeLevelScalar(saved * multiplier, _GUID_NULL)
+            log.info("Volume ducked: %.0f%% → %s", saved * 100,
+                     "muted" if multiplier == 0.0 else f"{saved * multiplier * 100:.0f}%")
         except Exception as e:
             log.debug("Volume duck failed: %s", e)
 
     def _restore_volume(self) -> None:
         """Silently restore system volume to previous level."""
-        if not _HAS_VOLUME_CTL or self._saved_volume is None:
+        if not _HAS_VOLUME_CTL:
+            return
+        with self._lock:
+            saved = self._saved_volume
+        if saved is None:
             return
         try:
             ctl = _get_volume_ctl()
             if not ctl:
                 return
             ctl.SetMute(False, _GUID_NULL)
-            ctl.SetMasterVolumeLevelScalar(self._saved_volume, _GUID_NULL)
-            log.info("Volume restored to %.0f%%.", self._saved_volume * 100)
-            self._saved_volume = None
+            ctl.SetMasterVolumeLevelScalar(saved, _GUID_NULL)
+            with self._lock:
+                self._saved_volume = None
+            log.info("Volume restored to %.0f%%.", saved * 100)
         except Exception as e:
             log.debug("Volume restore failed: %s", e)
 
     def activate(self) -> None:
-        self._target_hwnd = get_foreground_window()
-        log.info("Dictation activated (target window: %s)", self._target_hwnd)
+        hwnd = get_foreground_window()
+        with self._lock:
+            self._target_hwnd = hwnd
+            self._pending_text.clear()
+        log.info("Dictation activated (target window: %s)", hwnd)
         self._duck_volume()
-        self._pending_text.clear()
-        self.overlay.show("Listening...")
+        self.overlay.show(
+            "Listening..." if self.transcriber.is_model_ready() else "Loading model…"
+        )
         self.tray.set_active(True)
-        self.transcriber._mic_error = None
         self.transcriber.start()
-        if self.transcriber._mic_error:
+        mic_error = self.transcriber.consume_mic_error()
+        if mic_error:
             if not self.transcriber.is_running():
-                self.tray.notify(f"No microphone available: {self.transcriber._mic_error}")
+                self.tray.notify(f"No microphone available: {mic_error}")
                 self.overlay.hide()
                 self.tray.set_active(False)
                 self._restore_volume()
@@ -158,11 +175,12 @@ class App:
         with self._lock:
             full_text = " ".join(t.strip() for t in self._pending_text if t.strip())
             self._pending_text.clear()
+            target_hwnd = self._target_hwnd
 
         if full_text:
             time.sleep(0.4)  # wait for modifier keys to fully release
-            if self._target_hwnd:
-                set_foreground_window(self._target_hwnd)
+            if target_hwnd:
+                set_foreground_window(target_hwnd)
                 time.sleep(0.15)  # let the window come to focus
             type_text(full_text, use_clipboard=self.settings.auto_paste)
             log.info("Injected text: %s", full_text)
@@ -207,21 +225,8 @@ class App:
 
     def _model_is_cached(self) -> bool:
         """Check if the current model has already been downloaded."""
-        from .settings import MODEL_CACHE_DIR
-        model = self.settings.model_size
-        # faster-whisper stores models via huggingface_hub or directly
-        cache_dir = MODEL_CACHE_DIR
-        # Check for direct model folder or huggingface cache entry
-        for candidate in [
-            cache_dir / model,
-            cache_dir / f"models--Systran--faster-whisper-{model}",
-            cache_dir / f"models--ctranslate2-4you--distil-whisper-{model}",
-            cache_dir / "huggingface" / f"models--Systran--faster-whisper-{model}",
-            cache_dir / "huggingface" / f"models--ctranslate2-4you--distil-whisper-{model}",
-        ]:
-            if candidate.exists():
-                return True
-        return False
+        from .settings import is_model_cached
+        return is_model_cached(self.settings, self.settings.model_size)
 
     def _preload_model(self) -> None:
         try:

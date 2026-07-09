@@ -10,12 +10,13 @@ Things that silently break or waste time. Update the moment a new trap is discov
 ## Audio / volume
 - COM must be initialized **per-thread** for pycaw (`CoInitialize()` before touching the volume endpoint).
 - Galaxy Buds2 Pro (any Bluetooth headset): opening its mic flips A2DP→HFP — mono, awful quality, system-wide. Use the Realtek laptop mic (device 3 on Daniel's machine).
-- Whisper hallucinates on silence/noise ("Thank you.", "Thanks for watching.") — confidence gating ships in v0.3.3; until then, don't "fix" it by raising the VAD threshold (breaks quiet speech).
+- Whisper hallucinates on silence/noise ("Thank you.", "Thanks for watching.") — since v0.3.3 gated in `_do_complete`: near-silent buffers skipped (peak RMS < 1.5×threshold), segments with `no_speech_prob>0.6 & avg_logprob<-1.0` dropped, short blocklisted utterances discarded. Don't additionally raise the VAD threshold (breaks quiet speech).
 
 ## CUDA / models
 - `_ensure_model()` runs a CUDA smoke test at load time so a missing `cublas64_12.dll` fails fast → automatic CPU fallback (don't remove it).
 - VAD constants (0.003 RMS / 1.2 s / 0.4 s) are tuned; changing them changes the dictation feel everywhere.
-- Model cache is `D:\EqhoModels` (hardcoded until v0.3.3 → then a `model_dir` setting with migration).
+- Model cache resolves (since v0.3.3): `model_dir` setting → legacy `D:\EqhoModels` if it exists (auto-pinned into settings on first load) → platformdirs user cache. `HF_HUB_CACHE` is set from the resolved dir at transcriber construction/model load — not at import.
+- Model loading happens on the transcription worker thread (since v0.3.3) so the hotkey callback never blocks; the overlay shows "Loading model…" until ready. Audio spoken during load is queued and transcribed once ready.
 
 ## tkinter / customtkinter
 - Cross-thread tkinter images need the `master=` parameter or they get GC'd/bound to the wrong interpreter.

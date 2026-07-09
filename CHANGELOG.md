@@ -4,6 +4,23 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.3.3] - 2026-07-09
+
+### Added
+- **`python run.py --smoke`** — headless self-check (settings → audio devices → tiny-model load → silence transcription) printing a JSON report; the standard verification gate for future milestones and CI.
+- **Hallucination gating** — near-silent buffers are skipped (peak RMS < 1.5× VAD threshold), segments with `no_speech_prob > 0.6` and `avg_logprob < -1.0` are dropped, and short utterances matching known Whisper artifacts ("Thank you.", "Thanks for watching.", …) are discarded.
+- **CPU warm-up** — a dummy inference after CPU model load removes first-phrase lag (CUDA already had a smoke test).
+- **`model_dir` setting** — model cache location is configurable; resolves to the legacy `D:\EqhoModels` when present (auto-pinned on first load, nothing re-downloads) or the platform cache dir on fresh installs.
+
+### Changed
+- **Config paths via `platformdirs`** (new dependency) — same `%APPDATA%\Eqho` on Windows, correct native dirs on Linux/macOS (groundwork for Phase 6).
+- **Model loading moved off the hotkey thread** — first activation no longer freezes hotkey handling; the overlay shows "Loading model…" and audio spoken during the load is queued and transcribed once ready. Also serialized behind a dedicated lock (fixes the preload-vs-hotkey double-load race).
+- **Audio buffering is O(n)** — chunk list instead of repeated `np.concatenate`; live partials re-transcribe at most the last 10 s (finals still use the full buffer).
+- **Default mic is now the system default** (`audio_device: null`) — the old hardcoded device 3 stays only where it's already persisted in settings.
+- **Toggle-mode state authority moved to the app** — the hotkey layer only debounces, so a failed mic start no longer desyncs the toggle.
+- Clipboard paste falls back to simulated typing when the clipboard is unavailable; a non-text clipboard is no longer clobbered with an empty string.
+- Mic errors surface via `consume_mic_error()` instead of private attribute pokes; `_target_hwnd`/`_saved_volume`/pending text are consistently lock-guarded.
+
 ## [0.3.2] - 2026-07-09
 
 ### Added

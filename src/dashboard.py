@@ -19,7 +19,7 @@ from .audio import list_input_devices, device_name
 from .fonts import FONT_FAMILY
 from .settings import (
     Settings, SUPPORTED_LANGUAGES, WHISPER_MODELS, HOTKEY_MODES,
-    VOLUME_DUCK_OPTIONS, OVERLAY_POSITIONS, MODEL_CACHE_DIR,
+    VOLUME_DUCK_OPTIONS, OVERLAY_POSITIONS, is_model_cached,
 )
 from .theme import (
     get_colors, get_system_theme, ThemeColors, MODEL_INFO,
@@ -1016,16 +1016,7 @@ class Dashboard(ctk.CTkToplevel):
         return f"{icon} {lang} \u00b7 {size} \u00b7 {device}\n{rec} \u00b7 {status}"
 
     def _is_model_cached(self, model_key: str) -> bool:
-        for candidate in [
-            MODEL_CACHE_DIR / model_key,
-            MODEL_CACHE_DIR / f"models--Systran--faster-whisper-{model_key}",
-            MODEL_CACHE_DIR / f"models--ctranslate2-4you--distil-whisper-{model_key}",
-            MODEL_CACHE_DIR / "huggingface" / f"models--Systran--faster-whisper-{model_key}",
-            MODEL_CACHE_DIR / "huggingface" / f"models--ctranslate2-4you--distil-whisper-{model_key}",
-        ]:
-            if candidate.exists():
-                return True
-        return False
+        return is_model_cached(self._settings, model_key)
 
     def _apply_settings(self, reload_model: bool = False) -> None:
         """Run settings callback in background to avoid freezing the dashboard."""

@@ -1,15 +1,27 @@
 """User preferences persisted to a JSON config file."""
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
 
-CONFIG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "Eqho"
+import platformdirs
+
+log = logging.getLogger(__name__)
+
+# Config lives in the platform-native config dir. On Windows (roaming=True)
+# this resolves to %APPDATA%\Eqho — the same directory Eqho has always used,
+# so existing installs keep their settings without migration.
+CONFIG_DIR = Path(platformdirs.user_config_dir("Eqho", appauthor=False, roaming=True))
 CONFIG_FILE = CONFIG_DIR / "settings.json"
 
-MODEL_CACHE_DIR = Path("D:/EqhoModels")
+# Pre-0.3.3 installs cached models to a hardcoded D:\EqhoModels. If that
+# directory exists, Settings.load() pins it into `model_dir` so the cache
+# keeps working; fresh installs use the platform cache dir instead.
+LEGACY_MODEL_DIR = Path("D:/EqhoModels")
+DEFAULT_MODEL_DIR = Path(platformdirs.user_cache_dir("Eqho", appauthor=False)) / "models"
 
 WHISPER_MODELS = {
     "distil-large-v3": "Distil Large v3 (~1.5 GB, English-optimized, recommended)",
@@ -65,7 +77,8 @@ class Settings:
     hotkey: str = "alt+q"
     hotkey_mode: str = "toggle"  # "toggle" or "hold"
     model_size: str = "distil-large-v3"
-    audio_device: Optional[int] = 3  # 3 = Realtek Mic Array (avoids Bluetooth HFP switch)
+    model_dir: str = ""  # empty = resolve_model_dir() picks legacy dir or platform cache
+    audio_device: Optional[int] = None  # None = system default input device
     auto_paste: bool = True  # paste via clipboard vs simulated keystrokes
     overlay_enabled: bool = True
     overlay_opacity: float = 0.85
@@ -78,6 +91,14 @@ class Settings:
     # runtime-only (not persisted)
     _listeners: list = field(default_factory=list, repr=False)
 
+    def resolve_model_dir(self) -> Path:
+        """Directory Whisper models are cached in."""
+        if self.model_dir:
+            return Path(self.model_dir)
+        if LEGACY_MODEL_DIR.exists():
+            return LEGACY_MODEL_DIR
+        return DEFAULT_MODEL_DIR
+
     def save(self) -> None:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         data = asdict(self)
@@ -86,14 +107,27 @@ class Settings:
 
     @classmethod
     def load(cls) -> "Settings":
+        settings = None
         if CONFIG_FILE.exists():
             try:
                 data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
                 data.pop("_listeners", None)
-                return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+                settings = cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
             except (json.JSONDecodeError, TypeError):
                 pass
-        return cls()
+        if settings is None:
+            settings = cls()
+
+        # One-time migration: pin a pre-0.3.3 legacy model cache explicitly so
+        # it survives even if the drive layout changes later.
+        if not settings.model_dir and LEGACY_MODEL_DIR.exists():
+            settings.model_dir = str(LEGACY_MODEL_DIR)
+            try:
+                settings.save()
+                log.info("Pinned legacy model cache %s into settings.", LEGACY_MODEL_DIR)
+            except Exception as e:
+                log.debug("Could not persist model_dir migration: %s", e)
+        return settings
 
     def add_listener(self, callback) -> None:
         self._listeners.append(callback)
@@ -101,3 +135,18 @@ class Settings:
     def notify(self) -> None:
         for cb in self._listeners:
             cb(self)
+
+
+def is_model_cached(settings: "Settings", model_key: str) -> bool:
+    """True if the given Whisper model is already downloaded to the cache dir."""
+    cache_dir = settings.resolve_model_dir()
+    for candidate in (
+        cache_dir / model_key,
+        cache_dir / f"models--Systran--faster-whisper-{model_key}",
+        cache_dir / f"models--ctranslate2-4you--distil-whisper-{model_key}",
+        cache_dir / "huggingface" / f"models--Systran--faster-whisper-{model_key}",
+        cache_dir / "huggingface" / f"models--ctranslate2-4you--distil-whisper-{model_key}",
+    ):
+        if candidate.exists():
+            return True
+    return False

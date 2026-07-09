@@ -11,11 +11,10 @@ import numpy as np
 import sounddevice as sd
 from faster_whisper import WhisperModel
 
-from .settings import Settings, MODEL_CACHE_DIR
+from .settings import Settings
 
 log = logging.getLogger(__name__)
 
-os.environ["HF_HUB_CACHE"] = str(MODEL_CACHE_DIR / "huggingface")
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 os.environ.setdefault("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1")
 
@@ -49,6 +48,20 @@ SILENCE_THRESHOLD = 0.003
 SILENCE_TIMEOUT = 1.2
 MIN_PHRASE_DURATION = 0.4
 PARTIAL_INTERVAL = 1.5  # send a partial transcription every N seconds of active speech
+PARTIAL_TAIL_SECONDS = 10.0  # partials re-transcribe at most this much recent audio
+
+# Hallucination gating: Whisper invents text on (near-)silence. Buffers whose
+# peak RMS never rose meaningfully above the VAD threshold are skipped, low
+# confidence segments are dropped, and short utterances matching the known
+# artifact list are discarded.
+NEAR_SILENCE_FACTOR = 1.5
+NO_SPEECH_PROB_MAX = 0.6
+AVG_LOGPROB_MIN = -1.0
+HALLUCINATION_BLOCKLIST = {
+    "thank you", "thank you very much", "thanks for watching",
+    "thank you for watching", "you", "bye", "bye-bye", "the end", "so",
+    "subtitles by the amara.org community", "1", "2",
+}
 
 
 _CPU_ONLY_MODELS = {"large-v3"}  # too large for 6GB VRAM
@@ -77,69 +90,128 @@ class VoiceTranscriber:
         _disable_windows_audio_ducking()
         self._on_partial: Optional[Callable[[str], None]] = None
         self._on_complete: Optional[Callable[[str], None]] = None
+        self._on_status: Optional[Callable[[str], None]] = None
         self._running = False
         self._lock = threading.Lock()
+        self._model_lock = threading.Lock()  # serializes load/unload across threads
+        self._stream_lock = threading.Lock()
         self._model_loaded = False
         self._stream: Optional[sd.InputStream] = None
         self._audio_q: queue.Queue = queue.Queue()
         self._worker: Optional[threading.Thread] = None
         self._current_model_size: Optional[str] = None
         self._mic_error: Optional[str] = None
+        self._model_dir = settings.resolve_model_dir()
+        os.environ["HF_HUB_CACHE"] = str(self._model_dir / "huggingface")
 
     def set_callbacks(
         self,
         on_partial: Callable[[str], None],
         on_complete: Callable[[str], None],
+        on_status: Optional[Callable[[str], None]] = None,
     ) -> None:
         self._on_partial = on_partial
         self._on_complete = on_complete
+        self._on_status = on_status
+
+    def is_model_ready(self) -> bool:
+        return self._model_loaded and self._current_model_size == self._settings.model_size
+
+    def consume_mic_error(self) -> Optional[str]:
+        """Return and clear the last microphone error (None if there was none)."""
+        err, self._mic_error = self._mic_error, None
+        return err
 
     def _ensure_model(self) -> None:
-        target = self._settings.model_size
-        if self._model_loaded and self._current_model_size == target:
-            return
+        with self._model_lock:
+            target = self._settings.model_size
+            if self._model_loaded and self._current_model_size == target:
+                return
 
-        MODEL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            self._model_dir = self._settings.resolve_model_dir()
+            os.environ["HF_HUB_CACHE"] = str(self._model_dir / "huggingface")
+            self._model_dir.mkdir(parents=True, exist_ok=True)
 
-        device, compute = _pick_device_and_compute(target)
-        log.info(
-            "Loading faster-whisper model=%s device=%s compute=%s cache=%s",
-            target, device, compute, MODEL_CACHE_DIR,
+            device, compute = _pick_device_and_compute(target)
+            log.info(
+                "Loading faster-whisper model=%s device=%s compute=%s cache=%s",
+                target, device, compute, self._model_dir,
+            )
+            model = WhisperModel(
+                target,
+                device=device,
+                compute_type=compute,
+                download_root=str(self._model_dir),
+            )
+
+            # Smoke-test actual inference to catch missing CUDA DLLs (e.g. cublas64_12.dll)
+            if device == "cuda":
+                try:
+                    dummy = np.zeros(SAMPLE_RATE, dtype=np.float32)
+                    segments, _ = model.transcribe(dummy, language="en", beam_size=1)
+                    list(segments)  # force the generator to run
+                    log.info("CUDA inference verified OK.")
+                except Exception as e:
+                    log.warning("CUDA inference failed (%s), falling back to CPU.", e)
+                    model = WhisperModel(
+                        target,
+                        device="cpu",
+                        compute_type="int8",
+                        download_root=str(self._model_dir),
+                    )
+                    device, compute = "cpu", "int8"
+
+            if device == "cpu":
+                # Warm-up: the first CPU inference pays one-time kernel-init
+                # cost — spend it now, not on the user's first phrase.
+                try:
+                    dummy = np.zeros(SAMPLE_RATE // 2, dtype=np.float32)
+                    segments, _ = model.transcribe(dummy, language="en", beam_size=1)
+                    list(segments)
+                except Exception as e:
+                    log.debug("CPU warm-up failed: %s", e)
+
+            self._model = model
+            self._current_model_size = target
+            self._model_loaded = True
+            log.info("Model ready: %s on %s (%s)", target, device, compute)
+
+    def transcribe_once(self, audio: np.ndarray) -> str:
+        """Synchronously transcribe a float32 mono 16 kHz array (used by --smoke)."""
+        self._ensure_model()
+        segments, _ = self._model.transcribe(
+            audio, language=self._settings.language, beam_size=1,
         )
-        self._model = WhisperModel(
-            target,
+        return " ".join(s.text.strip() for s in segments if s.text.strip())
+
+    def _open_stream(self, device: Optional[int]) -> sd.InputStream:
+        stream = sd.InputStream(
+            samplerate=SAMPLE_RATE,
+            channels=1,
+            dtype="float32",
+            blocksize=int(SAMPLE_RATE * CHUNK_DURATION),
             device=device,
-            compute_type=compute,
-            download_root=str(MODEL_CACHE_DIR),
+            callback=self._audio_callback,
         )
+        stream.start()
+        return stream
 
-        # Smoke-test actual inference to catch missing CUDA DLLs (e.g. cublas64_12.dll)
-        if device == "cuda":
-            try:
-                dummy = np.zeros(SAMPLE_RATE, dtype=np.float32)
-                segments, _ = self._model.transcribe(dummy, language="en", beam_size=1)
-                list(segments)  # force the generator to run
-                log.info("CUDA inference verified OK.")
-            except Exception as e:
-                log.warning("CUDA inference failed (%s), falling back to CPU.", e)
-                self._model = WhisperModel(
-                    target,
-                    device="cpu",
-                    compute_type="int8",
-                    download_root=str(MODEL_CACHE_DIR),
-                )
-                device, compute = "cpu", "int8"
-
-        self._current_model_size = target
-        self._model_loaded = True
-        log.info("Model ready: %s on %s (%s)", target, device, compute)
+    def _close_stream(self) -> None:
+        with self._stream_lock:
+            if self._stream:
+                try:
+                    self._stream.stop()
+                    self._stream.close()
+                except Exception:
+                    pass
+                self._stream = None
 
     def start(self) -> None:
         with self._lock:
             if self._running:
                 return
-            self._ensure_model()
             assert self._on_partial and self._on_complete, "Set callbacks before starting"
+            self._mic_error = None
             self._running = True
 
             while not self._audio_q.empty():
@@ -150,28 +222,12 @@ class VoiceTranscriber:
 
             device = self._settings.audio_device
             try:
-                self._stream = sd.InputStream(
-                    samplerate=SAMPLE_RATE,
-                    channels=1,
-                    dtype="float32",
-                    blocksize=int(SAMPLE_RATE * CHUNK_DURATION),
-                    device=device,
-                    callback=self._audio_callback,
-                )
-                self._stream.start()
-            except (sd.PortAudioError, Exception) as e:
+                self._stream = self._open_stream(device)
+            except Exception as e:
                 log.warning("Mic device %s failed (%s), falling back to default.", device, e)
                 self._mic_error = str(e)
                 try:
-                    self._stream = sd.InputStream(
-                        samplerate=SAMPLE_RATE,
-                        channels=1,
-                        dtype="float32",
-                        blocksize=int(SAMPLE_RATE * CHUNK_DURATION),
-                        device=None,
-                        callback=self._audio_callback,
-                    )
-                    self._stream.start()
+                    self._stream = self._open_stream(None)
                     log.info("Fallback to default mic succeeded.")
                 except Exception as e2:
                     log.error("No microphone available: %s", e2)
@@ -179,6 +235,9 @@ class VoiceTranscriber:
                     self._running = False
                     return
 
+            # Model loading happens on the worker thread (not here) so the
+            # hotkey-callback thread never blocks; audio recorded while the
+            # model loads queues up and is processed once it is ready.
             self._worker = threading.Thread(target=self._transcription_loop, daemon=True)
             self._worker.start()
             log.info("Transcription started (mic recording).")
@@ -189,13 +248,28 @@ class VoiceTranscriber:
         self._audio_q.put(indata[:, 0].copy())
 
     def _transcription_loop(self) -> None:
-        """Accumulates audio, detects speech/silence, and transcribes phrases."""
-        audio_buffer = np.array([], dtype=np.float32)
+        """Loads the model if needed, then accumulates audio, detects speech/silence, and transcribes phrases."""
+        if not self.is_model_ready():
+            try:
+                self._ensure_model()
+            except Exception as e:
+                log.error("Model load failed: %s", e)
+                if self._on_status:
+                    self._on_status("Model failed to load — check logs")
+                self._running = False
+                self._close_stream()
+                return
+            if self._running and self._on_status:
+                self._on_status("Listening...")
+
+        chunks: list[np.ndarray] = []
+        total_samples = 0
         silence_start: Optional[float] = None
         is_speaking = False
         last_partial_time: float = 0
         chunk_count = 0
-        peak_rms = 0.0
+        log_peak = 0.0        # peak since the last level log line
+        utterance_peak = 0.0  # peak since the buffer last reset (gates hallucinations)
 
         while self._running:
             try:
@@ -203,19 +277,21 @@ class VoiceTranscriber:
             except queue.Empty:
                 continue
 
-            audio_buffer = np.concatenate([audio_buffer, chunk])
+            chunks.append(chunk)
+            total_samples += len(chunk)
             rms = float(np.sqrt(np.mean(chunk ** 2)))
             chunk_count += 1
-            peak_rms = max(peak_rms, rms)
+            log_peak = max(log_peak, rms)
+            utterance_peak = max(utterance_peak, rms)
 
             # Log mic levels periodically so we can diagnose issues
             if chunk_count % 20 == 0:
                 log.info(
                     "Mic level: RMS=%.5f peak=%.5f threshold=%.4f speaking=%s buf=%.1fs",
-                    rms, peak_rms, SILENCE_THRESHOLD, is_speaking,
-                    len(audio_buffer) / SAMPLE_RATE,
+                    rms, log_peak, SILENCE_THRESHOLD, is_speaking,
+                    total_samples / SAMPLE_RATE,
                 )
-                peak_rms = 0.0
+                log_peak = 0.0
 
             if rms > SILENCE_THRESHOLD:
                 silence_start = None
@@ -225,20 +301,25 @@ class VoiceTranscriber:
                     log.info("Speech detected (RMS=%.5f)", rms)
 
                 now = time.monotonic()
-                buf_duration = len(audio_buffer) / SAMPLE_RATE
+                buf_duration = total_samples / SAMPLE_RATE
                 if buf_duration > 1.0 and (now - last_partial_time) >= PARTIAL_INTERVAL:
                     last_partial_time = now
-                    self._do_partial(audio_buffer)
+                    # Bounded tail keeps partial latency flat on long phrases;
+                    # the final transcription still sees the full buffer.
+                    tail = max(1, int(PARTIAL_TAIL_SECONDS / CHUNK_DURATION))
+                    self._do_partial(np.concatenate(chunks[-tail:]))
             else:
                 if is_speaking:
                     if silence_start is None:
                         silence_start = time.monotonic()
                     elif time.monotonic() - silence_start > SILENCE_TIMEOUT:
-                        buf_duration = len(audio_buffer) / SAMPLE_RATE
+                        buf_duration = total_samples / SAMPLE_RATE
                         if buf_duration >= MIN_PHRASE_DURATION:
                             log.info("Silence detected, transcribing %.1fs of audio", buf_duration)
-                            self._do_complete(audio_buffer)
-                        audio_buffer = np.array([], dtype=np.float32)
+                            self._do_complete(np.concatenate(chunks), peak_rms=utterance_peak)
+                        chunks = []
+                        total_samples = 0
+                        utterance_peak = 0.0
                         is_speaking = False
                         silence_start = None
 
@@ -246,16 +327,18 @@ class VoiceTranscriber:
         while not self._audio_q.empty():
             try:
                 chunk = self._audio_q.get_nowait()
-                audio_buffer = np.concatenate([audio_buffer, chunk])
+                chunks.append(chunk)
+                total_samples += len(chunk)
+                utterance_peak = max(utterance_peak, float(np.sqrt(np.mean(chunk ** 2))))
             except queue.Empty:
                 break
 
         # Flush all remaining audio on stop (don't require is_speaking —
         # the user releasing the hold key IS the stop signal)
-        buf_duration = len(audio_buffer) / SAMPLE_RATE
+        buf_duration = total_samples / SAMPLE_RATE
         if buf_duration >= MIN_PHRASE_DURATION:
             log.info("Flushing remaining %.1fs of audio on stop", buf_duration)
-            self._do_complete(audio_buffer)
+            self._do_complete(np.concatenate(chunks), peak_rms=utterance_peak)
 
     def _do_partial(self, audio: np.ndarray) -> None:
         try:
@@ -271,14 +354,35 @@ class VoiceTranscriber:
         except Exception as e:
             log.error("Partial transcription error: %s", e)
 
-    def _do_complete(self, audio: np.ndarray) -> None:
+    def _do_complete(self, audio: np.ndarray, peak_rms: Optional[float] = None) -> None:
+        if peak_rms is not None and peak_rms < SILENCE_THRESHOLD * NEAR_SILENCE_FACTOR:
+            log.info("Skipping near-silent buffer (peak RMS %.5f) — hallucination bait.", peak_rms)
+            return
         try:
             segments, _ = self._model.transcribe(
                 audio,
                 language=self._settings.language,
                 beam_size=5,
             )
-            text = " ".join(s.text.strip() for s in segments if s.text.strip())
+            kept = []
+            for s in segments:
+                t = s.text.strip()
+                if not t:
+                    continue
+                if s.no_speech_prob > NO_SPEECH_PROB_MAX and s.avg_logprob < AVG_LOGPROB_MIN:
+                    log.info(
+                        "Dropped low-confidence segment %r (no_speech=%.2f logprob=%.2f)",
+                        t, s.no_speech_prob, s.avg_logprob,
+                    )
+                    continue
+                kept.append(t)
+            text = " ".join(kept)
+
+            duration = len(audio) / SAMPLE_RATE
+            if text and duration < 2.0 and text.lower().strip(' .!?"') in HALLUCINATION_BLOCKLIST:
+                log.info("Dropped known hallucination artifact: %r", text)
+                return
+
             if text and self._on_complete:
                 log.info("Complete: %s", text)
                 self._on_complete(text)
@@ -297,13 +401,7 @@ class VoiceTranscriber:
             self._worker = None
 
         # Close mic AFTER worker is done so no audio chunks are lost
-        if self._stream:
-            try:
-                self._stream.stop()
-                self._stream.close()
-            except Exception:
-                pass
-            self._stream = None
+        self._close_stream()
 
         log.info("Transcription stopped.")
 
@@ -315,12 +413,14 @@ class VoiceTranscriber:
         was_running = self._running
         if was_running:
             self.stop()
-        self._model_loaded = False
-        self._model = None
+        with self._model_lock:
+            self._model_loaded = False
+            self._model = None
         if was_running:
             self.start()
 
     def shutdown(self) -> None:
         self.stop()
-        self._model = None
-        self._model_loaded = False
+        with self._model_lock:
+            self._model = None
+            self._model_loaded = False

@@ -20,10 +20,12 @@ class HotkeyManager:
         settings: Settings,
         on_activate: Callable[[], None],
         on_deactivate: Callable[[], None],
+        on_toggle: Optional[Callable[[], None]] = None,
     ):
         self._settings = settings
         self._on_activate = on_activate
         self._on_deactivate = on_deactivate
+        self._on_toggle_cb = on_toggle
         self._active = False
         self._registered = False
         self._lock = threading.Lock()
@@ -99,6 +101,13 @@ class HotkeyManager:
             if now - self._last_toggle_time < 0.4:
                 return  # debounce rapid double-fires
             self._last_toggle_time = now
+        # Toggle state authority lives with the app (it knows whether the
+        # transcriber actually started); we only debounce here. The local
+        # _active flag is a fallback when no on_toggle callback was given.
+        if self._on_toggle_cb is not None:
+            self._on_toggle_cb()
+            return
+        with self._lock:
             if self._active:
                 self._active = False
                 self._on_deactivate()

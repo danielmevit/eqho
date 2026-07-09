@@ -41,7 +41,7 @@ def type_text(text: str, *, use_clipboard: bool = True) -> None:
 
 
 def _paste_via_clipboard(text: str) -> None:
-    old = ""
+    old = None
     try:
         old = pyperclip.paste()
     except Exception:
@@ -55,7 +55,14 @@ def _paste_via_clipboard(text: str) -> None:
             pass
     time.sleep(0.05)
 
-    pyperclip.copy(text)
+    try:
+        pyperclip.copy(text)
+    except Exception as e:
+        # Clipboard unavailable (e.g. missing xclip/xsel on Linux, or another
+        # app holding it open) — the text must still land somewhere.
+        log.warning("Clipboard unavailable (%s), falling back to simulated typing.", e)
+        _type_chars(text)
+        return
     time.sleep(0.05)
 
     _kb.press(Key.ctrl)
@@ -64,10 +71,11 @@ def _paste_via_clipboard(text: str) -> None:
     _kb.release(Key.ctrl)
     time.sleep(0.1)
 
-    try:
-        pyperclip.copy(old)
-    except Exception:
-        pass
+    if old is not None:
+        try:
+            pyperclip.copy(old)
+        except Exception:
+            pass
 
 
 def _type_chars(text: str) -> None:

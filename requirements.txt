@@ -2,6 +2,7 @@
 faster-whisper>=1.2.1
 sounddevice
 numpy
+platformdirs
 pystray
 Pillow
 keyboard
