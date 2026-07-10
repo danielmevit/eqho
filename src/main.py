@@ -9,12 +9,14 @@ import time
 import warnings
 from typing import Optional
 
+from . import chime, textproc
 from .fonts import load_fonts, unload_fonts
+from .history import TranscriptHistory
 from .settings import Settings, VOLUME_DUCK_OPTIONS
 from .transcriber import VoiceTranscriber
 from .overlay import TranscriptionOverlay
 from .hotkey import HotkeyManager
-from .injector import type_text, get_foreground_window, set_foreground_window
+from .injector import type_text, get_foreground_window, set_foreground_window, send_backspaces
 
 # Silent volume control via Windows Core Audio API (pycaw)
 try:
@@ -62,6 +64,9 @@ class App:
         self._lock = threading.Lock()
         self._target_hwnd: int = 0  # window to paste into
         self._saved_volume: Optional[float] = None  # for volume ducking
+        self.history = TranscriptHistory()
+        self._dictation_start: float = 0.0
+        self._last_injected: str = ""  # for the "delete that" voice command
 
         self.transcriber.set_callbacks(
             on_partial=self._on_partial,
@@ -89,10 +94,34 @@ class App:
         self.overlay.update_text(text)
 
     def _on_complete(self, text: str) -> None:
+        if self.settings.voice_commands:
+            if textproc.is_delete_command(text):
+                self._handle_delete_command()
+                return
+            command_text = textproc.match_command(text)
+            if command_text is not None:
+                text = command_text
         with self._lock:
             self._pending_text.append(text)
-            full_so_far = " ".join(self._pending_text)
+            full_so_far = textproc.smart_join(self._pending_text)
         self.overlay.update_text(full_so_far)
+
+    def _handle_delete_command(self) -> None:
+        """'Delete that': drop the previous utterance — the pending one if
+        dictation is mid-flight, else backspace the last injected text."""
+        with self._lock:
+            if self._pending_text:
+                self._pending_text.pop()
+                remaining = textproc.smart_join(self._pending_text)
+                last_injected = None
+            else:
+                last_injected, self._last_injected = self._last_injected, ""
+                remaining = ""
+        if last_injected:
+            if len(last_injected) <= 400:  # backspacing a novel would take ages
+                send_backspaces(len(last_injected))
+            return
+        self.overlay.update_text(remaining or "Listening...")
 
     def _on_status(self, message: str) -> None:
         """Transcriber lifecycle messages (e.g. model finished loading)."""
@@ -149,6 +178,9 @@ class App:
             self._target_hwnd = hwnd
             self._pending_text.clear()
         log.info("Dictation activated (target window: %s)", hwnd)
+        self._dictation_start = time.monotonic()
+        if self.settings.sound_feedback:
+            chime.play_start()  # must play BEFORE ducking mutes the output
         self._duck_volume()
         self.overlay.show(
             "Listening..." if self.transcriber.is_model_ready() else "Loading model…"
@@ -169,13 +201,17 @@ class App:
         log.info("Dictation deactivated")
         self.transcriber.stop()
         self._restore_volume()
+        if self.settings.sound_feedback:
+            chime.play_stop()  # after restore, so it's audible
         self.tray.set_active(False)
         self.overlay.hide()
 
         with self._lock:
-            full_text = " ".join(t.strip() for t in self._pending_text if t.strip())
+            full_text = textproc.smart_join(self._pending_text)
             self._pending_text.clear()
             target_hwnd = self._target_hwnd
+
+        full_text = textproc.apply_replacements(full_text, self.settings.replacements)
 
         if full_text:
             time.sleep(0.4)  # wait for modifier keys to fully release
@@ -184,6 +220,13 @@ class App:
                 time.sleep(0.15)  # let the window come to focus
             type_text(full_text, use_clipboard=self.settings.auto_paste)
             log.info("Injected text: %s", full_text)
+            self._last_injected = full_text
+            if self.settings.history_enabled:
+                duration = time.monotonic() - self._dictation_start if self._dictation_start else 0.0
+                self.history.append(
+                    full_text, duration=duration,
+                    model=self.settings.model_size, lang=self.settings.language,
+                )
 
     def toggle(self) -> None:
         if self.transcriber.is_running():

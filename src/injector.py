@@ -85,3 +85,14 @@ def _type_chars(text: str) -> None:
             time.sleep(0.01)
         except Exception:
             log.debug("Could not type char %r", ch)
+
+
+def send_backspaces(count: int) -> None:
+    """Delete the last *count* characters from the active app ("delete that")."""
+    for _ in range(max(0, count)):
+        try:
+            _kb.press(Key.backspace)
+            _kb.release(Key.backspace)
+            time.sleep(0.005)
+        except Exception:
+            break

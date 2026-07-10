@@ -29,6 +29,7 @@ SECTION_ICONS = {
     "APPEARANCE":       "▶",   # ▶
     "ENGLISH OPTIMIZED":"▶",   # ▶
     "MULTILINGUAL":     "▶",   # ▶
+    "DICTATION":        "▶",   # ▶
     "PLANNED FEATURES": "▶",   # ▶
     "POWERED BY":       "▶",   # ▶
 }

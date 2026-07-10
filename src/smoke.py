@@ -26,6 +26,30 @@ def run_smoke() -> int:
         devices = list_input_devices()
         report["steps"]["audio_devices"] = len(devices)
 
+        from src.textproc import (
+            apply_replacements, is_delete_command, match_command, smart_join,
+        )
+        assert match_command("Period.") == "."
+        assert match_command("New line") == "\n"
+        assert match_command("hello world") is None
+        assert is_delete_command("Delete that")
+        assert apply_replacements("hello eqho app", {"eqho": "Eqho"}) == "hello Eqho app"
+        assert smart_join(["hello", ".", "world"]) == "hello. world"
+        assert smart_join(["one", "\n", "two"]) == "one\ntwo"
+        report["steps"]["textproc"] = "ok"
+
+        import tempfile
+        from pathlib import Path
+        from src.history import TranscriptHistory
+        with tempfile.TemporaryDirectory() as td:
+            hist = TranscriptHistory(Path(td) / "h.jsonl", max_entries=3)
+            for i in range(5):
+                hist.append(f"entry {i}")
+            entries = hist.read_all()
+            assert len(entries) == 3 and entries[0]["text"] == "entry 4"
+            assert len(hist.search("entry 3")) == 1
+        report["steps"]["history"] = "ok"
+
         import numpy as np
         from src.transcriber import VoiceTranscriber, SAMPLE_RATE
 

@@ -181,6 +181,7 @@ class VoiceTranscriber:
         self._ensure_model()
         segments, _ = self._model.transcribe(
             audio, language=self._settings.language, beam_size=1,
+            initial_prompt=self._settings.initial_prompt or None,
         )
         return " ".join(s.text.strip() for s in segments if s.text.strip())
 
@@ -346,6 +347,7 @@ class VoiceTranscriber:
                 audio,
                 language=self._settings.language,
                 beam_size=1,
+                initial_prompt=self._settings.initial_prompt or None,
             )
             text = " ".join(s.text.strip() for s in segments if s.text.strip())
             if text and self._on_partial:
@@ -363,6 +365,7 @@ class VoiceTranscriber:
                 audio,
                 language=self._settings.language,
                 beam_size=5,
+                initial_prompt=self._settings.initial_prompt or None,
             )
             kept = []
             for s in segments:

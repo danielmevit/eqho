@@ -4,6 +4,18 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.5.0] - 2026-07-10
+
+All Phase-5 local features — no cloud, no server, everything on-device.
+
+### Added
+- **Transcript history** — every dictation is saved to `history.jsonl` in the config dir (pruned at 1000); the History tab is now functional: newest-first list, live search, per-entry copy/delete, Clear All, export to .txt. Toggle: General → Dictation → "Save History".
+- **Custom vocabulary** — a General-tab textbox whose content is passed to Whisper as `initial_prompt`, biasing recognition toward your names/jargon.
+- **Text replacements** — user-defined substitutions (word-boundary, case-insensitive) applied before injection; small `spoken => written` editor dialog.
+- **Voice commands** (opt-in) — whole-utterance commands: "new line", "new paragraph", "period", "comma", "question mark", "colon", …; "delete that" removes the previous utterance (or backspaces the last injected text). Punctuation and newlines join smartly (no stray spaces).
+- **Sound feedback** — synthesized start/stop blips via sounddevice (no assets, cross-platform); start blip plays before volume ducking so it stays audible.
+- `--smoke` now also asserts textproc command/replacement/join behavior and a history read/write/prune round-trip.
+
 ## [0.4.1] - 2026-07-10
 
 ### Added

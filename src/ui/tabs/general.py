@@ -10,6 +10,7 @@ from ...audio import list_input_devices
 from ...settings import SUPPORTED_LANGUAGES, WHISPER_MODELS
 from ...theme import MODEL_INFO, SPACING, RADIUS_SM, font
 from ..layout import TabBase
+from ..widgets import ghost_button, primary_button, secondary_button
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +60,12 @@ class GeneralTab(TabBase):
         card = self._card(tab)
         self._build_behavior_settings(card)
 
+        # Dictation (local features)
+        self._section_label(tab, "DICTATION")
+        card = self._card(tab)
+        self._build_vocab_setting(card)
+        self._build_dictation_settings(card)
+
     def _build_general_multi(self, tab, cols: int) -> None:
         """Multi-column grid layout."""
         grid = self._make_grid_container(tab)
@@ -98,6 +105,134 @@ class GeneralTab(TabBase):
             card = self._card(col2)
             self._build_language_setting(card)
             self._build_startup_setting(card)
+
+            self._section_label(col2, "DICTATION")
+            card = self._card(col2)
+            self._build_vocab_setting(card)
+            self._build_dictation_settings(card)
+        else:
+            # 2-col: dictation section balances under Audio + Hotkey
+            self._section_label(col0, "DICTATION")
+            card = self._card(col0)
+            self._build_vocab_setting(card)
+            self._build_dictation_settings(card)
+
+    # -- Dictation section (local features, v0.5.0) ------------------------------
+
+    def _build_switch_row(self, card, label: str, desc: str, value: bool, on_change):
+        right = self._setting_row(card, label, desc)
+        var = ctk.BooleanVar(value=value)
+        ctk.CTkSwitch(
+            right, text="", variable=var,
+            onvalue=True, offvalue=False,
+            command=lambda: on_change(var.get()),
+            width=44, height=22,
+            progress_color=self._colors.accent,
+            fg_color=self._colors.bg_hover,
+        ).pack()
+        return var
+
+    def _build_vocab_setting(self, card) -> None:
+        row = ctk.CTkFrame(card, fg_color="transparent")
+        row.pack(fill="x", padx=SPACING["md"], pady=SPACING["sm"])
+        ctk.CTkLabel(
+            row, text="Custom Vocabulary",
+            font=font("base"), text_color=self._colors.fg_primary, anchor="w",
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            row, text="Names and jargon Whisper should expect (used as its prompt)",
+            font=font("xs"), text_color=self._colors.fg_muted, anchor="w",
+        ).pack(anchor="w")
+        self._vocab_box = ctk.CTkTextbox(
+            row, height=56, corner_radius=RADIUS_SM, font=font("sm"),
+            fg_color=self._colors.bg_tertiary, text_color=self._colors.fg_primary,
+            border_width=1, border_color=self._colors.border, wrap="word",
+        )
+        self._vocab_box.pack(fill="x", pady=(SPACING["xs"], 0))
+        if self._settings.initial_prompt:
+            self._vocab_box.insert("1.0", self._settings.initial_prompt)
+        self._vocab_box.bind("<FocusOut>", self._on_vocab_changed)
+
+    def _build_dictation_settings(self, card) -> None:
+        self._voice_cmd_var = self._build_switch_row(
+            card, "Voice Commands", '"new line", "period", "delete that"',
+            self._settings.voice_commands, self._on_voice_commands_changed)
+        self._chime_var = self._build_switch_row(
+            card, "Sound Feedback", "Soft chime on start/stop",
+            self._settings.sound_feedback, self._on_chime_changed)
+        self._history_var = self._build_switch_row(
+            card, "Save History", "Keep dictations in the History tab",
+            self._settings.history_enabled, self._on_history_changed)
+
+        right = self._setting_row(card, "Text Replacements", "Auto-correct words after transcription")
+        secondary_button(
+            right, self._colors,
+            text=f"Edit…  ({len(self._settings.replacements)})", width=100,
+            command=self._open_replacements_editor,
+        ).pack()
+
+    def _on_vocab_changed(self, _event=None) -> None:
+        text = self._vocab_box.get("1.0", "end").strip()
+        if text != self._settings.initial_prompt:
+            self._settings.initial_prompt = text
+            self._settings.save()
+
+    def _on_voice_commands_changed(self, value: bool) -> None:
+        self._settings.voice_commands = value
+        self._settings.save()
+
+    def _on_chime_changed(self, value: bool) -> None:
+        self._settings.sound_feedback = value
+        self._settings.save()
+
+    def _on_history_changed(self, value: bool) -> None:
+        self._settings.history_enabled = value
+        self._settings.save()
+
+    def _open_replacements_editor(self) -> None:
+        parent = self._vocab_box.winfo_toplevel()
+        top = ctk.CTkToplevel(parent)
+        top.title("Text Replacements")
+        top.geometry("420x340")
+        top.transient(parent)
+        top.grab_set()
+        top.configure(fg_color=self._colors.bg_primary)
+
+        ctk.CTkLabel(
+            top, text="One rule per line:   spoken text => written text",
+            font=font("sm"), text_color=self._colors.fg_secondary,
+        ).pack(anchor="w", padx=SPACING["md"], pady=(SPACING["md"], SPACING["xs"]))
+
+        box = ctk.CTkTextbox(
+            top, corner_radius=RADIUS_SM, font=font("sm"),
+            fg_color=self._colors.bg_tertiary, text_color=self._colors.fg_primary,
+            border_width=1, border_color=self._colors.border,
+        )
+        box.pack(fill="both", expand=True, padx=SPACING["md"])
+        if self._settings.replacements:
+            box.insert("1.0", "\n".join(
+                f"{src} => {dst}" for src, dst in self._settings.replacements.items()
+            ))
+
+        def _save() -> None:
+            rules = {}
+            for line in box.get("1.0", "end").splitlines():
+                if "=>" in line:
+                    src, dst = line.split("=>", 1)
+                    src, dst = src.strip(), dst.strip()
+                    if src:
+                        rules[src] = dst
+            self._settings.replacements = rules
+            self._settings.save()
+            top.destroy()
+            self.ctx.rebuild_tab(self.KEY)  # refresh the rule count on the button
+
+        buttons = ctk.CTkFrame(top, fg_color="transparent")
+        buttons.pack(fill="x", padx=SPACING["md"], pady=SPACING["md"])
+        primary_button(buttons, self._colors, text="Save", width=80,
+                       command=_save).pack(side="right")
+        ghost_button(buttons, self._colors, text="Cancel", width=70,
+                     command=top.destroy).pack(side="right", padx=(0, SPACING["xs"]))
 
     # -- General tab building blocks (reusable in any layout) ------------------
 

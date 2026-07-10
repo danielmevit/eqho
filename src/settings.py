@@ -87,6 +87,12 @@ class Settings:
     volume_duck: str = "mute"  # "off", "50%", "25%", "10%", "mute"
     start_with_windows: bool = False
     theme: str = "dark"  # "dark", "light", "system"
+    # Local features (v0.5.0)
+    history_enabled: bool = True     # save dictations to history.jsonl
+    initial_prompt: str = ""         # custom vocabulary bias for Whisper
+    replacements: dict = field(default_factory=dict)  # text substitutions
+    voice_commands: bool = False     # "new line", "period", "delete that", …
+    sound_feedback: bool = True      # start/stop chime
 
     # runtime-only (not persisted)
     _listeners: list = field(default_factory=list, repr=False)

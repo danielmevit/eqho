@@ -44,13 +44,13 @@ Toolcraft-inspired restyle (original code only — see DECISIONS.md) + consumer-
 - [x] `packaging/windows/`: onedir PyInstaller spec + Inno Setup installer + portable zip
 - [x] GitHub Actions release workflow (tag → installer + zip artifacts)
 
-## Phase 5 -- Local Features (v0.5.x)
+## Phase 5 -- Local Features (v0.5.x) [done]
 All 100% local — no cloud, no server.
-- [ ] Transcript history log (JSONL) + functional History tab (search, copy, delete, export)
-- [ ] Whisper `initial_prompt` custom vocabulary setting
-- [ ] Text replacements (user-defined, applied before injection)
-- [ ] Voice commands ("new line", "period", "delete that") — opt-in
-- [ ] Sound feedback chime (synthesized, cross-platform via sounddevice)
+- [x] Transcript history log (JSONL) + functional History tab (search, copy, delete, export)
+- [x] Whisper `initial_prompt` custom vocabulary setting
+- [x] Text replacements (user-defined, applied before injection)
+- [x] Voice commands ("new line", "period", "delete that") — opt-in
+- [x] Sound feedback chime (synthesized, cross-platform via sounddevice)
 
 ## Phase 6 -- Cross-Platform (v0.6.x)
 Core dictation on Linux + macOS with graceful degradation.

@@ -4,4 +4,4 @@ Read by the dashboard About tab and the build scripts.
 Bump here (and only here) when a milestone ships; tag releases as v<version>.
 """
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
