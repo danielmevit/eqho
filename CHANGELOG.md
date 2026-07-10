@@ -4,6 +4,17 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.4.1] - 2026-07-10
+
+### Added
+- **Windows packaging pipeline** (`packaging/windows/`) — onedir PyInstaller spec (version parsed from `src/version.py`), `build.ps1` producing `dist\Eqho\`, `Eqho-portable-<version>.zip`, and (when Inno Setup is installed) `Eqho-Setup-<version>.exe`.
+- **Inno Setup installer** — per-user (no UAC), Start Menu shortcut, optional desktop icon, "start when you sign in" checkbox that writes the same Run-key value as the in-app toggle, launch-after-install, clean uninstall that preserves settings and models.
+- **GitHub Actions release workflow** — every `v*` tag builds the portable zip + installer on `windows-latest` (smoke gate first) and attaches them to the GitHub Release; `workflow_dispatch` for dry runs.
+
+### Changed
+- Root `Eqho.spec` and `build.ps1` retired in favor of `packaging/windows/`; COMMANDS.md updated.
+- Verified: the packaged `Eqho.exe --smoke` passes the full headless gate (settings, 17 audio devices, model load, silence transcription).
+
 ## [0.4.0] - 2026-07-10
 
 ### Changed

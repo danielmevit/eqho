@@ -45,11 +45,23 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Build Standalone .exe
+## Build Windows Distributables
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build.ps1
-# Output: dist\Eqho.exe
+powershell -ExecutionPolicy Bypass -File packaging\windows\build.ps1
+# Output: dist\Eqho\ (onedir bundle)
+#         dist\Eqho-portable-<version>.zip
+#         dist\Eqho-Setup-<version>.exe   (only if Inno Setup is installed:
+#                                          winget install JRSoftware.InnoSetup)
+```
+
+CI builds the same artifacts automatically on every `v*` tag (see `.github/workflows/release.yml`).
+
+## Headless Self-Check
+
+```powershell
+python run.py --smoke
+# JSON report; exit 0 = pass. Run after any engine change.
 ```
 
 ## Git — Two-Repo Workflow

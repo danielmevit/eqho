@@ -30,4 +30,7 @@ Things that silently break or waste time. Update the moment a new trap is discov
 - Stage specific paths; don't blind `git add -A` sweep in line-ending churn.
 
 ## Build / packaging
-- PyInstaller onefile spec at repo root until v0.4.1 (then `packaging/windows/`, onedir + Inno Setup). Unsigned binaries trigger SmartScreen "unknown publisher" — expected until code signing (backlog).
+- Windows build lives in `packaging/windows/` (onedir spec + Inno Setup `installer.iss` + `build.ps1`); the old root onefile spec is gone. Version is parsed from `src/version.py` — never hardcode it in packaging files.
+- Unsigned binaries trigger SmartScreen "unknown publisher" ("More info" → "Run anyway") — expected until code signing (backlog).
+- The installer is per-user (no UAC); its "start when you sign in" checkbox writes the same HKCU Run value ("Eqho") as the in-app toggle, so they stay in sync and uninstall removes it.
+- CI (`release.yml`) builds portable zip + installer on `v*` tags; `workflow_dispatch` for dry runs. The smoke gate runs first — a red smoke fails the release.

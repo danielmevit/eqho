@@ -1,0 +1,54 @@
+name: Release
+
+# Builds distributable artifacts on every version tag (and on demand).
+# Unsigned binaries: SmartScreen will warn on first run — documented in
+# docs/ai/GOTCHAS.md; code signing is a Phase-7+ item.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Create venv and install deps
+        run: |
+          python -m venv venv
+          venv\Scripts\python.exe -m pip install --upgrade pip
+          venv\Scripts\python.exe -m pip install -r requirements.txt
+
+      - name: Smoke gate
+        run: venv\Scripts\python.exe run.py --smoke
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build bundle + portable zip + installer
+        run: powershell -ExecutionPolicy Bypass -File packaging\windows\build.ps1
+
+      - name: Attach artifacts to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/Eqho-portable-*.zip
+            dist/Eqho-Setup-*.exe
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: eqho-windows
+          path: |
+            dist/Eqho-portable-*.zip
+            dist/Eqho-Setup-*.exe

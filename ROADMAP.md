@@ -41,8 +41,8 @@ Toolcraft-inspired restyle (original code only — see DECISIONS.md) + consumer-
 - [x] New token system: near-black dark ramp, hairline 1px borders, compact radii (4/6/8/12), `font()` helper
 - [x] Fix the 5 deferred v0.3.1 issues (dropdown polish, title-bar icon, tray theme refresh, responsive rebuild, unified padding)
 - [x] Dark title bar (DWM), new logo assets adoption, overlay restyle (pulse + fade)
-- [ ] `packaging/windows/`: onedir PyInstaller spec + Inno Setup installer + portable zip
-- [ ] GitHub Actions release workflow (tag → installer + zip artifacts)
+- [x] `packaging/windows/`: onedir PyInstaller spec + Inno Setup installer + portable zip
+- [x] GitHub Actions release workflow (tag → installer + zip artifacts)
 
 ## Phase 5 -- Local Features (v0.5.x)
 All 100% local — no cloud, no server.
