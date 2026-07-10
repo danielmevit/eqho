@@ -5,15 +5,66 @@ from typing import Optional
 
 import customtkinter as ctk
 
-from ..fonts import FONT_FAMILY
-from ..theme import FONT_SIZES, RADIUS_SM
+from ..theme import RADIUS_SM, RADIUS_MD, font
+
+
+# -- Button recipes -------------------------------------------------------------
+# The three button styles of the design system. Pass a ThemeColors instance;
+# any CTkButton kwarg can be overridden.
+
+def primary_button(parent, colors, **kwargs) -> ctk.CTkButton:
+    """Filled accent button for the main action."""
+    opts = dict(
+        corner_radius=RADIUS_SM,
+        height=28,
+        font=font("sm"),
+        fg_color=colors.accent,
+        hover_color=colors.accent_hover,
+        text_color=colors.on_accent,
+        border_width=0,
+    )
+    opts.update(kwargs)
+    return ctk.CTkButton(parent, **opts)
+
+
+def secondary_button(parent, colors, **kwargs) -> ctk.CTkButton:
+    """Hairline-bordered neutral button."""
+    opts = dict(
+        corner_radius=RADIUS_SM,
+        height=28,
+        font=font("sm"),
+        fg_color=colors.bg_tertiary,
+        hover_color=colors.bg_hover,
+        text_color=colors.fg_primary,
+        border_width=1,
+        border_color=colors.border,
+    )
+    opts.update(kwargs)
+    return ctk.CTkButton(parent, **opts)
+
+
+def ghost_button(parent, colors, **kwargs) -> ctk.CTkButton:
+    """Borderless transparent button (nav items, inline actions)."""
+    opts = dict(
+        corner_radius=RADIUS_SM,
+        height=28,
+        font=font("sm"),
+        fg_color="transparent",
+        hover_color=colors.bg_hover,
+        text_color=colors.fg_secondary,
+        border_width=0,
+    )
+    opts.update(kwargs)
+    return ctk.CTkButton(parent, **opts)
 
 
 class ThemedDropdown(ctk.CTkFrame):
     """Custom dropdown menu that replaces native tkinter.Menu with themed popups.
 
-    Renders as a button that opens a floating CTkFrame with selectable items.
-    Supports rounded corners and full theme control.
+    Renders as a hairline-bordered button that opens a floating CTkFrame with
+    selectable items. All colors must be supplied by the caller (the layout
+    factory passes the active ThemeColors values) — there are no hardcoded
+    fallback colors.
     """
 
     def __init__(
@@ -31,25 +82,28 @@ class ThemedDropdown(ctk.CTkFrame):
         text_color=None,
         button_color=None,
         button_hover_color=None,
+        border_color=None,
         dropdown_fg_color=None,
         dropdown_hover_color=None,
         dropdown_text_color=None,
         **kwargs,
     ):
         super().__init__(parent, fg_color="transparent", width=width, height=height)
+        from ..theme import font as theme_font  # avoid shadowing by the `font` kwarg
         self._values = values
         self._variable = variable
         self._command = command
         self._dropdown_open = False
         self._popup = None
-        self._font = font or (FONT_FAMILY, FONT_SIZES["sm"])
+        self._font = font or theme_font("sm")
         self._dropdown_font = dropdown_font or self._font
-        self._fg_color = button_color or fg_color or "#333"
-        self._hover_color = button_hover_color or "#444"
-        self._dd_fg = dropdown_fg_color or "#222"
-        self._dd_hover = dropdown_hover_color or "#444"
-        self._dd_text = dropdown_text_color or "#eee"
-        self._text_color = text_color or "#eee"
+        self._fg_color = button_color or fg_color
+        self._hover_color = button_hover_color
+        self._border_color = border_color
+        self._dd_fg = dropdown_fg_color
+        self._dd_hover = dropdown_hover_color
+        self._dd_text = dropdown_text_color
+        self._text_color = text_color
         self._corner_radius = corner_radius
         self._btn_width = width
         self._btn_height = height
@@ -66,6 +120,8 @@ class ThemedDropdown(ctk.CTkFrame):
             fg_color=self._fg_color,
             text_color=self._text_color,
             hover_color=self._hover_color,
+            border_width=1 if self._border_color else 0,
+            border_color=self._border_color,
             anchor="w",
             command=self._toggle_popup,
         )
@@ -100,9 +156,9 @@ class ThemedDropdown(ctk.CTkFrame):
         container = ctk.CTkFrame(
             self._popup,
             fg_color=self._dd_fg,
-            corner_radius=self._corner_radius,
+            corner_radius=RADIUS_MD,
             border_width=1,
-            border_color=self._hover_color,
+            border_color=self._border_color or self._hover_color,
         )
         container.pack(fill="both", expand=True, padx=1, pady=1)
 
@@ -132,7 +188,7 @@ class ThemedDropdown(ctk.CTkFrame):
                 text=val,
                 font=self._dropdown_font,
                 height=item_h,
-                corner_radius=4,
+                corner_radius=RADIUS_SM,
                 fg_color=self._dd_hover if is_selected else "transparent",
                 text_color=self._dd_text,
                 hover_color=self._dd_hover,

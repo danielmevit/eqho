@@ -2,8 +2,7 @@
 
 import customtkinter as ctk
 
-from ...fonts import FONT_FAMILY
-from ...theme import FONT_SIZES, SPACING, RADIUS_SM
+from ...theme import SPACING, RADIUS_SM, font
 from ..layout import TabBase
 
 
@@ -19,7 +18,7 @@ class OverlayTab(TabBase):
             grid = self._make_grid_container(tab)
 
             col0 = ctk.CTkFrame(grid, fg_color="transparent")
-            col0.grid(row=0, column=0, sticky="nsew", padx=SPACING["xs"])
+            col0.grid(row=0, column=0, sticky="nsew", padx=0)
 
             self._section_label(col0, "VISIBILITY")
             card = self._card(col0)
@@ -30,7 +29,7 @@ class OverlayTab(TabBase):
             self._build_position_setting(card)
 
             col1 = ctk.CTkFrame(grid, fg_color="transparent")
-            col1.grid(row=0, column=1, sticky="nsew", padx=SPACING["xs"])
+            col1.grid(row=0, column=1, sticky="nsew", padx=0)
 
             self._section_label(col1, "APPEARANCE")
             card = self._card(col1)
@@ -61,6 +60,8 @@ class OverlayTab(TabBase):
             onvalue=True, offvalue=False,
             command=self._on_overlay_toggle,
             width=44, height=22,
+            progress_color=self._colors.accent,
+            fg_color=self._colors.bg_hover,
         ).pack()
 
     def _build_position_setting(self, card) -> None:
@@ -77,18 +78,18 @@ class OverlayTab(TabBase):
             values=list(pos_labels.values()),
             width=160, height=30,
             corner_radius=RADIUS_SM,
-            font=(FONT_FAMILY, FONT_SIZES["sm"]),
-            dropdown_font=(FONT_FAMILY, FONT_SIZES["sm"]),
+            font=font("sm"),
+            dropdown_font=font("sm"),
             command=lambda v: self._on_pos_changed(v, pos_labels),
         ).pack()
 
     def _build_opacity_setting(self, card) -> None:
         opacity_row = ctk.CTkFrame(card, fg_color="transparent")
-        opacity_row.pack(fill="x", padx=SPACING["lg"], pady=SPACING["sm"])
+        opacity_row.pack(fill="x", padx=SPACING["md"], pady=SPACING["sm"])
 
         ctk.CTkLabel(
             opacity_row, text="Opacity",
-            font=(FONT_FAMILY, FONT_SIZES["base"]),
+            font=font("base"),
             text_color=self._colors.fg_primary, anchor="w",
         ).pack(anchor="w")
 
@@ -98,7 +99,7 @@ class OverlayTab(TabBase):
         self._opacity_val_label = ctk.CTkLabel(
             slider_frame,
             text=f"{int(self._settings.overlay_opacity * 100)}%",
-            font=(FONT_FAMILY, FONT_SIZES["sm"]),
+            font=font("sm"),
             text_color=self._colors.fg_secondary,
             width=40,
         )
@@ -110,15 +111,19 @@ class OverlayTab(TabBase):
             number_of_steps=14,
             command=self._on_opacity_changed,
             height=16,
+            fg_color=self._colors.bg_tertiary,
+            progress_color=self._colors.accent,
+            button_color=self._colors.accent,
+            button_hover_color=self._colors.accent_hover,
         ).pack(side="left", fill="x", expand=True)
 
     def _build_fontsize_setting(self, card) -> None:
         font_row = ctk.CTkFrame(card, fg_color="transparent")
-        font_row.pack(fill="x", padx=SPACING["lg"], pady=SPACING["sm"])
+        font_row.pack(fill="x", padx=SPACING["md"], pady=SPACING["sm"])
 
         ctk.CTkLabel(
             font_row, text="Font Size",
-            font=(FONT_FAMILY, FONT_SIZES["base"]),
+            font=font("base"),
             text_color=self._colors.fg_primary, anchor="w",
         ).pack(anchor="w")
 
@@ -128,7 +133,7 @@ class OverlayTab(TabBase):
         self._fontsize_val_label = ctk.CTkLabel(
             fs_frame,
             text=f"{self._settings.overlay_font_size}px",
-            font=(FONT_FAMILY, FONT_SIZES["sm"]),
+            font=font("sm"),
             text_color=self._colors.fg_secondary,
             width=40,
         )
@@ -140,6 +145,10 @@ class OverlayTab(TabBase):
             number_of_steps=18,
             command=self._on_fontsize_changed,
             height=16,
+            fg_color=self._colors.bg_tertiary,
+            progress_color=self._colors.accent,
+            button_color=self._colors.accent,
+            button_hover_color=self._colors.accent_hover,
         ).pack(side="left", fill="x", expand=True)
 
     def _on_overlay_toggle(self) -> None:

@@ -1,16 +1,20 @@
 """Shared layout builders for dashboard tabs.
 
 TabBase carries the DashboardContext and provides the card/row/label/dropdown
-builders that every tab uses. Method bodies are moved verbatim from the old
-monolithic dashboard.py — colors/settings resolve through the context so a
-theme switch is picked up on rebuild exactly as before.
+builders that every tab uses. Colors/settings resolve through the context so a
+theme switch is picked up on rebuild.
+
+Spacing law (applies to every tab, both 1-col and grid layouts):
+- Card/section/header horizontal inset from the tab edge = SPACING["md"].
+  Grid containers and column frames add NO extra horizontal padding, so
+  content aligns identically at every breakpoint.
+- Row padding inside a card = SPACING["md"]; gap between sections = SPACING["lg"].
 """
 
 import customtkinter as ctk
 
-from ..fonts import FONT_FAMILY
 from ..theme import (
-    MODEL_INFO, FONT_SIZES, SPACING, RADIUS_SM, RADIUS_MD,
+    MODEL_INFO, SPACING, RADIUS_SM, RADIUS_LG, font,
 )
 from .context import DashboardContext
 from .widgets import ThemedDropdown
@@ -60,7 +64,7 @@ class TabBase:
     def _is_model_cached(self, model_key: str) -> bool:
         return self.ctx.is_model_cached(model_key)
 
-    # -- Shared builders (moved verbatim from dashboard.py) ----------------------
+    # -- Shared builders ----------------------------------------------------------
 
     def _add_bottom_padding(self, tab) -> None:
         """Add breathing room at the bottom of a tab."""
@@ -72,11 +76,11 @@ class TabBase:
     def _tab_header(self, parent, title: str, subtitle: str) -> None:
         """Standard tab header with title and status info."""
         header = ctk.CTkFrame(parent, fg_color="transparent")
-        header.pack(fill="x", padx=SPACING["xl"], pady=(SPACING["xl"], SPACING["xs"]))
+        header.pack(fill="x", padx=SPACING["md"], pady=(SPACING["xl"], SPACING["xs"]))
 
         ctk.CTkLabel(
             header, text=title,
-            font=(FONT_FAMILY, FONT_SIZES["2xl"], "bold"),
+            font=font("2xl", "bold"),
             text_color=self._colors.fg_primary, anchor="w",
         ).pack(anchor="w")
 
@@ -89,25 +93,25 @@ class TabBase:
 
         ctk.CTkLabel(
             header, text=status,
-            font=(FONT_FAMILY, FONT_SIZES["xs"]),
+            font=font("xs"),
             text_color=self._colors.fg_muted, anchor="w",
         ).pack(anchor="w", pady=(2, 0))
 
         ctk.CTkLabel(
             parent, text=subtitle,
-            font=(FONT_FAMILY, FONT_SIZES["sm"]),
+            font=font("sm"),
             text_color=self._colors.fg_secondary, anchor="w",
-        ).pack(fill="x", padx=SPACING["xl"], pady=(0, SPACING["md"]))
+        ).pack(fill="x", padx=SPACING["md"], pady=(0, SPACING["md"]))
 
     def _section_label(self, parent, text: str) -> ctk.CTkLabel:
         icon = SECTION_ICONS.get(text, "▶")
         lbl = ctk.CTkLabel(
             parent, text=f"{icon}  {text}",
-            font=(FONT_FAMILY, FONT_SIZES["sm"], "bold"),
+            font=font("sm", "bold"),
             text_color=self._colors.fg_secondary,
             anchor="w",
         )
-        lbl.pack(fill="x", padx=SPACING["xl"], pady=(SPACING["lg"], 4))
+        lbl.pack(fill="x", padx=SPACING["md"], pady=(SPACING["lg"], 4))
         return lbl
 
     def _dropdown_colors(self) -> dict:
@@ -115,6 +119,7 @@ class TabBase:
         return {
             "button_color": self._colors.bg_tertiary,
             "button_hover_color": self._colors.bg_hover,
+            "border_color": self._colors.border,
             "dropdown_fg_color": self._colors.bg_secondary,
             "dropdown_hover_color": self._colors.bg_hover,
             "dropdown_text_color": self._colors.fg_primary,
@@ -123,45 +128,45 @@ class TabBase:
         }
 
     def _dropdown(self, parent, **kwargs) -> ThemedDropdown:
-        """Create a themed dropdown with rounded corners and full theme control."""
+        """Create a themed dropdown with hairline border and full theme control."""
         merged = {**self._dropdown_colors(), **kwargs}
         return ThemedDropdown(parent, **merged)
 
     def _card(self, parent) -> ctk.CTkFrame:
         card = ctk.CTkFrame(
             parent,
-            corner_radius=RADIUS_MD,
+            corner_radius=RADIUS_LG,
             fg_color=self._colors.bg_secondary,
             border_width=1,
             border_color=self._colors.border_subtle,
         )
-        card.pack(fill="x", padx=SPACING["xl"], pady=(SPACING["xs"], 0))
+        card.pack(fill="x", padx=SPACING["md"], pady=(SPACING["xs"], 0))
         return card
 
     def _card_grid(self, parent, col: int, row: int) -> ctk.CTkFrame:
         """A card placed into a grid layout."""
         card = ctk.CTkFrame(
             parent,
-            corner_radius=RADIUS_MD,
+            corner_radius=RADIUS_LG,
             fg_color=self._colors.bg_secondary,
             border_width=1,
             border_color=self._colors.border_subtle,
         )
         card.grid(row=row, column=col, sticky="nsew",
-                  padx=SPACING["xs"], pady=SPACING["xs"])
+                  padx=SPACING["md"], pady=SPACING["xs"])
         return card
 
     def _setting_row(self, parent, label: str, description: str = "") -> ctk.CTkFrame:
         """A row inside a card: label on the left, widget slot on the right."""
         row = ctk.CTkFrame(parent, fg_color="transparent")
-        row.pack(fill="x", padx=SPACING["lg"], pady=SPACING["sm"])
+        row.pack(fill="x", padx=SPACING["md"], pady=SPACING["sm"])
 
         left = ctk.CTkFrame(row, fg_color="transparent")
         left.pack(side="left", fill="x", expand=True)
 
         ctk.CTkLabel(
             left, text=label,
-            font=(FONT_FAMILY, FONT_SIZES["base"]),
+            font=font("base"),
             text_color=self._colors.fg_primary,
             anchor="w",
         ).pack(anchor="w")
@@ -169,7 +174,7 @@ class TabBase:
         if description:
             ctk.CTkLabel(
                 left, text=description,
-                font=(FONT_FAMILY, FONT_SIZES["xs"]),
+                font=font("xs"),
                 text_color=self._colors.fg_muted,
                 anchor="w",
             ).pack(anchor="w")
@@ -179,9 +184,10 @@ class TabBase:
         return right
 
     def _make_grid_container(self, parent) -> ctk.CTkFrame:
-        """Create a grid container that distributes columns evenly."""
+        """Grid container distributing columns evenly. Adds no horizontal
+        padding of its own — cards carry the md inset (see spacing law)."""
         grid = ctk.CTkFrame(parent, fg_color="transparent")
-        grid.pack(fill="both", expand=True, padx=SPACING["lg"], pady=SPACING["xs"])
+        grid.pack(fill="both", expand=True, padx=0, pady=SPACING["xs"])
         cols = self._get_col_count()
         for c in range(cols):
             grid.columnconfigure(c, weight=1, uniform="col")

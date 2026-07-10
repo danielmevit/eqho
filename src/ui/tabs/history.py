@@ -2,8 +2,7 @@
 
 import customtkinter as ctk
 
-from ...fonts import FONT_FAMILY
-from ...theme import FONT_SIZES, SPACING
+from ...theme import SPACING, font
 from ..layout import TabBase
 
 
@@ -19,14 +18,14 @@ class HistoryTab(TabBase):
         inner.pack(fill="x", padx=SPACING["xl"], pady=SPACING["2xl"])
 
         ctk.CTkLabel(
-            inner, text="⧖  Coming in Phase 3",
-            font=(FONT_FAMILY, FONT_SIZES["lg"], "bold"),
+            inner, text="⧖  Coming in Phase 5",
+            font=font("lg", "bold"),
             text_color=self._colors.fg_muted,
         ).pack()
 
         ctk.CTkLabel(
             inner, text="Your past dictations will be saved and searchable here.",
-            font=(FONT_FAMILY, FONT_SIZES["sm"]),
+            font=font("sm"),
             text_color=self._colors.fg_muted,
         ).pack(pady=(SPACING["xs"], 0))
 
@@ -44,12 +43,12 @@ class HistoryTab(TabBase):
             row.pack(fill="x", padx=SPACING["lg"], pady=SPACING["xs"])
             ctk.CTkLabel(
                 row, text=f"{icon}  {title}",
-                font=(FONT_FAMILY, FONT_SIZES["sm"]),
+                font=font("sm"),
                 text_color=self._colors.fg_muted, anchor="w",
             ).pack(anchor="w")
             ctk.CTkLabel(
                 row, text=f"     {desc}",
-                font=(FONT_FAMILY, FONT_SIZES["xs"]),
+                font=font("xs"),
                 text_color=self._colors.fg_muted, anchor="w",
             ).pack(anchor="w")
 

@@ -13,11 +13,10 @@ from typing import Callable, Optional
 
 import customtkinter as ctk
 
-from ..fonts import FONT_FAMILY
 from ..settings import Settings
 from ..theme import (
     get_colors, get_system_theme, ThemeColors,
-    RADIUS_SM, RADIUS_MD, FONT_SIZES, SPACING,
+    RADIUS_SM, RADIUS_MD, SPACING, font,
 )
 from .context import DashboardContext
 from .tabs import TAB_CLASSES
@@ -189,7 +188,7 @@ class Dashboard(ctk.CTkToplevel):
         else:
             ctk.CTkLabel(
                 title_frame, text="Eqho",
-                font=(FONT_FAMILY, FONT_SIZES["xl"], "bold"),
+                font=font("xl", "bold"),
                 text_color=self._colors.fg_primary,
             ).pack(anchor="w")
 
@@ -208,7 +207,7 @@ class Dashboard(ctk.CTkToplevel):
             btn = ctk.CTkButton(
                 self._sidebar,
                 text=f"  {icon}  {label}",
-                font=(FONT_FAMILY, FONT_SIZES["base"]),
+                font=font("base"),
                 height=36,
                 corner_radius=RADIUS_SM,
                 fg_color="transparent",
@@ -232,7 +231,7 @@ class Dashboard(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             frame, text="Theme",
-            font=(FONT_FAMILY, FONT_SIZES["xs"]),
+            font=font("xs"),
             text_color=self._colors.fg_muted,
         ).pack(anchor="w", padx=SPACING["sm"], pady=(0, 4))
 
@@ -254,9 +253,9 @@ class Dashboard(ctk.CTkToplevel):
                 width=40,
                 height=26,
                 corner_radius=RADIUS_SM,
-                font=(FONT_FAMILY, FONT_SIZES["xs"]),
+                font=font("xs"),
                 fg_color=self._colors.accent if is_active else "transparent",
-                text_color="#ffffff" if is_active else self._colors.fg_secondary,
+                text_color=self._colors.on_accent if is_active else self._colors.fg_secondary,
                 hover_color=self._colors.bg_hover,
                 command=lambda m=mode: self._set_theme(m),
             )

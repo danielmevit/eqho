@@ -7,9 +7,8 @@ from pathlib import Path
 import customtkinter as ctk
 
 from ...audio import list_input_devices
-from ...fonts import FONT_FAMILY
 from ...settings import SUPPORTED_LANGUAGES, WHISPER_MODELS
-from ...theme import MODEL_INFO, FONT_SIZES, SPACING, RADIUS_SM
+from ...theme import MODEL_INFO, SPACING, RADIUS_SM, font
 from ..layout import TabBase
 
 log = logging.getLogger(__name__)
@@ -67,7 +66,7 @@ class GeneralTab(TabBase):
         # Distribute sections across columns
         # Col 0: Audio + Hotkey
         col0 = ctk.CTkFrame(grid, fg_color="transparent")
-        col0.grid(row=0, column=0, sticky="nsew", padx=SPACING["xs"])
+        col0.grid(row=0, column=0, sticky="nsew", padx=0)
 
         self._section_label(col0, "AUDIO INPUT")
         card = self._card(col0)
@@ -80,7 +79,7 @@ class GeneralTab(TabBase):
 
         # Col 1: Model + Behavior
         col1 = ctk.CTkFrame(grid, fg_color="transparent")
-        col1.grid(row=0, column=1, sticky="nsew", padx=SPACING["xs"])
+        col1.grid(row=0, column=1, sticky="nsew", padx=0)
 
         self._section_label(col1, "MODEL")
         card = self._card(col1)
@@ -93,7 +92,7 @@ class GeneralTab(TabBase):
         # Col 2 (if 3-col): pull behavior out, add language/startup separately
         if cols >= 3:
             col2 = ctk.CTkFrame(grid, fg_color="transparent")
-            col2.grid(row=0, column=2, sticky="nsew", padx=SPACING["xs"])
+            col2.grid(row=0, column=2, sticky="nsew", padx=0)
 
             self._section_label(col2, "BEHAVIOR")
             card = self._card(col2)
@@ -123,25 +122,25 @@ class GeneralTab(TabBase):
             values=device_names,
             width=200, height=30,
             corner_radius=RADIUS_SM,
-            font=(FONT_FAMILY, FONT_SIZES["sm"]),
-            dropdown_font=(FONT_FAMILY, FONT_SIZES["sm"]),
+            font=font("sm"),
+            dropdown_font=font("sm"),
             command=lambda val: self._on_mic_changed(val, device_names, device_indices),
         ).pack()
 
     def _build_hotkey_setting(self, card) -> None:
         hotkey_row = ctk.CTkFrame(card, fg_color="transparent")
-        hotkey_row.pack(fill="x", padx=SPACING["lg"], pady=SPACING["sm"])
+        hotkey_row.pack(fill="x", padx=SPACING["md"], pady=SPACING["sm"])
 
         left = ctk.CTkFrame(hotkey_row, fg_color="transparent")
         left.pack(side="left", fill="x", expand=True)
         ctk.CTkLabel(
             left, text="Global Hotkey",
-            font=(FONT_FAMILY, FONT_SIZES["base"]),
+            font=font("base"),
             text_color=self._colors.fg_primary, anchor="w",
         ).pack(anchor="w")
         ctk.CTkLabel(
             left, text="Press to activate/deactivate dictation",
-            font=(FONT_FAMILY, FONT_SIZES["xs"]),
+            font=font("xs"),
             text_color=self._colors.fg_muted, anchor="w",
         ).pack(anchor="w")
 
@@ -151,7 +150,7 @@ class GeneralTab(TabBase):
         self._hotkey_display = ctk.CTkButton(
             hotkey_right,
             text=self._format_hotkey(self._settings.hotkey),
-            font=(FONT_FAMILY, FONT_SIZES["lg"], "bold"),
+            font=font("lg", "bold"),
             width=160, height=36,
             corner_radius=RADIUS_SM,
             fg_color=self._colors.bg_tertiary,
@@ -165,7 +164,7 @@ class GeneralTab(TabBase):
 
         self._hotkey_hint = ctk.CTkLabel(
             hotkey_right, text="Click to change",
-            font=(FONT_FAMILY, FONT_SIZES["xs"]),
+            font=font("xs"),
             text_color=self._colors.fg_muted,
         )
         self._hotkey_hint.pack(pady=(2, 0))
@@ -177,27 +176,32 @@ class GeneralTab(TabBase):
             right,
             values=["toggle", "hold"],
             variable=self._mode_var,
-            font=(FONT_FAMILY, FONT_SIZES["sm"]),
+            font=font("sm"),
             corner_radius=RADIUS_SM,
+            fg_color=self._colors.bg_tertiary,
+            selected_color=self._colors.accent,
+            selected_hover_color=self._colors.accent_hover,
+            unselected_color=self._colors.bg_tertiary,
+            unselected_hover_color=self._colors.bg_hover,
             command=self._on_mode_changed,
         ).pack()
 
     def _build_model_setting(self, card) -> None:
         model_row = ctk.CTkFrame(card, fg_color="transparent")
-        model_row.pack(fill="x", padx=SPACING["lg"], pady=SPACING["sm"])
+        model_row.pack(fill="x", padx=SPACING["md"], pady=SPACING["sm"])
 
         model_left = ctk.CTkFrame(model_row, fg_color="transparent")
         model_left.pack(side="left", fill="x", expand=True)
 
         ctk.CTkLabel(
             model_left, text="Whisper Model",
-            font=(FONT_FAMILY, FONT_SIZES["base"]),
+            font=font("base"),
             text_color=self._colors.fg_primary, anchor="w",
         ).pack(anchor="w")
 
         self._model_info_label = ctk.CTkLabel(
             model_left, text=self._get_model_info_text(self._settings.model_size),
-            font=(FONT_FAMILY, FONT_SIZES["xs"]),
+            font=font("xs"),
             text_color=self._colors.fg_muted, anchor="w",
         )
         self._model_info_label.pack(anchor="w")
@@ -219,8 +223,8 @@ class GeneralTab(TabBase):
             values=model_display_names,
             width=180, height=30,
             corner_radius=RADIUS_SM,
-            font=(FONT_FAMILY, FONT_SIZES["sm"]),
-            dropdown_font=(FONT_FAMILY, FONT_SIZES["sm"]),
+            font=font("sm"),
+            dropdown_font=font("sm"),
             command=self._on_model_changed,
         ).pack()
 
@@ -235,8 +239,8 @@ class GeneralTab(TabBase):
             values=list(duck_labels.values()),
             width=100, height=30,
             corner_radius=RADIUS_SM,
-            font=(FONT_FAMILY, FONT_SIZES["sm"]),
-            dropdown_font=(FONT_FAMILY, FONT_SIZES["sm"]),
+            font=font("sm"),
+            dropdown_font=font("sm"),
             command=lambda val: self._on_duck_changed(val, duck_labels),
         ).pack()
 
@@ -247,8 +251,13 @@ class GeneralTab(TabBase):
             right,
             values=["Clipboard", "Typing"],
             variable=self._paste_var,
-            font=(FONT_FAMILY, FONT_SIZES["sm"]),
+            font=font("sm"),
             corner_radius=RADIUS_SM,
+            fg_color=self._colors.bg_tertiary,
+            selected_color=self._colors.accent,
+            selected_hover_color=self._colors.accent_hover,
+            unselected_color=self._colors.bg_tertiary,
+            unselected_hover_color=self._colors.bg_hover,
             command=self._on_paste_changed,
         ).pack()
 
@@ -273,8 +282,8 @@ class GeneralTab(TabBase):
             values=lang_names,
             width=140, height=30,
             corner_radius=RADIUS_SM,
-            font=(FONT_FAMILY, FONT_SIZES["sm"]),
-            dropdown_font=(FONT_FAMILY, FONT_SIZES["sm"]),
+            font=font("sm"),
+            dropdown_font=font("sm"),
             command=self._on_lang_changed,
         ).pack()
 
@@ -286,6 +295,8 @@ class GeneralTab(TabBase):
             onvalue=True, offvalue=False,
             command=self._on_startup_changed,
             width=44, height=22,
+            progress_color=self._colors.accent,
+            fg_color=self._colors.bg_hover,
         ).pack()
 
     # -- Callbacks ---------------------------------------------------------------

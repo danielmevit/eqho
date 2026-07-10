@@ -1,7 +1,9 @@
 """Eqho Design System — tokens and theme engine.
 
 Three modes: dark, light, system (auto-detects Windows theme).
-Neutral, functional palette with rounded, spacious feel.
+Compact pro-tool aesthetic: near-black dark surfaces, hairline 1px borders,
+small radii, dense Inter typography. Both themes share the same geometry;
+only the palettes differ.
 """
 
 from dataclasses import dataclass
@@ -12,14 +14,16 @@ log = logging.getLogger(__name__)
 
 # -- Design tokens (constant across themes) -----------------------------------
 
-RADIUS_SM = 6      # inputs, buttons, small chips
-RADIUS_MD = 10     # cards, panels, dropdowns
-RADIUS_LG = 14     # overlay bar, modal windows, dashboard frame
-RADIUS_XL = 18     # pill switcher, large containers
+RADIUS_SM = 4      # buttons, inputs, chips
+RADIUS_MD = 6      # dropdown popups, menus
+RADIUS_LG = 8      # cards, panels
+RADIUS_XL = 12     # overlay bar, large containers
 
-ACCENT = "#58a6ff"          # Eqho blue
+# Eqho blue. (Toolcraft-blue "#0c8ce9" is a deliberate one-line swap option
+# if a deeper, more saturated accent is ever preferred.)
+ACCENT = "#58a6ff"
 ACCENT_HOVER = "#79b8ff"
-ACCENT_MUTED = "#1f3a5f"    # dark mode accent bg
+ACCENT_MUTED = "#16283f"    # dark mode accent bg
 ACCENT_LIGHT_MUTED = "#dbeafe"  # light mode accent bg
 
 SUCCESS = "#3fb950"
@@ -34,9 +38,8 @@ FONT_SIZES = {
     "sm": 11,
     "base": 13,
     "lg": 15,
-    "xl": 18,
-    "2xl": 22,
-    "3xl": 28,
+    "xl": 17,
+    "2xl": 20,
 }
 
 SPACING = {
@@ -47,6 +50,14 @@ SPACING = {
     "xl": 24,
     "2xl": 32,
 }
+
+
+def font(size: str = "base", weight: str | None = None) -> tuple:
+    """Font tuple for tk/customtkinter widgets — the ONLY way UI code should
+    build fonts, so family/scale changes stay one-file edits."""
+    if weight:
+        return (FONT_FAMILY, FONT_SIZES[size], weight)
+    return (FONT_FAMILY, FONT_SIZES[size])
 
 
 @dataclass(frozen=True)
@@ -64,6 +75,7 @@ class ThemeColors:
     accent: str           # primary action color
     accent_hover: str
     accent_muted: str     # accent background (tags, badges)
+    on_accent: str        # text/icon color that stays readable ON the accent fill
     success: str
     success_muted: str
     warning: str
@@ -76,48 +88,50 @@ class ThemeColors:
 
 
 DARK = ThemeColors(
-    bg_primary="#0d1117",
-    bg_secondary="#161b22",
-    bg_tertiary="#21262d",
-    bg_hover="#30363d",
-    fg_primary="#e6edf3",
-    fg_secondary="#8b949e",
-    fg_muted="#484f58",
-    border="#30363d",
-    border_subtle="#21262d",
+    bg_primary="#0a0a0b",       # near-black canvas
+    bg_secondary="#151517",     # sidebar, cards
+    bg_tertiary="#1f1f23",      # inputs, nested surfaces
+    bg_hover="#29292e",         # hover states
+    fg_primary="#f5f6f8",       # main text
+    fg_secondary="#a1a1aa",     # labels, descriptions
+    fg_muted="#85858f",         # placeholders, hints (kept readable on cards)
+    border="#2a2a30",           # hairline borders on controls
+    border_subtle="#232327",    # hairline borders on cards/panels
     accent=ACCENT,
     accent_hover=ACCENT_HOVER,
     accent_muted=ACCENT_MUTED,
+    on_accent="#0a0a0b",        # near-black reads best on the light Eqho blue
     success=SUCCESS,
     success_muted=SUCCESS_MUTED,
     warning=WARNING,
     warning_muted=WARNING_MUTED,
     danger=DANGER,
-    overlay_bg="#161b22",
-    overlay_fg="#e6edf3",
+    overlay_bg="#151517",
+    overlay_fg="#f5f6f8",
     overlay_accent=ACCENT,
 )
 
 LIGHT = ThemeColors(
-    bg_primary="#f0f2f5",       # gray canvas (main background)
+    bg_primary="#f5f6f8",       # light gray canvas
     bg_secondary="#ffffff",     # white cards, sidebar
-    bg_tertiary="#e4e8ec",      # inputs, nested elements
-    bg_hover="#d0d5dc",         # hover states
-    fg_primary="#1f2328",       # main text (near-black)
-    fg_secondary="#4d5562",     # labels, descriptions (darker than before)
-    fg_muted="#6e7681",         # placeholders, disabled (darker)
-    border="#c9cfd6",           # borders (more visible)
-    border_subtle="#dce1e6",    # subtle separators
+    bg_tertiary="#ecedf0",      # inputs, nested surfaces
+    bg_hover="#e2e4e8",         # hover states
+    fg_primary="#1a1c1f",       # main text (near-black)
+    fg_secondary="#4b4f58",     # labels, descriptions
+    fg_muted="#74747e",         # placeholders, hints
+    border="#d4d6dc",           # hairline borders on controls
+    border_subtle="#e4e6ea",    # hairline borders on cards/panels
     accent="#0969da",
     accent_hover="#0550ae",
     accent_muted=ACCENT_LIGHT_MUTED,
+    on_accent="#ffffff",        # white reads best on the deep light-mode blue
     success="#1a7f37",
     success_muted="#dafbe1",
     warning="#9a6700",
     warning_muted="#fff8c5",
     danger="#cf222e",
     overlay_bg="#ffffff",
-    overlay_fg="#1f2328",
+    overlay_fg="#1a1c1f",
     overlay_accent="#0969da",
 )
 

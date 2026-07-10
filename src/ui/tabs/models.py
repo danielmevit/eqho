@@ -2,9 +2,9 @@
 
 import customtkinter as ctk
 
-from ...fonts import FONT_FAMILY
-from ...theme import MODEL_INFO, FONT_SIZES, SPACING, RADIUS_SM, RADIUS_MD
+from ...theme import MODEL_INFO, SPACING, RADIUS_LG, font
 from ..layout import TabBase
+from ..widgets import secondary_button
 
 
 class ModelsTab(TabBase):
@@ -51,12 +51,12 @@ class ModelsTab(TabBase):
 
         card = ctk.CTkFrame(
             parent,
-            corner_radius=RADIUS_MD,
+            corner_radius=RADIUS_LG,
             fg_color=self._colors.bg_secondary,
             border_width=2 if is_selected else 1,
             border_color=self._colors.accent if is_selected else self._colors.border_subtle,
         )
-        card.pack(fill="x", padx=SPACING["xl"], pady=(SPACING["xs"], 0))
+        card.pack(fill="x", padx=SPACING["md"], pady=(SPACING["xs"], 0))
         self._fill_model_card(card, info, model_key, is_selected, cached)
 
     def _build_model_card_grid(self, grid, model_key: str, col: int, row: int) -> None:
@@ -66,18 +66,18 @@ class ModelsTab(TabBase):
 
         card = ctk.CTkFrame(
             grid,
-            corner_radius=RADIUS_MD,
+            corner_radius=RADIUS_LG,
             fg_color=self._colors.bg_secondary,
             border_width=2 if is_selected else 1,
             border_color=self._colors.accent if is_selected else self._colors.border_subtle,
         )
         card.grid(row=row, column=col, sticky="nsew",
-                  padx=SPACING["xs"], pady=SPACING["xs"])
+                  padx=SPACING["md"], pady=SPACING["xs"])
         self._fill_model_card(card, info, model_key, is_selected, cached)
 
     def _fill_model_card(self, card, info, model_key, is_selected, cached) -> None:
         inner = ctk.CTkFrame(card, fg_color="transparent")
-        inner.pack(fill="x", padx=SPACING["lg"], pady=SPACING["sm"])
+        inner.pack(fill="x", padx=SPACING["md"], pady=SPACING["sm"])
 
         top = ctk.CTkFrame(inner, fg_color="transparent")
         top.pack(fill="x")
@@ -88,7 +88,7 @@ class ModelsTab(TabBase):
 
         ctk.CTkLabel(
             top, text=name_text,
-            font=(FONT_FAMILY, FONT_SIZES["base"], "bold"),
+            font=font("base", "bold"),
             text_color=self._colors.accent if is_selected else self._colors.fg_primary,
             anchor="w",
         ).pack(side="left")
@@ -97,14 +97,14 @@ class ModelsTab(TabBase):
         status_color = self._colors.success if cached else self._colors.fg_muted
         ctk.CTkLabel(
             top, text=status_text,
-            font=(FONT_FAMILY, FONT_SIZES["xs"]),
+            font=font("xs"),
             text_color=status_color,
         ).pack(side="right")
 
         detail = f"{info.get('lang', '')} · {info.get('size', '')} · {info.get('device', '')}"
         ctk.CTkLabel(
             inner, text=detail,
-            font=(FONT_FAMILY, FONT_SIZES["xs"]),
+            font=font("xs"),
             text_color=self._colors.fg_secondary, anchor="w",
         ).pack(fill="x")
 
@@ -112,16 +112,15 @@ class ModelsTab(TabBase):
         if rec:
             ctk.CTkLabel(
                 inner, text=rec,
-                font=(FONT_FAMILY, FONT_SIZES["xs"]),
+                font=font("xs"),
                 text_color=self._colors.fg_muted, anchor="w",
             ).pack(fill="x")
 
         if not is_selected:
-            ctk.CTkButton(
-                inner, text="Select",
-                font=(FONT_FAMILY, FONT_SIZES["xs"]),
+            secondary_button(
+                inner, self._colors, text="Select",
+                font=font("xs"),
                 width=70, height=24,
-                corner_radius=RADIUS_SM,
                 command=lambda k=model_key: self._select_model_from_card(k),
             ).pack(anchor="e", pady=(SPACING["xs"], 0))
 

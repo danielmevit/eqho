@@ -2,8 +2,7 @@
 
 import customtkinter as ctk
 
-from ...fonts import FONT_FAMILY
-from ...theme import FONT_SIZES, SPACING
+from ...theme import SPACING, font
 from ...version import __version__
 from ..layout import TabBase
 
@@ -54,13 +53,13 @@ class AboutTab(TabBase):
             row.pack(fill="x", pady=2)
             ctk.CTkLabel(
                 row, text=label,
-                font=(FONT_FAMILY, FONT_SIZES["sm"]),
+                font=font("sm"),
                 text_color=self._colors.fg_secondary, anchor="w",
                 width=120,
             ).pack(side="left")
             ctk.CTkLabel(
                 row, text=value,
-                font=(FONT_FAMILY, FONT_SIZES["sm"]),
+                font=font("sm"),
                 text_color=self._colors.fg_primary, anchor="w",
             ).pack(side="left")
 
@@ -69,13 +68,13 @@ class AboutTab(TabBase):
         row.pack(fill="x", pady=2)
         ctk.CTkLabel(
             row, text="Author",
-            font=(FONT_FAMILY, FONT_SIZES["sm"]),
+            font=font("sm"),
             text_color=self._colors.fg_secondary, anchor="w",
             width=120,
         ).pack(side="left")
         author_link = ctk.CTkLabel(
             row, text="Daniel Mevit",
-            font=(FONT_FAMILY, FONT_SIZES["sm"]),
+            font=font("sm"),
             text_color=self._colors.accent, anchor="w",
             cursor="hand2",
         )
@@ -99,7 +98,7 @@ class AboutTab(TabBase):
         for t in techs:
             ctk.CTkLabel(
                 inner, text=f"·  {t}",
-                font=(FONT_FAMILY, FONT_SIZES["xs"]),
+                font=font("xs"),
                 text_color=self._colors.fg_secondary, anchor="w",
             ).pack(anchor="w", pady=1)
 
