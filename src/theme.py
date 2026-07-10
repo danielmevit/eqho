@@ -52,12 +52,17 @@ SPACING = {
 }
 
 
-def font(size: str = "base", weight: str | None = None) -> tuple:
-    """Font tuple for tk/customtkinter widgets — the ONLY way UI code should
-    build fonts, so family/scale changes stay one-file edits."""
-    if weight:
-        return (FONT_FAMILY, FONT_SIZES[size], weight)
-    return (FONT_FAMILY, FONT_SIZES[size])
+def font(size: str = "base", weight: str | None = None):
+    """Font for customtkinter widgets — the ONLY way UI code should build
+    fonts, so family/scale changes stay one-file edits. Returns a CTkFont
+    with slant explicitly forced to roman (never italic)."""
+    import customtkinter as ctk
+    return ctk.CTkFont(
+        family=FONT_FAMILY,
+        size=FONT_SIZES[size],
+        weight=weight or "normal",
+        slant="roman",
+    )
 
 
 @dataclass(frozen=True)
@@ -75,6 +80,7 @@ class ThemeColors:
     accent: str           # primary action color
     accent_hover: str
     accent_muted: str     # accent background (tags, badges)
+    accent_selected: str  # selected-segment fill — must pass AA with fg_primary text
     on_accent: str        # text/icon color that stays readable ON the accent fill
     success: str
     success_muted: str
@@ -100,6 +106,7 @@ DARK = ThemeColors(
     accent=ACCENT,
     accent_hover=ACCENT_HOVER,
     accent_muted=ACCENT_MUTED,
+    accent_selected="#1f6feb",  # deep blue — white fg_primary text passes AA
     on_accent="#0a0a0b",        # near-black reads best on the light Eqho blue
     success=SUCCESS,
     success_muted=SUCCESS_MUTED,
@@ -124,6 +131,7 @@ LIGHT = ThemeColors(
     accent="#0969da",
     accent_hover="#0550ae",
     accent_muted=ACCENT_LIGHT_MUTED,
+    accent_selected="#b3d1f5",  # soft blue chip — near-black fg_primary text passes AA
     on_accent="#ffffff",        # white reads best on the deep light-mode blue
     success="#1a7f37",
     success_muted="#dafbe1",

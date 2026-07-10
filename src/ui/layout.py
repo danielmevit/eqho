@@ -19,20 +19,6 @@ from ..theme import (
 from .context import DashboardContext
 from .widgets import ThemedDropdown
 
-SECTION_ICONS = {
-    "AUDIO INPUT":      "▶",   # ▶
-    "HOTKEY":           "▶",   # ▶
-    "MODEL":            "▶",   # ▶
-    "BEHAVIOR":         "▶",   # ▶
-    "VISIBILITY":       "▶",   # ▶
-    "POSITION":         "▶",   # ▶
-    "APPEARANCE":       "▶",   # ▶
-    "ENGLISH OPTIMIZED":"▶",   # ▶
-    "MULTILINGUAL":     "▶",   # ▶
-    "DICTATION":        "▶",   # ▶
-    "PLANNED FEATURES": "▶",   # ▶
-    "POWERED BY":       "▶",   # ▶
-}
 
 
 class TabBase:
@@ -105,9 +91,8 @@ class TabBase:
         ).pack(fill="x", padx=SPACING["md"], pady=(0, SPACING["md"]))
 
     def _section_label(self, parent, text: str) -> ctk.CTkLabel:
-        icon = SECTION_ICONS.get(text, "▶")
         lbl = ctk.CTkLabel(
-            parent, text=f"{icon}  {text}",
+            parent, text=text,
             font=font("sm", "bold"),
             text_color=self._colors.fg_secondary,
             anchor="w",

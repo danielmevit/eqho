@@ -8,7 +8,7 @@ from ...audio import list_input_devices
 from ...settings import SUPPORTED_LANGUAGES, WHISPER_MODELS
 from ...theme import MODEL_INFO, SPACING, RADIUS_SM, font
 from ..layout import TabBase
-from ..widgets import ghost_button, primary_button, secondary_button
+from ..widgets import ghost_button, primary_button, secondary_button, segmented, themed_switch
 
 log = logging.getLogger(__name__)
 
@@ -120,13 +120,9 @@ class GeneralTab(TabBase):
     def _build_switch_row(self, card, label: str, desc: str, value: bool, on_change):
         right = self._setting_row(card, label, desc)
         var = ctk.BooleanVar(value=value)
-        ctk.CTkSwitch(
-            right, text="", variable=var,
-            onvalue=True, offvalue=False,
+        themed_switch(
+            right, self._colors, variable=var,
             command=lambda: on_change(var.get()),
-            width=44, height=22,
-            progress_color=self._colors.accent,
-            fg_color=self._colors.bg_hover,
         ).pack()
         return var
 
@@ -305,17 +301,10 @@ class GeneralTab(TabBase):
     def _build_hotkey_mode_setting(self, card) -> None:
         right = self._setting_row(card, "Hotkey Mode", "Toggle on/off or hold to talk")
         self._mode_var = ctk.StringVar(value=self._settings.hotkey_mode)
-        ctk.CTkSegmentedButton(
-            right,
+        segmented(
+            right, self._colors,
             values=["toggle", "hold"],
             variable=self._mode_var,
-            font=font("sm"),
-            corner_radius=RADIUS_SM,
-            fg_color=self._colors.bg_tertiary,
-            selected_color=self._colors.accent,
-            selected_hover_color=self._colors.accent_hover,
-            unselected_color=self._colors.bg_tertiary,
-            unselected_hover_color=self._colors.bg_hover,
             command=self._on_mode_changed,
         ).pack()
 
@@ -380,17 +369,10 @@ class GeneralTab(TabBase):
         # Paste mode
         right = self._setting_row(card, "Paste Mode", "How text is injected into apps")
         self._paste_var = ctk.StringVar(value="Clipboard" if self._settings.auto_paste else "Typing")
-        ctk.CTkSegmentedButton(
-            right,
+        segmented(
+            right, self._colors,
             values=["Clipboard", "Typing"],
             variable=self._paste_var,
-            font=font("sm"),
-            corner_radius=RADIUS_SM,
-            fg_color=self._colors.bg_tertiary,
-            selected_color=self._colors.accent,
-            selected_hover_color=self._colors.accent_hover,
-            unselected_color=self._colors.bg_tertiary,
-            unselected_hover_color=self._colors.bg_hover,
             command=self._on_paste_changed,
         ).pack()
 
@@ -423,13 +405,9 @@ class GeneralTab(TabBase):
     def _build_startup_setting(self, card) -> None:
         right = self._setting_row(card, "Start with Windows", "Launch Eqho on login")
         self._startup_var = ctk.BooleanVar(value=self._settings.start_with_windows)
-        ctk.CTkSwitch(
-            right, text="", variable=self._startup_var,
-            onvalue=True, offvalue=False,
+        themed_switch(
+            right, self._colors, variable=self._startup_var,
             command=self._on_startup_changed,
-            width=44, height=22,
-            progress_color=self._colors.accent,
-            fg_color=self._colors.bg_hover,
         ).pack()
 
     # -- Callbacks ---------------------------------------------------------------

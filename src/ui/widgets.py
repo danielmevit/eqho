@@ -43,6 +43,39 @@ def secondary_button(parent, colors, **kwargs) -> ctk.CTkButton:
     return ctk.CTkButton(parent, **opts)
 
 
+def themed_switch(parent, colors, **kwargs) -> ctk.CTkSwitch:
+    """Toggle switch — track AND knob stay in the accent-blue family
+    (a black knob on the blue track reads wrong, per Daniel)."""
+    opts = dict(
+        text="",
+        onvalue=True, offvalue=False,
+        width=44, height=22,
+        progress_color=colors.accent,      # ON track
+        fg_color=colors.bg_hover,          # OFF track
+        button_color=colors.accent_hover,  # knob
+        button_hover_color=colors.accent,
+    )
+    opts.update(kwargs)
+    return ctk.CTkSwitch(parent, **opts)
+
+
+def segmented(parent, colors, **kwargs) -> ctk.CTkSegmentedButton:
+    """Segmented control: rounded, inset trough (bg_primary against the card),
+    and an accent_selected chip tuned so fg_primary text passes AA contrast."""
+    opts = dict(
+        font=font("sm"),
+        corner_radius=RADIUS_MD,
+        fg_color=colors.bg_primary,
+        unselected_color=colors.bg_primary,
+        unselected_hover_color=colors.bg_hover,
+        selected_color=colors.accent_selected,
+        selected_hover_color=colors.accent_selected,
+        text_color=colors.fg_primary,
+    )
+    opts.update(kwargs)
+    return ctk.CTkSegmentedButton(parent, **opts)
+
+
 def ghost_button(parent, colors, **kwargs) -> ctk.CTkButton:
     """Borderless transparent button (nav items, inline actions)."""
     opts = dict(

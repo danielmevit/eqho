@@ -33,12 +33,14 @@ def _load_icon(active: bool = False) -> Image.Image:
     Dims to 40% brightness for inactive state.
     Falls back to legacy icon_64 PNGs, then programmatic generation.
     """
-    # Pick variant based on taskbar theme
+    # Pick variant based on taskbar theme. Asset names indicate the theme
+    # they serve: *_dark.png (white art) for a dark taskbar, *_white.png
+    # (blue art) for a light one.
     taskbar = _get_taskbar_theme()
     if taskbar == "dark":
-        new_logo = _ASSETS / "logo_62_white.png"  # white on dark taskbar
+        new_logo = _ASSETS / "logo_62_dark.png"
     else:
-        new_logo = _ASSETS / "logo_62_dark.png"   # blue on light taskbar
+        new_logo = _ASSETS / "logo_62_white.png"
 
     if new_logo.exists():
         img = Image.open(new_logo).convert("RGBA")
@@ -48,7 +50,7 @@ def _load_icon(active: bool = False) -> Image.Image:
         return img
 
     # Fallback to the other variant
-    fallback = _ASSETS / "logo_62_dark.png"
+    fallback = _ASSETS / "logo_62_white.png"
     if fallback.exists():
         img = Image.open(fallback).convert("RGBA")
         if not active:

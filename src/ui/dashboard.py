@@ -81,7 +81,8 @@ class Dashboard(ctk.CTkToplevel):
         self._setup_window()
         self._build_sidebar()
         self._build_content_area()
-        self._build_all_tabs()
+        # Tabs build lazily on first show — keeps window open and theme
+        # switching fast (only the visible tab is rebuilt synchronously)
         self._show_tab("general")
 
         # Responsive resize handler
@@ -136,7 +137,7 @@ class Dashboard(ctk.CTkToplevel):
                 resolved = self._settings.theme
                 if resolved == "system":
                     resolved = get_system_theme()
-                name = "logo_32_white.png" if resolved == "dark" else "logo_32_dark.png"
+                name = "logo_32_dark.png" if resolved == "dark" else "logo_32_white.png"
                 logo_path = self._assets / name
                 if not logo_path.exists():
                     logo_path = self._assets / "logo_32.png"
@@ -172,9 +173,10 @@ class Dashboard(ctk.CTkToplevel):
         title_frame = ctk.CTkFrame(self._sidebar, fg_color="transparent")
         title_frame.pack(fill="x", padx=SPACING["lg"], pady=(SPACING["xl"], SPACING["lg"]))
 
-        # Wordmark variants: dark text for light backgrounds, light text for dark
-        wordmark_for_light_theme = self._assets / "logo_horizontal_dark.png"
-        wordmark_for_dark_theme = self._assets / "logo_horizontal_light.png"
+        # Asset names indicate the THEME they serve (Daniel's convention):
+        # *_dark.png is shown in dark mode, *_light.png in light mode.
+        wordmark_for_light_theme = self._assets / "logo_horizontal_light.png"
+        wordmark_for_dark_theme = self._assets / "logo_horizontal_dark.png"
         if wordmark_for_light_theme.exists() and wordmark_for_dark_theme.exists():
             from PIL import Image, ImageTk
             pil_for_light = Image.open(wordmark_for_light_theme)
@@ -310,10 +312,9 @@ class Dashboard(ctk.CTkToplevel):
         # Update window bg
         self.configure(fg_color=self._colors.bg_primary)
 
-        # Rebuild
+        # Rebuild — only the current tab; others rebuild lazily when shown
         self._build_sidebar()
         self._build_content_area()
-        self._build_all_tabs()
         self._show_tab(current_tab)
 
         # Re-bind resize
@@ -330,10 +331,11 @@ class Dashboard(ctk.CTkToplevel):
 
     def _show_tab(self, key: str) -> None:
         self._current_tab = key
-        # Rebuild if this tab was built for a different column count — fixes
-        # the stale-layout-until-resize glitch on tabs built before the
-        # window had its real size (deferred issue d)
-        if self._tab_built_cols.get(key) != self._get_col_count():
+        # Lazy build on first visit; rebuild if the tab was built for a
+        # different column count (the old stale-layout-until-resize glitch)
+        if key not in self._tab_frames:
+            self._build_tab(key)
+        elif self._tab_built_cols.get(key) != self._get_col_count():
             self.rebuild_tab(key)
         # Update nav highlight
         for k, btn in self._nav_buttons.items():
@@ -360,10 +362,6 @@ class Dashboard(ctk.CTkToplevel):
         self._tabs[key] = tab_obj
         tab_obj.build(frame)
         self._tab_built_cols[key] = self._get_col_count()
-
-    def _build_all_tabs(self) -> None:
-        for key in TAB_CLASSES:
-            self._build_tab(key)
 
     def rebuild_tab(self, key: str) -> None:
         """Tear down and rebuild one tab (responsive change or content refresh)."""

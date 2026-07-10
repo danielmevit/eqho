@@ -17,14 +17,17 @@ SRC = ROOT / "logo" / "new logo"
 ASSETS = ROOT / "assets"
 LOGO = ROOT / "logo"
 
-PNG_NAMES = [
-    "logo_32_dark.png",
-    "logo_32_white.png",
-    "logo_62_dark.png",
-    "logo_62_white.png",
-    "logo_horizontal_dark.png",
-    "logo_horizontal_light.png",
-]
+# `logo/new logo/` sources are named by ARTWORK COLOR (dark = dark/blue art),
+# but assets are named by the THEME THEY SERVE (dark = shown in dark mode) —
+# Daniel's convention since v0.6.1 — so the copy step swaps each pair.
+SRC_TO_DEST = {
+    "logo_32_dark.png": "logo_32_white.png",
+    "logo_32_white.png": "logo_32_dark.png",
+    "logo_62_dark.png": "logo_62_white.png",
+    "logo_62_white.png": "logo_62_dark.png",
+    "logo_horizontal_dark.png": "logo_horizontal_light.png",
+    "logo_horizontal_light.png": "logo_horizontal_dark.png",
+}
 
 ICO_SIZES = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64)]
 
@@ -34,16 +37,17 @@ def main() -> None:
         print(f"Source dir not found: {SRC} — nothing to do.")
         return
 
-    for name in PNG_NAMES:
-        src = SRC / name
+    for src_name, dest_name in SRC_TO_DEST.items():
+        src = SRC / src_name
         if not src.exists():
-            print(f"skip (missing): {name}")
+            print(f"skip (missing): {src_name}")
             continue
         for dest_dir in (ASSETS, LOGO):
-            shutil.copy2(src, dest_dir / name)
-        print(f"copied: {name} -> assets/, logo/")
+            shutil.copy2(src, dest_dir / dest_name)
+        print(f"copied: {src_name} -> assets/{dest_name}, logo/{dest_name}")
 
-    mark = ASSETS / "logo_62_dark.png"
+    # The app icon uses the blue mark — under mode-naming that's *_white.png
+    mark = ASSETS / "logo_62_white.png"
     if mark.exists():
         base = Image.open(mark).convert("RGBA")
         side = max(base.size)

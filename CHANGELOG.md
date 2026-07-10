@@ -4,6 +4,20 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.6.1] - 2026-07-10
+
+Polish pass from Daniel's first installed-build review.
+
+### Changed
+- **Softer chime** — lower register (G4/B4), ~10 dB quieter, full swell envelope; nothing urgent-sounding, both start and stop.
+- **Theme switching is fast now** — tabs build lazily (only the visible tab rebuilds on a theme change or first open; others build when visited).
+- **Segmented controls** (Hotkey Mode, Paste Mode) — rounder corners, inset trough, and a new `accent_selected` fill tuned so the text passes AA contrast in both themes.
+- **Toggle switches** — the knob is now accent-blue like the track (was a near-black circle on the blue track in light mode).
+- **No italics anywhere** — all UI fonts are now created with slant explicitly forced to roman.
+- **Section labels lost the "▶" icon** — plain uppercase text.
+- **Logo asset naming convention flipped to theme-served**: `*_dark.png` is the file shown IN dark mode (light artwork) and `*_white.png`/`*_light.png` in light mode. Files swapped in `assets/` + `logo/`, all code references updated, `tools/make_icons.py` maps the color-named sources in `logo/new logo/` accordingly.
+- **README rewritten** for the public launch — tighter, approachable, SEO-friendly (offline/private/free voice-to-text keywords, install-first structure, FAQ), with the AGPL attribution requirement stated plainly.
+
 ## [0.6.0] - 2026-07-10
 
 Cross-platform groundwork + Linux/macOS packages. Core dictation (hotkey → record → transcribe → inject) now targets all three OSes; extras degrade gracefully.

@@ -4,6 +4,7 @@ import customtkinter as ctk
 
 from ...theme import SPACING, RADIUS_SM, font
 from ..layout import TabBase
+from ..widgets import themed_switch
 
 
 class OverlayTab(TabBase):
@@ -55,13 +56,9 @@ class OverlayTab(TabBase):
     def _build_overlay_switch(self, card) -> None:
         right = self._setting_row(card, "Show Overlay", "Display transcription text while dictating")
         self._overlay_var = ctk.BooleanVar(value=self._settings.overlay_enabled)
-        ctk.CTkSwitch(
-            right, text="", variable=self._overlay_var,
-            onvalue=True, offvalue=False,
+        themed_switch(
+            right, self._colors, variable=self._overlay_var,
             command=self._on_overlay_toggle,
-            width=44, height=22,
-            progress_color=self._colors.accent,
-            fg_color=self._colors.bg_hover,
         ).pack()
 
     def _build_position_setting(self, card) -> None:
