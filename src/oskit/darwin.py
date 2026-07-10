@@ -15,7 +15,7 @@ from .base import OsKit
 
 log = logging.getLogger(__name__)
 
-_AGENT_FILE = Path.home() / "Library" / "LaunchAgents" / "com.danielmevit.eqho.plist"
+_AGENT_FILE = Path.home() / "Library" / "LaunchAgents" / "xyz.damt.eqho.plist"
 
 
 def _osascript(script: str) -> Optional[str]:
@@ -65,7 +65,7 @@ class DarwinOsKit(OsKit):
                     '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
                     '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
                     '<plist version="1.0">\n<dict>\n'
-                    "    <key>Label</key>\n    <string>com.danielmevit.eqho</string>\n"
+                    "    <key>Label</key>\n    <string>xyz.damt.eqho</string>\n"
                     "    <key>ProgramArguments</key>\n    <array>\n"
                     f"{args}\n"
                     "    </array>\n"

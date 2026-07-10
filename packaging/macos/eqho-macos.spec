@@ -57,7 +57,7 @@ app = BUNDLE(
     coll,
     name="Eqho.app",
     icon=str(ICNS) if ICNS.exists() else None,
-    bundle_identifier="com.danielmevit.eqho",
+    bundle_identifier="xyz.damt.eqho",
     version=VERSION,
     info_plist={
         "NSMicrophoneUsageDescription": "Eqho transcribes your speech locally — the microphone never leaves this Mac.",

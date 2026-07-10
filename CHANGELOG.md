@@ -6,6 +6,9 @@ Date format: `YYYY-MM-DD`.
 
 ## [0.6.6] - 2026-07-10
 
+### Changed
+- **Branding: damt.xyz** — the Windows installer's publisher is now `damt.xyz` (was the personal name), publisher URL points to https://damt.xyz, the About tab gains a Website row, README credits "Made by damt.xyz", and the macOS bundle/LaunchAgent id is `xyz.damt.eqho`. Author credit stays in About + README license.
+
 ### Fixed
 - **The model-switch freeze — root cause identified from the log.** Frozen sessions were never dying: multiple Eqho instances (installed autostart copy + dev runs + killed-but-zombie relaunches) each held a Whisper model in the 6 GB GPU, and the next CUDA load hung in Windows WDDM paging instead of erroring. Fixes:
   - **Single-instance lock** — a second Eqho now shows "already running" and exits instead of double-hooking the hotkey and stacking VRAM.

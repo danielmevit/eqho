@@ -81,6 +81,24 @@ class AboutTab(TabBase):
         author_link.pack(side="left")
         author_link.bind("<Button-1>", lambda e: self._open_url("https://github.com/DanielMevit"))
 
+        # Website row (damt.xyz — the public-facing brand)
+        row = ctk.CTkFrame(inner, fg_color="transparent")
+        row.pack(fill="x", pady=2)
+        ctk.CTkLabel(
+            row, text="Website",
+            font=font("sm"),
+            text_color=self._colors.fg_secondary, anchor="w",
+            width=120,
+        ).pack(side="left")
+        site_link = ctk.CTkLabel(
+            row, text="damt.xyz",
+            font=font("sm"),
+            text_color=self._colors.accent, anchor="w",
+            cursor="hand2",
+        )
+        site_link.pack(side="left")
+        site_link.bind("<Button-1>", lambda e: self._open_url("https://damt.xyz"))
+
     def _build_about_credits(self, parent) -> None:
         """About tab: powered by section."""
         self._section_label(parent, "POWERED BY")

@@ -94,6 +94,8 @@ Settings persist to `settings.json` in your config folder — everything is also
 
 Eqho is licensed under the [GNU AGPL-3.0](LICENSE): free to use, study, and modify — if you redistribute it or a derivative (including as a network service), you must keep the copyright and attribution notices and release your version under the same license. © [Daniel Mevit](https://github.com/DanielMevit).
 
+Made by **[damt.xyz](https://damt.xyz)** — freelance design & development.
+
 Provided "as is", without warranty of any kind.
 
 ---

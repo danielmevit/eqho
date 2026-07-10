@@ -16,8 +16,8 @@
 AppId={{7C21F6E3-9B4A-4D2E-8F0C-5A6B3D91C4E7}
 AppName={#AppName}
 AppVersion={#AppVersion}
-AppPublisher=Daniel Mevit
-AppPublisherURL=https://github.com/DanielMevit/Eqho
+AppPublisher=damt.xyz
+AppPublisherURL=https://damt.xyz
 AppSupportURL=https://github.com/DanielMevit/Eqho/issues
 DefaultDirName={autopf}\{#AppName}
 DisableProgramGroupPage=yes
