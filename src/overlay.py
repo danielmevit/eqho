@@ -19,11 +19,18 @@ log = logging.getLogger(__name__)
 
 _PADDING_X = 18
 _PADDING_Y = 10
-_MARGIN = 60
+_MARGIN = 24  # distance from the work-area edge (was 60 — floated too far in)
 _MIN_WIDTH = 300
 _PULSE_MS = 650      # recording-dot pulse interval
 _FADE_STEPS = 5      # fade in/out animation steps
 _FADE_INTERVAL = 25  # ms between fade steps
+_MAX_TEXT_CHARS = 220  # show only the TAIL of long dictations (latest words win)
+
+
+def _tail_text(text: str) -> str:
+    if len(text) <= _MAX_TEXT_CHARS:
+        return text
+    return "…" + text[-(_MAX_TEXT_CHARS - 1):]
 
 
 def _blend_hex(c1: str, c2: str, t: float) -> str:
@@ -85,6 +92,13 @@ class TranscriptionOverlay:
         bg, fg, accent = self._get_theme_colors()
 
         self._root = tk.Tk()
+        # CRITICAL: release tkinter's process-wide "default root" claim.
+        # The overlay's Tk is created first (on THIS thread); if it stays the
+        # default root, every Variable/CTkFont the dashboard creates without
+        # an explicit master binds to THIS interpreter — and the dashboard
+        # thread then makes cross-thread Tcl calls that intermittently
+        # DEADLOCK (the model-switch freeze; see eqho.log thread dumps).
+        tk._default_root = None
         self._root.title("Eqho")
         self._root.overrideredirect(True)
         self._root.attributes("-topmost", True)
@@ -116,6 +130,7 @@ class TranscriptionOverlay:
             fg=fg,
             bg=bg,
             anchor="w",
+            justify="left",  # multi-line text aligns left, not centered
             wraplength=600,
         )
         self._label.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -148,7 +163,7 @@ class TranscriptionOverlay:
         bg, fg, accent = self._get_theme_colors()
         self._root.configure(bg=bg)
         self._label.config(
-            text=text if text else "Listening...",
+            text=_tail_text(text) if text else "Listening...",
             fg=fg, bg=bg,
             font=(FONT_FAMILY, self._settings.overlay_font_size),
         )
@@ -187,21 +202,31 @@ class TranscriptionOverlay:
             self._root.attributes("-alpha", self._settings.overlay_opacity)
 
     def _calc_position(self, w: int, h: int, sw: int, sh: int) -> tuple[int, int]:
-        """Calculate overlay x, y based on the position preference."""
-        pos = self._settings.overlay_position
+        """Overlay x, y from the position preference, anchored to the WORK
+        AREA (excludes the taskbar) so bottom-center sits exactly where it
+        should instead of floating above a taskbar-sized gap."""
+        left, top, right, bottom = 0, 0, sw, sh
+        try:
+            from . import oskit
+            area = oskit.get().work_area()
+            if area:
+                left, top, right, bottom = area
+        except Exception:
+            pass
         margin = _MARGIN
-        if pos == "top-center":
-            return (sw - w) // 2, margin
-        elif pos == "top-left":
-            return margin, margin
-        elif pos == "top-right":
-            return sw - w - margin, margin
-        elif pos == "bottom-left":
-            return margin, sh - h - margin
-        elif pos == "bottom-right":
-            return sw - w - margin, sh - h - margin
-        else:  # bottom-center (default)
-            return (sw - w) // 2, sh - h - margin
+        cx = left + (right - left - w) // 2
+        if pos := self._settings.overlay_position:
+            if pos == "top-center":
+                return cx, top + margin
+            if pos == "top-left":
+                return left + margin, top + margin
+            if pos == "top-right":
+                return right - w - margin, top + margin
+            if pos == "bottom-left":
+                return left + margin, bottom - h - margin
+            if pos == "bottom-right":
+                return right - w - margin, bottom - h - margin
+        return cx, bottom - h - margin  # bottom-center (default)
 
     def update_text(self, text: str) -> None:
         if not self._root:
@@ -212,8 +237,22 @@ class TranscriptionOverlay:
             pass
 
     def _do_update(self, text: str) -> None:
-        if self._label:
-            self._label.config(text=text if text else "Listening...")
+        if not self._label:
+            return
+        self._label.config(text=_tail_text(text) if text else "Listening...")
+        if self._visible:
+            # Grow/reposition as lines wrap so the box always fits the text
+            try:
+                self._root.update_idletasks()
+                w = max(_MIN_WIDTH, self._label.winfo_reqwidth() + 2 * _PADDING_X + 26)
+                show_level = getattr(self._settings, "overlay_show_level", True)
+                h = self._label.winfo_reqheight() + 2 * _PADDING_Y + (7 if show_level else 0)
+                sw = self._root.winfo_screenwidth()
+                sh = self._root.winfo_screenheight()
+                x, y = self._calc_position(w, h, sw, sh)
+                self._root.geometry(f"{w}x{h}+{x}+{y}")
+            except Exception:
+                pass
 
     def hide(self) -> None:
         if not self._root:
@@ -246,11 +285,12 @@ class TranscriptionOverlay:
             return
         # Ease toward the target, and let the target itself breathe down so
         # the bar falls gently between the 2 Hz level updates
-        self._level_current += (self._level_target - self._level_current) * 0.35
-        self._level_target *= 0.93
+        # Fast attack, gentle release — reads as "alive" instead of a twitch
+        self._level_current += (self._level_target - self._level_current) * 0.5
+        self._level_target *= 0.90
         try:
             width = self._level_canvas.winfo_width()
-            bar_w = int(width * 0.35 * self._level_current)
+            bar_w = int(width * 0.9 * self._level_current)
             self._level_canvas.coords(self._level_rect, 0, 0, bar_w, 3)
         except Exception:
             return

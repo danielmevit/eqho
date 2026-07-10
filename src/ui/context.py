@@ -21,6 +21,7 @@ class DashboardContext:
         get_col_count: Callable[[], int],
         rebuild_tab: Callable[[str], None],
         set_ui_scale: Callable[[float], None] = lambda scale: None,
+        master_getter: Callable[[], object] = lambda: None,
     ):
         self.settings = settings
         self._colors_getter = colors_getter
@@ -28,6 +29,7 @@ class DashboardContext:
         self.get_col_count = get_col_count
         self.rebuild_tab = rebuild_tab
         self.set_ui_scale = set_ui_scale
+        self.master = master_getter  # the dashboard window — tk Variables MUST bind to it
         # _subs[event][key] = handler — keyed so a rebuilt tab REPLACES its old
         # subscription instead of stacking dead handlers on destroyed widgets.
         self._subs: dict[str, dict[str, Callable]] = {}

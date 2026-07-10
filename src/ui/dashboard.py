@@ -77,6 +77,7 @@ class Dashboard(ctk.CTkToplevel):
             get_col_count=self._get_col_count,
             rebuild_tab=self.rebuild_tab,
             set_ui_scale=self.set_ui_scale,
+            master_getter=lambda: self,
         )
         # Non-visible tabs rebuild on next show after a model change, so
         # their headers/cards never show a stale active model
@@ -418,11 +419,18 @@ class Dashboard(ctk.CTkToplevel):
         self._rebuild_ui()
 
     def _on_content_resize(self, event=None) -> None:
-        """Rebuild the current tab if column count changed."""
+        """Rebuild the current tab if column count changed — debounced, so a
+        live drag-resize doesn't rebuild on every breakpoint crossing."""
         new_cols = self._get_col_count()
         if new_cols != self._last_col_count:
             self._last_col_count = new_cols
-            self.rebuild_tab(self._current_tab)
+            if getattr(self, "_resize_job", None):
+                try:
+                    self.after_cancel(self._resize_job)
+                except Exception:
+                    pass
+            self._resize_job = self.after(
+                150, lambda: self.rebuild_tab(self._current_tab))
 
     def _make_tab_frame(self, key: str) -> ctk.CTkScrollableFrame:
         frame = ctk.CTkScrollableFrame(

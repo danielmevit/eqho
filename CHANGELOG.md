@@ -4,6 +4,19 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.6.7] - 2026-07-10
+
+### Fixed
+- **THE model-switch freeze — root cause caught by the watchdog and eliminated.** Thread dumps showed the dashboard thread deadlocked inside `StringVar.set` → `tk.globalsetvar`: the overlay's window (created first, on its own thread) became tkinter's default root, so every dashboard Variable/font silently belonged to the overlay's interpreter — cross-thread Tcl calls that intermittently deadlocked and made the whole dashboard sluggish. The overlay now releases the default-root claim, all tab Variables bind explicitly to the dashboard's root, and the constant cross-interpreter chatter (the "heavy/laggy" feel) is gone.
+- **Start chime is now reliable** — mic starts first, the blip plays to completion, THEN volume ducking mutes the output (the fire-and-forget blip raced the mute and was sometimes silent).
+- **Overlay bottom-center is exact** — positions anchor to the Windows work area (excludes the taskbar) with a tighter 24 px margin.
+- **Multi-line overlay text aligns left** (was centered per-line), long dictations show the **latest tail** with a leading ellipsis, and the box re-fits/repositions as lines wrap.
+
+### Changed
+- **Livelier audio-level line** — sqrt loudness curve, up to 90% of the overlay width (was 35%), faster attack/gentler release.
+- **Snappier partials** — live preview updates every 1.0 s of speech (was 1.5 s).
+- Window drag-resizes debounce the responsive rebuild (150 ms) instead of rebuilding mid-drag.
+
 ## [0.6.6] - 2026-07-10
 
 ### Changed

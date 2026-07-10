@@ -132,7 +132,7 @@ class GeneralTab(TabBase):
 
     def _build_switch_row(self, card, label: str, desc: str, value: bool, on_change):
         right = self._setting_row(card, label, desc)
-        var = ctk.BooleanVar(value=value)
+        var = self._bool_var(value=value)
         themed_switch(
             right, self._colors, variable=var,
             command=lambda: on_change(var.get()),
@@ -182,7 +182,7 @@ class GeneralTab(TabBase):
         control = self._setting_row(card, "UI Zoom", "Scale the whole dashboard")
         levels = ["100%", "125%", "150%", "175%", "200%"]
         current = f"{int(round(self._settings.ui_scale * 100))}%"
-        self._zoom_var = ctk.StringVar(value=current if current in levels else "150%")
+        self._zoom_var = self._string_var(value=current if current in levels else "150%")
         segmented(
             control, self._colors,
             values=levels,
@@ -274,7 +274,7 @@ class GeneralTab(TabBase):
                 current_name = name
                 break
 
-        self._mic_var = ctk.StringVar(value=current_name)
+        self._mic_var = self._string_var(value=current_name)
         self._dropdown(
             right,
             variable=self._mic_var,
@@ -313,7 +313,7 @@ class GeneralTab(TabBase):
 
     def _build_hotkey_mode_setting(self, card) -> None:
         right = self._setting_row(card, "Hotkey Mode", "Toggle on/off or hold to talk")
-        self._mode_var = ctk.StringVar(value=self._settings.hotkey_mode)
+        self._mode_var = self._string_var(value=self._settings.hotkey_mode)
         segmented(
             right, self._colors,
             values=["toggle", "hold"],
@@ -338,7 +338,7 @@ class GeneralTab(TabBase):
         model_keys = list(WHISPER_MODELS.keys())
         current_model_name = MODEL_INFO.get(self._settings.model_size, {}).get("name", "Unknown")
 
-        self._model_var = ctk.StringVar(value=current_model_name)
+        self._model_var = self._string_var(value=current_model_name)
         self._model_keys = model_keys
         self._model_display_names = model_display_names
 
@@ -357,7 +357,7 @@ class GeneralTab(TabBase):
         # Volume while speaking
         right = self._setting_row(card, "Volume While Speaking", "System volume during dictation")
         duck_labels = {"off": "Off", "50%": "50%", "25%": "25%", "10%": "10%", "mute": "Mute"}
-        self._duck_var = ctk.StringVar(value=duck_labels.get(self._settings.volume_duck, "Mute"))
+        self._duck_var = self._string_var(value=duck_labels.get(self._settings.volume_duck, "Mute"))
         self._dropdown(
             right,
             variable=self._duck_var,
@@ -371,7 +371,7 @@ class GeneralTab(TabBase):
 
         # Paste mode
         right = self._setting_row(card, "Paste Mode", "How text is injected into apps")
-        self._paste_var = ctk.StringVar(value="Clipboard" if self._settings.auto_paste else "Typing")
+        self._paste_var = self._string_var(value="Clipboard" if self._settings.auto_paste else "Typing")
         segmented(
             right, self._colors,
             values=["Clipboard", "Typing"],
@@ -390,7 +390,7 @@ class GeneralTab(TabBase):
         lang_names = list(SUPPORTED_LANGUAGES.values())
         lang_codes = list(SUPPORTED_LANGUAGES.keys())
         current_lang = SUPPORTED_LANGUAGES.get(self._settings.language, "English")
-        self._lang_var = ctk.StringVar(value=current_lang)
+        self._lang_var = self._string_var(value=current_lang)
         self._lang_codes = lang_codes
         self._lang_names = lang_names
 
@@ -407,7 +407,7 @@ class GeneralTab(TabBase):
 
     def _build_startup_setting(self, card) -> None:
         right = self._setting_row(card, "Start with Windows", "Launch Eqho on login")
-        self._startup_var = ctk.BooleanVar(value=self._settings.start_with_windows)
+        self._startup_var = self._bool_var(value=self._settings.start_with_windows)
         themed_switch(
             right, self._colors, variable=self._startup_var,
             command=self._on_startup_changed,

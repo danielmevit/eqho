@@ -51,6 +51,16 @@ class TabBase:
     def _is_model_cached(self, model_key: str) -> bool:
         return self.ctx.is_model_cached(model_key)
 
+    # tk Variables MUST bind to the dashboard's own root. Without an explicit
+    # master they bind to tkinter's default root — which can be a window on
+    # ANOTHER THREAD, making every .set() a cross-thread Tcl call that can
+    # deadlock (the model-switch freeze).
+    def _string_var(self, value: str = "") -> ctk.StringVar:
+        return ctk.StringVar(master=self.ctx.master(), value=value)
+
+    def _bool_var(self, value: bool = False) -> ctk.BooleanVar:
+        return ctk.BooleanVar(master=self.ctx.master(), value=value)
+
     # -- Shared builders ----------------------------------------------------------
 
     def _add_bottom_padding(self, tab) -> None:

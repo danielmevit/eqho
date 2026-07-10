@@ -33,7 +33,7 @@ class HistoryTab(TabBase):
         bar = ctk.CTkFrame(tab, fg_color="transparent")
         bar.pack(fill="x", padx=SPACING["md"], pady=(0, SPACING["xs"]))
 
-        self._search_var = ctk.StringVar()
+        self._search_var = self._string_var()
         search = ctk.CTkEntry(
             bar, textvariable=self._search_var,
             placeholder_text="Search transcripts…",

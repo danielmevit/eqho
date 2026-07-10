@@ -24,7 +24,7 @@ CHUNK_DURATION = 0.5
 SILENCE_THRESHOLD = 0.003
 SILENCE_TIMEOUT = 1.2
 MIN_PHRASE_DURATION = 0.4
-PARTIAL_INTERVAL = 1.5  # send a partial transcription every N seconds of active speech
+PARTIAL_INTERVAL = 1.0  # send a partial transcription every N seconds of active speech
 PARTIAL_TAIL_SECONDS = 10.0  # partials re-transcribe at most this much recent audio
 
 # Hallucination gating: Whisper invents text on (near-)silence. Buffers whose
@@ -269,8 +269,9 @@ class VoiceTranscriber:
             utterance_peak = max(utterance_peak, rms)
 
             if self._on_level:
-                # Normalized mic level for the overlay's audio indicator
-                self._on_level(min(1.0, rms / 0.06))
+                # Normalized mic level for the overlay's audio indicator —
+                # sqrt curve lifts normal speech well into the visible range
+                self._on_level(min(1.0, (rms / 0.045) ** 0.5))
 
             # Log mic levels periodically so we can diagnose issues
             if chunk_count % 20 == 0:

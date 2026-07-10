@@ -114,6 +114,20 @@ class WindowsOsKit(OsKit):
         except Exception:
             pass
 
+    # -- screen geometry ------------------------------------------------------------
+
+    def work_area(self):
+        try:
+            import ctypes
+            from ctypes import byref, wintypes
+            rect = wintypes.RECT()
+            SPI_GETWORKAREA = 0x0030
+            if ctypes.windll.user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, byref(rect), 0):
+                return (rect.left, rect.top, rect.right, rect.bottom)
+        except Exception:
+            pass
+        return None
+
     # -- theme -------------------------------------------------------------------------
 
     def _theme_value(self, value_name: str) -> str:

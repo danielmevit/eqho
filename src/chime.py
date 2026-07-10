@@ -31,16 +31,21 @@ _START = np.concatenate([_tone(392.0, 0.12), _tone(494.0, 0.16)])  # G4 → B4, 
 _STOP = np.concatenate([_tone(494.0, 0.12), _tone(392.0, 0.16)])   # B4 → G4, gentle fall
 
 
-def _play(data: np.ndarray) -> None:
+def _play(data: np.ndarray, blocking: bool) -> None:
     try:
-        sd.play(data, _SAMPLE_RATE)  # non-blocking
+        sd.play(data, _SAMPLE_RATE)
+        if blocking:
+            sd.wait()
     except Exception as e:
         log.debug("Chime playback failed: %s", e)
 
 
-def play_start() -> None:
-    _play(_START)
+def play_start(blocking: bool = False) -> None:
+    """Start blip. blocking=True guarantees it finishes BEFORE volume ducking
+    mutes the output (a non-blocking start blip raced the mute and was
+    sometimes inaudible)."""
+    _play(_START, blocking)
 
 
-def play_stop() -> None:
-    _play(_STOP)
+def play_stop(blocking: bool = False) -> None:
+    _play(_STOP, blocking)

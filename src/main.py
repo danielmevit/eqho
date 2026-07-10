@@ -168,14 +168,18 @@ class App:
             self._pending_text.clear()
         log.info("Dictation activated (target window: %s)", hwnd)
         self._dictation_start = time.monotonic()
-        if self.settings.sound_feedback:
-            chime.play_start()  # must play BEFORE ducking mutes the output
-        self._duck_volume()
         self.overlay.show(
             "Listening..." if self.transcriber.is_model_ready() else "Loading model…"
         )
         self.tray.set_active(True)
+        # Mic first (recording starts instantly), THEN the chime — blocking,
+        # so it finishes before ducking mutes the output (the old fire-and-
+        # forget blip raced the mute and was sometimes silent). Ducking lands
+        # ~0.3s into dictation, which is inaudible in practice.
         self.transcriber.start()
+        if self.settings.sound_feedback:
+            chime.play_start(blocking=True)
+        self._duck_volume()
         mic_error = self.transcriber.consume_mic_error()
         if mic_error:
             if not self.transcriber.is_running():

@@ -47,6 +47,12 @@ class OsKit:
     def unload_fonts(self, font_dir: Path) -> None:
         pass
 
+    # -- Screen geometry -----------------------------------------------------------
+    def work_area(self):
+        """(left, top, right, bottom) of the desktop excluding taskbar/dock,
+        or None when unknown (callers fall back to the full screen)."""
+        return None
+
     # -- Theme detection ---------------------------------------------------------
     def system_theme(self) -> str:
         """'dark' or 'light' for app surfaces."""
