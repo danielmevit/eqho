@@ -1,27 +1,27 @@
 """Inject transcribed text into the currently focused application."""
 
-import ctypes
 import logging
 import time
 
 import pyperclip
 from pynput.keyboard import Controller, Key
 
+from . import oskit
+
 log = logging.getLogger(__name__)
 
 _kb = Controller()
-_user32 = ctypes.windll.user32
 
 
-def get_foreground_window() -> int:
-    """Return the handle of the currently focused window."""
-    return _user32.GetForegroundWindow()
+def get_foreground_window():
+    """Handle of the currently focused window (None where unsupported)."""
+    return oskit.get().get_foreground_window()
 
 
-def set_foreground_window(hwnd: int) -> None:
-    """Bring the given window to the foreground."""
+def set_foreground_window(hwnd) -> None:
+    """Bring the given window to the foreground (no-op where unsupported)."""
     if hwnd:
-        _user32.SetForegroundWindow(hwnd)
+        oskit.get().set_foreground_window(hwnd)
 
 
 def type_text(text: str, *, use_clipboard: bool = True) -> None:

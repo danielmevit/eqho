@@ -9,7 +9,7 @@ import time
 import warnings
 from typing import Optional
 
-from . import chime, textproc
+from . import chime, oskit, textproc
 from .fonts import load_fonts, unload_fonts
 from .history import TranscriptHistory
 from .settings import Settings, VOLUME_DUCK_OPTIONS
@@ -17,24 +17,6 @@ from .transcriber import VoiceTranscriber
 from .overlay import TranscriptionOverlay
 from .hotkey import HotkeyManager
 from .injector import type_text, get_foreground_window, set_foreground_window, send_backspaces
-
-# Silent volume control via Windows Core Audio API (pycaw)
-try:
-    from pycaw.pycaw import AudioUtilities
-    from comtypes import GUID, CoInitialize
-    _GUID_NULL = GUID()
-    _HAS_VOLUME_CTL = True
-except Exception:
-    _HAS_VOLUME_CTL = False
-
-
-def _get_volume_ctl():
-    """Get a fresh volume endpoint (must be called per-thread due to COM)."""
-    try:
-        CoInitialize()
-        return AudioUtilities.GetSpeakers().EndpointVolume
-    except Exception:
-        return None
 from .tray import TrayApp
 
 logging.basicConfig(
@@ -131,46 +113,34 @@ class App:
 
     def _duck_volume(self) -> None:
         """Silently lower system volume based on user setting."""
-        if not _HAS_VOLUME_CTL:
-            return
         multiplier = VOLUME_DUCK_OPTIONS.get(self.settings.volume_duck)
         if multiplier is None:  # "off"
             return
-        try:
-            ctl = _get_volume_ctl()
-            if not ctl:
-                return
-            saved = ctl.GetMasterVolumeLevelScalar()
-            with self._lock:
-                self._saved_volume = saved
-            if multiplier == 0.0:
-                ctl.SetMute(True, _GUID_NULL)
-            else:
-                ctl.SetMasterVolumeLevelScalar(saved * multiplier, _GUID_NULL)
-            log.info("Volume ducked: %.0f%% → %s", saved * 100,
-                     "muted" if multiplier == 0.0 else f"{saved * multiplier * 100:.0f}%")
-        except Exception as e:
-            log.debug("Volume duck failed: %s", e)
+        kit = oskit.get()
+        saved = kit.get_volume()
+        if saved is None:  # volume control unavailable on this OS setup
+            return
+        with self._lock:
+            self._saved_volume = saved
+        if multiplier == 0.0:
+            kit.set_mute(True)
+        else:
+            kit.set_volume(saved * multiplier)
+        log.info("Volume ducked: %.0f%% → %s", saved * 100,
+                 "muted" if multiplier == 0.0 else f"{saved * multiplier * 100:.0f}%")
 
     def _restore_volume(self) -> None:
         """Silently restore system volume to previous level."""
-        if not _HAS_VOLUME_CTL:
-            return
         with self._lock:
             saved = self._saved_volume
         if saved is None:
             return
-        try:
-            ctl = _get_volume_ctl()
-            if not ctl:
-                return
-            ctl.SetMute(False, _GUID_NULL)
-            ctl.SetMasterVolumeLevelScalar(saved, _GUID_NULL)
+        kit = oskit.get()
+        kit.set_mute(False)
+        if kit.set_volume(saved):
             with self._lock:
                 self._saved_volume = None
             log.info("Volume restored to %.0f%%.", saved * 100)
-        except Exception as e:
-            log.debug("Volume restore failed: %s", e)
 
     def activate(self) -> None:
         hwnd = get_foreground_window()
@@ -303,10 +273,7 @@ class App:
 def _emergency_unmute() -> None:
     """Last resort: unmute system audio on any exit."""
     try:
-        if _HAS_VOLUME_CTL:
-            ctl = _get_volume_ctl()
-            if ctl:
-                ctl.SetMute(False, _GUID_NULL)
+        oskit.get().set_mute(False)
     except Exception:
         pass
 

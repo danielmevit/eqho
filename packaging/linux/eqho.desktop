@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Eqho
+Comment=Local voice-to-text dictation
+Exec=Eqho
+Icon=eqho
+Categories=Utility;Accessibility;
+Terminal=false

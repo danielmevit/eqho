@@ -5,8 +5,10 @@ numpy
 platformdirs
 pystray
 Pillow
-keyboard
 pynput
 pyperclip
-pycaw
 customtkinter>=5.2.0
+
+# Windows-only
+keyboard ; sys_platform == "win32"
+pycaw ; sys_platform == "win32"

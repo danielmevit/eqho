@@ -52,6 +52,15 @@ def main() -> None:
         canvas.save(ASSETS / "eqho.ico", sizes=ICO_SIZES)
         print(f"wrote: assets/eqho.ico ({', '.join(f'{w}px' for w, _ in ICO_SIZES)})")
 
+        # macOS .icns (upscaled from the 62px mark — replace with a vector
+        # render when a bigger raster exists)
+        try:
+            big = canvas.resize((512, 512), Image.LANCZOS)
+            big.save(ASSETS / "eqho.icns", format="ICNS")
+            print("wrote: assets/eqho.icns")
+        except Exception as e:
+            print(f"icns skipped: {e}")
+
 
 if __name__ == "__main__":
     main()

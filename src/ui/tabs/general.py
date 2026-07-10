@@ -1,8 +1,6 @@
 """General tab: audio input, hotkey, model, and behavior settings."""
 
 import logging
-import sys
-from pathlib import Path
 
 import customtkinter as ctk
 
@@ -494,24 +492,9 @@ class GeneralTab(TabBase):
         enabled = self._startup_var.get()
         self._settings.start_with_windows = enabled
         self._settings.save()
-        try:
-            import winreg
-            key_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0,
-                                winreg.KEY_SET_VALUE | winreg.KEY_READ) as key:
-                if enabled:
-                    if getattr(sys, "frozen", False):
-                        cmd = f'"{sys.executable}"'
-                    else:
-                        cmd = f'"{sys.executable}" "{Path(sys.argv[0]).resolve()}"'
-                    winreg.SetValueEx(key, "Eqho", 0, winreg.REG_SZ, cmd)
-                else:
-                    try:
-                        winreg.DeleteValue(key, "Eqho")
-                    except FileNotFoundError:
-                        pass
-        except Exception as e:
-            log.error("Failed to update startup registry: %s", e)
+        from ... import oskit
+        from ...oskit.base import autostart_command
+        oskit.get().set_autostart(enabled, autostart_command())
 
     # -- Hotkey capture --------------------------------------------------------
 

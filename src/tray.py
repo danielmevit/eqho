@@ -10,6 +10,8 @@ from typing import Callable, Optional
 from PIL import Image, ImageDraw
 import pystray
 
+from . import oskit
+from .oskit.base import autostart_command
 from .settings import Settings, SUPPORTED_LANGUAGES, WHISPER_MODELS, VOLUME_DUCK_OPTIONS, OVERLAY_POSITIONS
 from .audio import list_input_devices
 from .ui import open_dashboard
@@ -20,18 +22,8 @@ _ASSETS = Path(__file__).resolve().parent.parent / "assets"
 
 
 def _get_taskbar_theme() -> str:
-    """Detect Windows taskbar light/dark mode. Returns 'dark' or 'light'."""
-    try:
-        import winreg
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize",
-        )
-        value, _ = winreg.QueryValueEx(key, "SystemUsesLightTheme")
-        winreg.CloseKey(key)
-        return "light" if value == 1 else "dark"
-    except Exception:
-        return "dark"
+    """Taskbar light/dark mode (can differ from the apps theme on Windows)."""
+    return oskit.get().taskbar_theme()
 
 
 def _load_icon(active: bool = False) -> Image.Image:
@@ -320,36 +312,10 @@ class TrayApp:
             ))
         return pystray.Menu(*items)
 
-    def _get_startup_command(self) -> str:
-        """Return the command to launch Eqho at startup."""
-        if getattr(sys, "frozen", False):
-            return f'"{sys.executable}"'
-        script = Path(sys.argv[0]).resolve()
-        return f'"{sys.executable}" "{script}"'
-
-    def _set_startup_registry(self, enable: bool) -> None:
-        """Add or remove Eqho from the Windows Run registry key."""
-        try:
-            import winreg
-            key_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0,
-                                winreg.KEY_SET_VALUE | winreg.KEY_READ) as key:
-                if enable:
-                    winreg.SetValueEx(key, "Eqho", 0, winreg.REG_SZ, self._get_startup_command())
-                    log.info("Added Eqho to Windows startup.")
-                else:
-                    try:
-                        winreg.DeleteValue(key, "Eqho")
-                        log.info("Removed Eqho from Windows startup.")
-                    except FileNotFoundError:
-                        pass
-        except Exception as e:
-            log.error("Failed to update startup registry: %s", e)
-
     def _toggle_startup(self, icon, item) -> None:
         self._settings.start_with_windows = not self._settings.start_with_windows
         self._settings.save()
-        self._set_startup_registry(self._settings.start_with_windows)
+        oskit.get().set_autostart(self._settings.start_with_windows, autostart_command())
 
     def _make_overlay_pos_setter(self, pos: str):
         def _set(icon, item):

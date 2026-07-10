@@ -11,36 +11,13 @@ import numpy as np
 import sounddevice as sd
 from faster_whisper import WhisperModel
 
+from . import oskit
 from .settings import Settings
 
 log = logging.getLogger(__name__)
 
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 os.environ.setdefault("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1")
-
-
-def _disable_windows_audio_ducking() -> None:
-    """Tell Windows not to adjust other apps' volume when we use the mic.
-
-    Sets the registry key so Windows Communications Activity is "Do nothing"
-    instead of ducking/boosting other audio when a mic is in use.
-    """
-    try:
-        import winreg
-        key_path = r"SOFTWARE\Microsoft\Multimedia\Audio"
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0,
-                            winreg.KEY_READ | winreg.KEY_WRITE) as key:
-            try:
-                current, _ = winreg.QueryValueEx(key, "UserDuckingPreference")
-                if current == 3:  # already set to "Do nothing"
-                    return
-            except FileNotFoundError:
-                pass
-            # 3 = "Do nothing" (0=mute, 1=reduce 80%, 2=reduce 50%)
-            winreg.SetValueEx(key, "UserDuckingPreference", 0, winreg.REG_DWORD, 3)
-            log.info("Disabled Windows audio ducking (Communications Activity → Do nothing).")
-    except Exception as e:
-        log.debug("Could not disable audio ducking: %s", e)
 
 SAMPLE_RATE = 16000
 CHUNK_DURATION = 0.5
@@ -87,7 +64,7 @@ class VoiceTranscriber:
     def __init__(self, settings: Settings):
         self._settings = settings
         self._model: Optional[WhisperModel] = None
-        _disable_windows_audio_ducking()
+        oskit.get().disable_os_mic_ducking()
         self._on_partial: Optional[Callable[[str], None]] = None
         self._on_complete: Optional[Callable[[str], None]] = None
         self._on_status: Optional[Callable[[str], None]] = None

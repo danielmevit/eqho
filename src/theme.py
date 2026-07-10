@@ -137,16 +137,10 @@ LIGHT = ThemeColors(
 
 
 def get_system_theme() -> str:
-    """Detect Windows light/dark mode. Returns 'dark' or 'light'."""
+    """Detect the OS light/dark mode. Returns 'dark' or 'light'."""
     try:
-        import winreg
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize",
-        )
-        value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-        winreg.CloseKey(key)
-        return "light" if value == 1 else "dark"
+        from . import oskit
+        return oskit.get().system_theme()
     except Exception:
         return "dark"
 

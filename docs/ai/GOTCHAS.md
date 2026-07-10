@@ -29,6 +29,13 @@ Things that silently break or waste time. Update the moment a new trap is discov
 - `core.filemode false` is set (avoids phantom mode diffs on /mnt).
 - Stage specific paths; don't blind `git add -A` sweep in line-ending churn.
 
+## Cross-platform (oskit)
+- ALL OS-specific code lives in `src/oskit/` — adding a `sys.platform` branch or ctypes/winreg/osascript call anywhere else is a bug. Base-class methods are safe no-ops; unimplemented capabilities must degrade, not crash.
+- Linux runtime deps (not pip): `libportaudio2` (audio), `xclip` (clipboard), `gir1.2-ayatanaappindicator3-0.1` + `python3-gi` (tray on GNOME), `xdotool` (optional focus restore). Hotkeys/injection target X11; on Wayland pynput can't grab global keys (backlog).
+- macOS: the app must be granted **Accessibility** and **Input Monitoring** (System Settings → Privacy & Security) or hotkeys/typing silently do nothing. Unsigned .app → right-click → Open on first launch. CTranslate2 has no Metal — CPU int8 on Macs until the whisper.cpp era (Phase 8).
+- The `keyboard` lib is Windows-only by requirements markers now — never import it at module level (lazy imports inside the keyboard-backend paths only). Hotkey capture UI (General tab) still uses it, so "click to change hotkey" is Windows-only until ported.
+- Chime plays through the default output — on Linux/macOS the volume-duck subprocess calls (wpctl/osascript) are slower than pycaw; the pre-duck chime ordering matters even more there.
+
 ## Build / packaging
 - Windows build lives in `packaging/windows/` (onedir spec + Inno Setup `installer.iss` + `build.ps1`); the old root onefile spec is gone. Version is parsed from `src/version.py` — never hardcode it in packaging files.
 - Unsigned binaries trigger SmartScreen "unknown publisher" ("More info" → "Run anyway") — expected until code signing (backlog).

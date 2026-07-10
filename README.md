@@ -153,12 +153,12 @@ The executable will be at `dist\Eqho.exe`. To start automatically with Windows, 
 - faster-whisper (Whisper via CTranslate2, MIT license, on-device)
 - CUDA Toolkit 12.x (optional, for GPU acceleration on NVIDIA GPUs)
 - pystray + Pillow (system tray)
-- keyboard (global hotkeys)
+- keyboard (global hotkeys, Windows) / pynput (Linux X11, macOS)
 - pynput + pyperclip (text injection)
 - tkinter (overlay)
 - customtkinter (dashboard UI)
 - sounddevice + numpy (audio capture and processing)
-- Target: Windows 10/11
+- Platforms: Windows 10/11 (primary) · Linux X11 and macOS (core dictation since v0.6.0; Linux needs `libportaudio2`, `xclip`, and an AppIndicator lib for the tray; macOS needs Accessibility + Input Monitoring permissions)
 
 ## Changelog
 

@@ -52,13 +52,13 @@ All 100% local — no cloud, no server.
 - [x] Voice commands ("new line", "period", "delete that") — opt-in
 - [x] Sound feedback chime (synthesized, cross-platform via sounddevice)
 
-## Phase 6 -- Cross-Platform (v0.6.x)
+## Phase 6 -- Cross-Platform (v0.6.x) [done]
 Core dictation on Linux + macOS with graceful degradation.
-- [ ] `src/oskit/` platform abstraction (volume duck, hotkeys, focus, autostart, fonts, theme)
-- [ ] pynput hotkey backend (Linux/macOS; Windows keeps `keyboard` until validated)
-- [ ] Platform-marked requirements; pystray backends per OS
-- [ ] Linux tar.gz + AppImage · macOS .app + unsigned dmg
-- [ ] CI build matrix (windows/ubuntu/macos) with headless `--smoke`
+- [x] `src/oskit/` platform abstraction (volume duck, hotkeys, focus, autostart, fonts, theme)
+- [x] pynput hotkey backend (Linux/macOS; Windows keeps `keyboard` until validated)
+- [x] Platform-marked requirements; pystray backends per OS
+- [x] Linux tar.gz + AppImage · macOS .app + unsigned dmg
+- [x] CI build matrix (windows/ubuntu/macos) with headless `--smoke`
 
 ## Phase 7 -- Public Launch (→ v1.0)
 - [x] Relocate internal docs (now root AGENTS/SOUL/TODO + docs/ai/)

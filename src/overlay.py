@@ -87,10 +87,13 @@ class TranscriptionOverlay:
 
         self._root.configure(bg=bg)
 
-        # Apply rounded corners (Windows 11+)
+        # Apply rounded corners (Windows 11+; no-op elsewhere)
         self._root.update_idletasks()
-        hwnd = ctypes.windll.user32.GetParent(self._root.winfo_id())
-        _apply_rounded_corners(hwnd)
+        try:
+            hwnd = ctypes.windll.user32.GetParent(self._root.winfo_id())
+            _apply_rounded_corners(hwnd)
+        except Exception:
+            pass
 
         frame = tk.Frame(self._root, bg=bg, padx=_PADDING_X, pady=_PADDING_Y)
         frame.pack(fill=tk.BOTH, expand=True)

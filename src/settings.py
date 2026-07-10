@@ -76,6 +76,7 @@ class Settings:
     language: str = "en"
     hotkey: str = "alt+q"
     hotkey_mode: str = "toggle"  # "toggle" or "hold"
+    hotkey_backend: str = "auto"  # "auto" (keyboard on Windows, pynput elsewhere), "keyboard", "pynput"
     model_size: str = "distil-large-v3"
     model_dir: str = ""  # empty = resolve_model_dir() picks legacy dir or platform cache
     audio_device: Optional[int] = None  # None = system default input device
