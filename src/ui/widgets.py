@@ -161,13 +161,14 @@ class ThemedDropdown(ctk.CTkFrame):
             self._button, text=current, font=self._font,
             text_color=self._text_color, fg_color="transparent", anchor="w",
         )
-        self._text_label.pack(side="left", fill="x", expand=True, padx=(10, 2))
+        # 1px downward nudge — Inter's metrics sit text slightly high
+        self._text_label.pack(side="left", fill="x", expand=True, padx=(10, 2), pady=(1, 0))
 
         self._chevron = ctk.CTkLabel(
             self._button, text="▾", font=self._font,
             text_color=self._text_color, fg_color="transparent", width=14,
         )
-        self._chevron.pack(side="right", padx=(0, 8))
+        self._chevron.pack(side="right", padx=(0, 8), pady=(1, 0))
 
         for widget in (self._button, self._text_label, self._chevron):
             widget.bind("<Button-1>", lambda e: self._toggle_popup())

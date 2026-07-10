@@ -1,4 +1,8 @@
-"""Models tab: Whisper model cards with selection, download, and progress."""
+"""Models tab: Whisper model cards with selection, download, and progress.
+
+All state changes (select, download start/finish/fail) update the existing
+card widgets IN PLACE — never a tab rebuild, which flashed the whole view.
+"""
 
 import customtkinter as ctk
 
@@ -16,13 +20,17 @@ class ModelsTab(TabBase):
 
     def __init__(self, ctx):
         super().__init__(ctx)
+        self._card_refs: dict = {}
         self._progress_widgets: dict = {}
         self._poll_widget = None
+        self._selected_key = ""
 
     def build(self, tab) -> None:
         self._tab_header(tab, "Models", "Whisper models for speech recognition")
+        self._card_refs = {}
         self._progress_widgets = {}
         self._poll_widget = tab
+        self._selected_key = self._settings.model_size
 
         cols = self._get_col_count()
 
@@ -49,6 +57,8 @@ class ModelsTab(TabBase):
 
         if self._progress_widgets:
             self._schedule_poll()
+
+    # -- Card construction -----------------------------------------------------
 
     def _card_frame(self, is_selected: bool, parent) -> ctk.CTkFrame:
         return ctk.CTkFrame(
@@ -83,16 +93,13 @@ class ModelsTab(TabBase):
         top = ctk.CTkFrame(inner, fg_color="transparent")
         top.pack(fill="x")
 
-        name_text = info.get("name", model_key)
-        if is_selected:
-            name_text += "  ●"
-
-        ctk.CTkLabel(
-            top, text=name_text,
+        name_label = ctk.CTkLabel(
+            top, text=info.get("name", model_key) + ("  ●" if is_selected else ""),
             font=font("base", "bold"),
             text_color=self._colors.accent if is_selected else self._colors.fg_primary,
             anchor="w",
-        ).pack(side="left")
+        )
+        name_label.pack(side="left")
 
         if cached:
             status_text, status_color = "✓ Ready", self._colors.success
@@ -100,11 +107,10 @@ class ModelsTab(TabBase):
             status_text, status_color = "Downloading…", self._colors.accent
         else:
             status_text, status_color = "Not downloaded", self._colors.fg_muted
-        ctk.CTkLabel(
-            top, text=status_text,
-            font=font("xs"),
-            text_color=status_color,
-        ).pack(side="right")
+        status_label = ctk.CTkLabel(
+            top, text=status_text, font=font("xs"), text_color=status_color,
+        )
+        status_label.pack(side="right")
 
         detail = f"{info.get('lang', '')} · {info.get('size', '')} · {info.get('device', '')}"
         ctk.CTkLabel(
@@ -121,38 +127,57 @@ class ModelsTab(TabBase):
                 text_color=self._colors.fg_muted, anchor="w",
             ).pack(fill="x")
 
+        # Actions row is ALWAYS built (hidden while selected) so selection
+        # changes can toggle it in place without rebuilding the card.
+        actions = ctk.CTkFrame(inner, fg_color="transparent")
+
+        select_btn = secondary_button(
+            actions, self._colors, text="Select",
+            font=font("xs"),
+            width=70, height=24,
+            command=lambda k=model_key: self._select_model_from_card(k),
+        )
+        if not cached:
+            # Selecting an absent model would silently trigger a long
+            # download — download explicitly first, then select.
+            select_btn.configure(state="disabled",
+                                 text_color_disabled=self._colors.fg_muted)
+        select_btn.pack(side="right")
+
+        download_btn = None
+        if not cached and not downloading:
+            download_btn = self._make_download_button(actions, model_key)
+
         if not is_selected:
-            actions = ctk.CTkFrame(inner, fg_color="transparent")
             actions.pack(fill="x", pady=(SPACING["xs"], 0))
 
-            select_btn = secondary_button(
-                actions, self._colors, text="Select",
-                font=font("xs"),
-                width=70, height=24,
-                command=lambda k=model_key: self._select_model_from_card(k),
-            )
-            if not cached:
-                # Selecting an absent model would silently trigger a long
-                # download — download explicitly first, then select.
-                select_btn.configure(state="disabled",
-                                     text_color_disabled=self._colors.fg_muted)
-            select_btn.pack(side="right")
-
-            if not cached and not downloading:
-                secondary_button(
-                    actions, self._colors, text="↓",
-                    font=font("sm", "bold"),
-                    width=28, height=24,
-                    command=lambda k=model_key: self._start_download(k),
-                ).pack(side="right", padx=(0, SPACING["xs"]))
+        self._card_refs[model_key] = {
+            "card": card, "inner": inner, "name": name_label,
+            "status": status_label, "actions": actions,
+            "select": select_btn, "download": download_btn,
+            "base_name": info.get("name", model_key),
+        }
 
         if downloading:
-            self._attach_progress(inner, model_key)
+            self._attach_progress(model_key)
 
-    def _attach_progress(self, inner, model_key: str) -> None:
+    def _make_download_button(self, actions, model_key: str) -> ctk.CTkButton:
+        btn = secondary_button(
+            actions, self._colors, text="↓",
+            font=font("sm", "bold"),
+            width=28, height=24,
+            command=lambda k=model_key: self._start_download(k),
+        )
+        btn.pack(side="right", padx=(0, SPACING["xs"]))
+        return btn
+
+    def _attach_progress(self, model_key: str) -> None:
         """Thin progress bar at the card bottom, filling left → right."""
+        refs = self._card_refs.get(model_key)
+        if not refs:
+            return
         state = download_status(model_key)
-        row = ctk.CTkFrame(inner, fg_color="transparent")
+        row = ctk.CTkFrame(refs["inner"], fg_color="transparent")
         row.pack(fill="x", pady=(SPACING["xs"], 0))
 
         percent = ctk.CTkLabel(
@@ -170,13 +195,21 @@ class ModelsTab(TabBase):
         bar.set(state.get("progress", 0.0))
         bar.pack(side="left", fill="x", expand=True, padx=(0, SPACING["xs"]))
 
-        self._progress_widgets[model_key] = (bar, percent)
+        self._progress_widgets[model_key] = (row, bar, percent)
 
-    # -- Download polling -----------------------------------------------------
+    # -- Download lifecycle (all in-place, no rebuilds) --------------------------
 
     def _start_download(self, model_key: str) -> None:
+        refs = self._card_refs.get(model_key)
+        if not refs:
+            return
         start_download(self._settings, model_key)
-        self.ctx.rebuild_tab(self.KEY)
+        if refs["download"] is not None:
+            refs["download"].destroy()
+            refs["download"] = None
+        refs["status"].configure(text="Downloading…", text_color=self._colors.accent)
+        self._attach_progress(model_key)
+        self._schedule_poll()
 
     def _schedule_poll(self) -> None:
         try:
@@ -186,32 +219,66 @@ class ModelsTab(TabBase):
 
     def _poll_downloads(self) -> None:
         any_active = False
-        any_finished = False
-        for key, (bar, percent) in list(self._progress_widgets.items()):
+        for key in list(self._progress_widgets.keys()):
+            row, bar, percent = self._progress_widgets[key]
             state = download_status(key)
             if not state:
                 continue
-            if state.get("done"):
-                any_finished = True
-                continue
-            any_active = True
-            fraction = state.get("progress", 0.0)
             try:
+                if state.get("done"):
+                    self._finish_download(key, state)
+                    continue
+                any_active = True
+                fraction = state.get("progress", 0.0)
                 bar.set(fraction)
                 percent.configure(text=f"{int(fraction * 100)}%")
             except Exception:
-                return  # widgets destroyed (tab rebuilt) — that build's poller dies
-        if any_finished:
-            self.ctx.rebuild_tab(self.KEY)  # Select enables, status flips to Ready
-            return
+                # Widgets destroyed (tab rebuilt) — drop this entry, keep going
+                self._progress_widgets.pop(key, None)
         if any_active:
             self._schedule_poll()
 
+    def _finish_download(self, model_key: str, state: dict) -> None:
+        row, _bar, _percent = self._progress_widgets.pop(model_key, (None, None, None))
+        if row is not None:
+            row.destroy()
+        refs = self._card_refs.get(model_key)
+        if not refs:
+            return
+        if state.get("error"):
+            refs["status"].configure(text="Download failed — check logs",
+                                     text_color=self._colors.danger)
+            if refs["download"] is None:  # let the user retry
+                refs["download"] = self._make_download_button(refs["actions"], model_key)
+            return
+        refs["status"].configure(text="✓ Ready", text_color=self._colors.success)
+        refs["select"].configure(state="normal", text_color=self._colors.fg_primary)
+        # Refresh the General tab's model info line ("Downloaded" status)
+        self.ctx.emit("model_changed", self._settings.model_size)
+
+    # -- Selection (in-place highlight swap) --------------------------------------
+
     def _select_model_from_card(self, key: str) -> None:
+        previous = self._selected_key
         self._settings.model_size = key
         self._settings.save()
+        self._selected_key = key
+
+        new_refs = self._card_refs.get(key)
+        if new_refs:
+            new_refs["card"].configure(border_width=2, border_color=self._colors.accent)
+            new_refs["name"].configure(text=new_refs["base_name"] + "  ●",
+                                       text_color=self._colors.accent)
+            new_refs["actions"].pack_forget()
+
+        old_refs = self._card_refs.get(previous)
+        if old_refs and previous != key:
+            old_refs["card"].configure(border_width=1, border_color=self._colors.border_subtle)
+            old_refs["name"].configure(text=old_refs["base_name"],
+                                       text_color=self._colors.fg_primary)
+            old_refs["select"].configure(state="normal", text_color=self._colors.fg_primary)
+            old_refs["actions"].pack(fill="x", pady=(SPACING["xs"], 0))
+
         # Let other tabs (General) sync their own widgets.
         self.ctx.emit("model_changed", key)
-        # Rebuild this tab to update the selection highlight.
-        self.ctx.rebuild_tab(self.KEY)
         self._apply_settings(reload_model=True)

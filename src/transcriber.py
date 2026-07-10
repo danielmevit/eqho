@@ -68,6 +68,7 @@ class VoiceTranscriber:
         self._on_partial: Optional[Callable[[str], None]] = None
         self._on_complete: Optional[Callable[[str], None]] = None
         self._on_status: Optional[Callable[[str], None]] = None
+        self._on_level: Optional[Callable[[float], None]] = None
         self._running = False
         self._lock = threading.Lock()
         self._model_lock = threading.Lock()  # serializes load/unload across threads
@@ -86,10 +87,12 @@ class VoiceTranscriber:
         on_partial: Callable[[str], None],
         on_complete: Callable[[str], None],
         on_status: Optional[Callable[[str], None]] = None,
+        on_level: Optional[Callable[[float], None]] = None,
     ) -> None:
         self._on_partial = on_partial
         self._on_complete = on_complete
         self._on_status = on_status
+        self._on_level = on_level
 
     def is_model_ready(self) -> bool:
         return self._model_loaded and self._current_model_size == self._settings.model_size
@@ -261,6 +264,10 @@ class VoiceTranscriber:
             chunk_count += 1
             log_peak = max(log_peak, rms)
             utterance_peak = max(utterance_peak, rms)
+
+            if self._on_level:
+                # Normalized mic level for the overlay's audio indicator
+                self._on_level(min(1.0, rms / 0.06))
 
             # Log mic levels periodically so we can diagnose issues
             if chunk_count % 20 == 0:

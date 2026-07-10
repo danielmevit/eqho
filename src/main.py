@@ -54,6 +54,7 @@ class App:
             on_partial=self._on_partial,
             on_complete=self._on_complete,
             on_status=self._on_status,
+            on_level=self._on_level,
         )
 
         self.hotkey = HotkeyManager(
@@ -108,6 +109,10 @@ class App:
     def _on_status(self, message: str) -> None:
         """Transcriber lifecycle messages (e.g. model finished loading)."""
         self.overlay.update_text(message)
+
+    def _on_level(self, level: float) -> None:
+        """Live mic level (0..1) for the overlay's audio indicator."""
+        self.overlay.set_level(level)
 
     # -- Activation control ----------------------------------------------------
 

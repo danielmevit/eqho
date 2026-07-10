@@ -4,6 +4,26 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.6.3] - 2026-07-10
+
+Review round 3 + first public GitHub Release.
+
+### Fixed
+- **The italic headings, actually fixed.** Root cause found: systems with many installed Inter variants (variable-font instances incl. italics) make Windows' bold-matching resolve "Inter bold" to an *italic* instance. Bold text now binds directly to the "Inter SemiBold" family — no bold matching, no italics. Applies to tab titles, section labels, card names, everything.
+- **Models tab flashing** — selecting a model or starting a download no longer rebuilds the whole tab; cards update in place (border, ● marker, status, buttons).
+- **Silent download failures** — a failed download now shows "Download failed — check logs" on the card and brings the ↓ button back for retry; the progress poller no longer dies when one card misbehaves.
+- Model switching lag reduced (no tab rebuild; the engine reload already ran on a background thread).
+
+### Changed
+- **Tighter vertical rhythm** — title→subtitle gap halved, subtitle→content reduced ~25%, section headers pulled in; the whole UI reads denser and less chunky.
+- **Smoother scrolling** — smaller canvas scroll increment (the default felt jumpy, especially at higher UI zoom).
+- **Default UI zoom is 125%** (was 150%). Existing installs keep their saved zoom — change it in General → Interface.
+- Dropdown text nudged 1 px down (Inter metrics sit text slightly high in boxes).
+
+### Added
+- **Overlay audio-level indicator** — a short accent line along the overlay's bottom edge that eases with your live mic level; subtle, never covers the text. Toggleable: Overlay → "Audio Level Indicator".
+- README: SEO keyword footer for search discoverability.
+
 ## [0.6.2] - 2026-07-10
 
 Second review round + public launch push (dev merged to public `main` at v0.6.1).

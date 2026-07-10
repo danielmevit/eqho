@@ -52,15 +52,47 @@ SPACING = {
 }
 
 
+_HEADING_FAMILY: Optional[str] = None
+
+
+def _heading_family() -> str:
+    """Family used for bold text. Systems with many Inter variants installed
+    (variable-font instances incl. italics) make Windows' weight=bold matching
+    land on an ITALIC instance — so bold text binds straight to the SemiBold
+    family instead of asking "Inter" for bold. Falls back cleanly."""
+    global _HEADING_FAMILY
+    if _HEADING_FAMILY is None:
+        try:
+            import tkinter.font as tkfont
+            families = set(tkfont.families())
+            for candidate in ("Inter SemiBold", "Inter Semi Bold", "Inter Medium"):
+                if candidate in families:
+                    _HEADING_FAMILY = candidate
+                    break
+            else:
+                _HEADING_FAMILY = FONT_FAMILY
+        except Exception:
+            _HEADING_FAMILY = FONT_FAMILY
+    return _HEADING_FAMILY
+
+
 def font(size: str = "base", weight: str | None = None):
     """Font for customtkinter widgets — the ONLY way UI code should build
-    fonts, so family/scale changes stay one-file edits. Returns a CTkFont
-    with slant explicitly forced to roman (never italic)."""
+    fonts, so family/scale changes stay one-file edits. Slant is always
+    forced to roman; bold uses the dedicated SemiBold family (see above)."""
     import customtkinter as ctk
+    if weight == "bold":
+        family = _heading_family()
+        return ctk.CTkFont(
+            family=family,
+            size=FONT_SIZES[size],
+            weight="bold" if family == FONT_FAMILY else "normal",
+            slant="roman",
+        )
     return ctk.CTkFont(
         family=FONT_FAMILY,
         size=FONT_SIZES[size],
-        weight=weight or "normal",
+        weight="normal",
         slant="roman",
     )
 

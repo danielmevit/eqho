@@ -420,6 +420,11 @@ class Dashboard(ctk.CTkToplevel):
             scrollbar_button_color=self._colors.bg_tertiary,
             scrollbar_button_hover_color=self._colors.bg_hover,
         )
+        try:
+            # Smaller scroll increment — the default feels jumpy at UI zoom
+            frame._parent_canvas.configure(yscrollincrement=5)
+        except Exception:
+            pass
         self._tab_frames[key] = frame
         # Add bottom spacer so content doesn't cut off at the edge
         self._tab_bottom_spacers[key] = frame

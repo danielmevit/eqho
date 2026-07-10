@@ -63,7 +63,7 @@ class TabBase:
     def _tab_header(self, parent, title: str, subtitle: str) -> None:
         """Standard tab header with title and status info."""
         header = ctk.CTkFrame(parent, fg_color="transparent")
-        header.pack(fill="x", padx=SPACING["md"], pady=(SPACING["xl"], SPACING["xs"]))
+        header.pack(fill="x", padx=SPACING["md"], pady=(SPACING["md"], 2))
 
         ctk.CTkLabel(
             header, text=title,
@@ -82,13 +82,13 @@ class TabBase:
             header, text=status,
             font=font("xs"),
             text_color=self._colors.fg_muted, anchor="w",
-        ).pack(anchor="w", pady=(2, 0))
+        ).pack(anchor="w", pady=(1, 0))
 
         ctk.CTkLabel(
             parent, text=subtitle,
             font=font("sm"),
             text_color=self._colors.fg_secondary, anchor="w",
-        ).pack(fill="x", padx=SPACING["md"], pady=(0, SPACING["md"]))
+        ).pack(fill="x", padx=SPACING["md"], pady=(0, SPACING["sm"]))
 
     def _section_label(self, parent, text: str) -> ctk.CTkLabel:
         lbl = ctk.CTkLabel(
@@ -97,7 +97,7 @@ class TabBase:
             text_color=self._colors.fg_secondary,
             anchor="w",
         )
-        lbl.pack(fill="x", padx=SPACING["md"], pady=(SPACING["lg"], 4))
+        lbl.pack(fill="x", padx=SPACING["md"], pady=(SPACING["md"], 3))
         return lbl
 
     def _dropdown_colors(self) -> dict:
@@ -165,7 +165,7 @@ class TabBase:
             ).pack(anchor="w", fill="x")
 
         control = ctk.CTkFrame(row, fg_color="transparent")
-        control.pack(anchor="w", pady=(SPACING["xs"], 0))
+        control.pack(anchor="w", pady=(3, 0))
         return control
 
     def _make_grid_container(self, parent) -> ctk.CTkFrame:

@@ -95,3 +95,7 @@ Settings persist to `settings.json` in your config folder — everything is also
 Eqho is licensed under the [GNU AGPL-3.0](LICENSE): free to use, study, and modify — if you redistribute it or a derivative (including as a network service), you must keep the copyright and attribution notices and release your version under the same license. © [Daniel Mevit](https://github.com/DanielMevit).
 
 Provided "as is", without warranty of any kind.
+
+---
+
+<sub><b>Keywords:</b> speech to text · voice to text · dictation software · offline speech recognition · free dictation app · voice typing for Windows · OpenAI Whisper app · whisper.cpp alternative · faster-whisper GUI · private speech to text · local voice recognition · no-cloud transcription · talk to type · voice keyboard · speech recognition without internet · dictate into any app · Dragon NaturallySpeaking alternative · Windows Voice Access alternative · open source dictation · GPU accelerated transcription · CUDA speech to text · real-time transcription overlay · hands-free typing · accessibility voice input · multilingual dictation</sub>

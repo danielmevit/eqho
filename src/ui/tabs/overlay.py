@@ -61,6 +61,13 @@ class OverlayTab(TabBase):
             command=self._on_overlay_toggle,
         ).pack()
 
+        right = self._setting_row(card, "Audio Level Indicator", "Small line that moves with your voice")
+        self._level_var = ctk.BooleanVar(value=self._settings.overlay_show_level)
+        themed_switch(
+            right, self._colors, variable=self._level_var,
+            command=self._on_level_toggle,
+        ).pack()
+
     def _build_position_setting(self, card) -> None:
         right = self._setting_row(card, "Screen Position", "Where the overlay appears")
         pos_labels = {
@@ -150,6 +157,10 @@ class OverlayTab(TabBase):
 
     def _on_overlay_toggle(self) -> None:
         self._settings.overlay_enabled = self._overlay_var.get()
+        self._settings.save()
+
+    def _on_level_toggle(self) -> None:
+        self._settings.overlay_show_level = self._level_var.get()
         self._settings.save()
 
     def _on_pos_changed(self, val, labels) -> None:

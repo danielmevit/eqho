@@ -63,6 +63,11 @@ class TranscriptionOverlay:
         self._pulse_job = None
         self._pulse_phase = 0
         self._fade_job = None
+        self._level_canvas: Optional[tk.Canvas] = None
+        self._level_rect = None
+        self._level_job = None
+        self._level_target = 0.0
+        self._level_current = 0.0
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -115,6 +120,15 @@ class TranscriptionOverlay:
         )
         self._label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
+        # Audio-level line: short accent bar at the bottom edge that moves
+        # with the mic level — subtle, never covering the text
+        self._level_canvas = tk.Canvas(
+            self._root, height=3, bg=bg, highlightthickness=0,
+        )
+        self._level_rect = self._level_canvas.create_rectangle(
+            0, 0, 0, 3, fill=accent, outline="",
+        )
+
         self._root.withdraw()
         self._ready.set()
         self._root.mainloop()
@@ -142,10 +156,19 @@ class TranscriptionOverlay:
         self._status_dot.itemconfig("dot", fill=accent)
         self._label.master.configure(bg=bg)
 
+        show_level = getattr(self._settings, "overlay_show_level", True)
+        if show_level:
+            self._level_canvas.configure(bg=bg)
+            self._level_canvas.itemconfig(self._level_rect, fill=accent)
+            self._level_canvas.pack(side=tk.BOTTOM, fill=tk.X,
+                                    padx=_PADDING_X, pady=(0, 4))
+        else:
+            self._level_canvas.pack_forget()
+
         self._root.update_idletasks()
 
         w = max(_MIN_WIDTH, self._label.winfo_reqwidth() + 2 * _PADDING_X + 26)
-        h = self._label.winfo_reqheight() + 2 * _PADDING_Y
+        h = self._label.winfo_reqheight() + 2 * _PADDING_Y + (7 if show_level else 0)
         sw = self._root.winfo_screenwidth()
         sh = self._root.winfo_screenheight()
         x, y = self._calc_position(w, h, sw, sh)
@@ -157,6 +180,8 @@ class TranscriptionOverlay:
             self._visible = True
             self._fade_to(self._settings.overlay_opacity)
             self._start_pulse()
+            if show_level:
+                self._start_level_animation()
         else:
             # Update opacity in case the setting changed
             self._root.attributes("-alpha", self._settings.overlay_opacity)
@@ -200,8 +225,46 @@ class TranscriptionOverlay:
 
     def _do_hide(self) -> None:
         self._stop_pulse()
+        self._stop_level_animation()
         self._visible = False
         self._fade_to(0.0, on_done=self._root.withdraw)
+
+    # -- Audio level indicator ---------------------------------------------------
+
+    def set_level(self, level: float) -> None:
+        """Feed the live mic level (0..1); the bar eases toward it."""
+        self._level_target = max(0.0, min(1.0, level))
+
+    def _start_level_animation(self) -> None:
+        self._stop_level_animation()
+        self._level_current = 0.0
+        self._level_target = 0.0
+        self._level_tick()
+
+    def _level_tick(self) -> None:
+        if not self._visible or not self._level_canvas:
+            return
+        # Ease toward the target, and let the target itself breathe down so
+        # the bar falls gently between the 2 Hz level updates
+        self._level_current += (self._level_target - self._level_current) * 0.35
+        self._level_target *= 0.93
+        try:
+            width = self._level_canvas.winfo_width()
+            bar_w = int(width * 0.35 * self._level_current)
+            self._level_canvas.coords(self._level_rect, 0, 0, bar_w, 3)
+        except Exception:
+            return
+        self._level_job = self._root.after(60, self._level_tick)
+
+    def _stop_level_animation(self) -> None:
+        if self._level_job is not None:
+            try:
+                self._root.after_cancel(self._level_job)
+            except Exception:
+                pass
+            self._level_job = None
+        self._level_target = 0.0
+        self._level_current = 0.0
 
     # -- Animations -------------------------------------------------------------
 
