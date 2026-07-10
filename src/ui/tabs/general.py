@@ -431,6 +431,7 @@ class GeneralTab(TabBase):
         name = MODEL_INFO.get(model_key, {}).get("name", model_key)
         self._model_var.set(name)
         self._model_info_label.configure(text=self._get_model_info_text(model_key))
+        self.refresh_header_status()
 
     def _on_mic_changed(self, val, names, indices) -> None:
         idx = indices[names.index(val)] if val in names else None
@@ -450,6 +451,8 @@ class GeneralTab(TabBase):
             self._settings.model_size = key
             self._settings.save()
             self._model_info_label.configure(text=self._get_model_info_text(key))
+            self.refresh_header_status()
+            self.ctx.emit("model_changed", key)
             self._apply_settings(reload_model=True)
 
     def _on_duck_changed(self, val, labels) -> None:

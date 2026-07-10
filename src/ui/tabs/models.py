@@ -281,4 +281,5 @@ class ModelsTab(TabBase):
 
         # Let other tabs (General) sync their own widgets.
         self.ctx.emit("model_changed", key)
+        self.refresh_header_status()
         self._apply_settings(reload_model=True)

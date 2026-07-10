@@ -117,20 +117,23 @@ class VoiceTranscriber:
                 "Loading faster-whisper model=%s device=%s compute=%s cache=%s",
                 target, device, compute, self._model_dir,
             )
+            phase_start = time.monotonic()
             model = WhisperModel(
                 target,
                 device=device,
                 compute_type=compute,
                 download_root=str(self._model_dir),
             )
+            log.info("Model weights loaded in %.1fs", time.monotonic() - phase_start)
 
             # Smoke-test actual inference to catch missing CUDA DLLs (e.g. cublas64_12.dll)
             if device == "cuda":
                 try:
+                    phase_start = time.monotonic()
                     dummy = np.zeros(SAMPLE_RATE, dtype=np.float32)
                     segments, _ = model.transcribe(dummy, language="en", beam_size=1)
                     list(segments)  # force the generator to run
-                    log.info("CUDA inference verified OK.")
+                    log.info("CUDA inference verified OK (%.1fs).", time.monotonic() - phase_start)
                 except Exception as e:
                     log.warning("CUDA inference failed (%s), falling back to CPU.", e)
                     model = WhisperModel(

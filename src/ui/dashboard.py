@@ -78,6 +78,9 @@ class Dashboard(ctk.CTkToplevel):
             rebuild_tab=self.rebuild_tab,
             set_ui_scale=self.set_ui_scale,
         )
+        # Non-visible tabs rebuild on next show after a model change, so
+        # their headers/cards never show a stale active model
+        self._ctx.subscribe("model_changed", "dashboard", lambda *_: self._mark_hidden_tabs_stale())
 
         self._setup_window()
         self._build_sidebar()
@@ -88,6 +91,10 @@ class Dashboard(ctk.CTkToplevel):
 
         # Responsive resize handler
         self._content.bind("<Configure>", self._on_content_resize)
+
+        # Feed the freeze watchdog from inside the Tk loop — if this stops
+        # beating, the watchdog dumps all thread stacks to the log
+        self._schedule_heartbeat()
 
         # Register as the active singleton BEFORE mainloop blocks
         global _active_dashboard
@@ -369,6 +376,11 @@ class Dashboard(ctk.CTkToplevel):
         tab_obj.build(frame)
         self._tab_built_cols[key] = self._get_col_count()
 
+    def _mark_hidden_tabs_stale(self) -> None:
+        for key in list(self._tab_built_cols):
+            if key != self._current_tab:
+                self._tab_built_cols[key] = -1  # forces rebuild on next show
+
     def rebuild_tab(self, key: str) -> None:
         """Tear down and rebuild one tab (responsive change or content refresh)."""
         if key not in self._tab_frames:
@@ -442,9 +454,22 @@ class Dashboard(ctk.CTkToplevel):
 
     # -- Lifecycle -------------------------------------------------------------
 
+    def _schedule_heartbeat(self) -> None:
+        try:
+            from ..watchdog import beat
+            beat("dashboard-ui")
+            self.after(1000, self._schedule_heartbeat)
+        except Exception:
+            pass
+
     def _on_close(self) -> None:
         global _active_dashboard
         _active_dashboard = None
+        try:
+            from ..watchdog import clear
+            clear("dashboard-ui")
+        except Exception:
+            pass
         general = self._tabs.get("general")
         if general is not None and getattr(general, "_hotkey_capturing", False):
             general._stop_hotkey_capture(cancelled=True)

@@ -60,6 +60,21 @@ class TabBase:
     def _format_hotkey(self, combo: str) -> str:
         return " + ".join(p.strip().title() for p in combo.split("+"))
 
+    def _header_status_text(self) -> str:
+        from ..settings import SUPPORTED_LANGUAGES
+        model_name = MODEL_INFO.get(self._settings.model_size, {}).get("name", self._settings.model_size)
+        lang = SUPPORTED_LANGUAGES.get(self._settings.language, self._settings.language)
+        hotkey = self._format_hotkey(self._settings.hotkey)
+        return f"{model_name}  ·  {hotkey}  ·  {lang}  ·  {self._settings.hotkey_mode}"
+
+    def refresh_header_status(self) -> None:
+        """Update the header's model·hotkey·language line in place (settings
+        changes no longer rebuild tabs, so headers must refresh themselves)."""
+        try:
+            self._header_status.configure(text=self._header_status_text())
+        except Exception:
+            pass
+
     def _tab_header(self, parent, title: str, subtitle: str) -> None:
         """Standard tab header with title and status info."""
         header = ctk.CTkFrame(parent, fg_color="transparent")
@@ -71,18 +86,12 @@ class TabBase:
             text_color=self._colors.fg_primary, anchor="w",
         ).pack(anchor="w")
 
-        # Status bar: model + hotkey + language
-        from ..settings import SUPPORTED_LANGUAGES
-        model_name = MODEL_INFO.get(self._settings.model_size, {}).get("name", self._settings.model_size)
-        lang = SUPPORTED_LANGUAGES.get(self._settings.language, self._settings.language)
-        hotkey = self._format_hotkey(self._settings.hotkey)
-        status = f"{model_name}  ·  {hotkey}  ·  {lang}  ·  {self._settings.hotkey_mode}"
-
-        ctk.CTkLabel(
-            header, text=status,
+        self._header_status = ctk.CTkLabel(
+            header, text=self._header_status_text(),
             font=font("xs"),
             text_color=self._colors.fg_muted, anchor="w",
-        ).pack(anchor="w", pady=(1, 0))
+        )
+        self._header_status.pack(anchor="w", pady=(1, 0))
 
         ctk.CTkLabel(
             parent, text=subtitle,

@@ -251,6 +251,8 @@ class App:
     # -- Lifecycle -------------------------------------------------------------
 
     def run(self) -> None:
+        from .watchdog import start as start_watchdog
+        start_watchdog()
         load_fonts()
         log.info("Eqho starting...")
         log.info(

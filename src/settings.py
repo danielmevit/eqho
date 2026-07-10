@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
@@ -146,6 +147,9 @@ class Settings:
             cb(self)
 
 
+_cache_check_memo: dict = {}
+
+
 def is_model_cached(settings: "Settings", model_key: str) -> bool:
     """True if the given Whisper model is already downloaded to the cache dir.
 
@@ -153,7 +157,17 @@ def is_model_cached(settings: "Settings", model_key: str) -> bool:
     (no network). The old hand-built path list missed the distil models'
     actual repo naming (faster-DISTIL-whisper-*), which made downloaded distil
     models look absent and disabled their Select button.
+    Results are memoized for 5 s — the Models tab asks 9× per build.
     """
+    memo = _cache_check_memo.get(model_key)
+    if memo and time.monotonic() - memo[1] < 5.0:
+        return memo[0]
+    result = _is_model_cached_uncached(settings, model_key)
+    _cache_check_memo[model_key] = (result, time.monotonic())
+    return result
+
+
+def _is_model_cached_uncached(settings: "Settings", model_key: str) -> bool:
     cache_dir = settings.resolve_model_dir()
     try:
         try:

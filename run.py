@@ -11,5 +11,8 @@ if __name__ == "__main__":
     if "--smoke" in sys.argv:
         from src.smoke import run_smoke
         sys.exit(run_smoke())
+    if "--diagnose" in sys.argv:
+        from src.diagnose import run_diagnose
+        sys.exit(run_diagnose(sys.argv))
     from src.main import main
     main()

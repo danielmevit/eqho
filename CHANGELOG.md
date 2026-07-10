@@ -4,6 +4,26 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.6.5] - 2026-07-10
+
+### Fixed
+- **Stale "active model" display** — with in-place card updates, tab headers kept showing the previous model. Headers now refresh in place on model change, and hidden tabs rebuild on next show.
+
+### Added
+- **Freeze watchdog** — the dashboard beats once a second from inside its Tk loop; if the UI stalls >5 s, every thread's stack is dumped into `eqho.log`, so a freeze pinpoints its own cause.
+- **`python run.py --diagnose [model]`** — headless model-switch diagnostic: timed cache checks for all models, timed load of the current model, timed switch to the target (exact in-app reload path), with automatic thread dumps if any phase exceeds 60 s. Never saves settings.
+- Model-load phase timings in the log (weights, CUDA verification).
+- `is_model_cached` results memoized for 5 s (the Models tab asks 9× per build; the first faster-whisper import costs ~0.9 s).
+
+## [0.6.4] - 2026-07-10
+
+### Fixed
+- **Downloaded distil models showed "Not downloaded"** (Select disabled) — the cache check missed the `faster-distil-whisper-*` repo naming; it now asks faster-whisper itself with `local_files_only=True`.
+- Settings changes apply on a background thread for every caller (tray menu included) and eagerly preload the newly selected model with tray notifications.
+
+### Added
+- Rotating file log at the config dir (`eqho.log`) + unhandled-exception hooks for main thread and all threads — crashes in the windowed exe finally leave evidence.
+
 ## [0.6.3] - 2026-07-10
 
 Review round 3 + first public GitHub Release.
