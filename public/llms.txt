@@ -1,0 +1,24 @@
+# Eqho
+
+> Free, offline voice-to-text dictation application that types directly into any focused window using local OpenAI Whisper models.
+
+## Tech Stack
+* Language: Python 3.10+
+* Engine: OpenAI Whisper (via faster-whisper / CTranslate2)
+* Hardware Acceleration: GPU-accelerated (NVIDIA CUDA 12.x) with automatic CPU fallback
+* Environments: Windows 10/11 (primary), Linux X11, macOS
+
+## Key Features & Differentiators
+* **Universal Dictation:** Types into any focused application (Word, browsers, Slack, IDEs) via clipboard paste or simulated typing.
+* **100% Local & Private:** No cloud, no accounts, no API keys. Audio never leaves the machine. 
+* **Real-Time Pipeline:** Features a live transcription overlay and hallucination filtering (to prevent silence from being transcribed).
+* **Customization:** Supports custom vocabulary, voice commands ("new line", "delete that"), text replacements, and volume ducking.
+* **Multilingual:** 13 supported languages using models ranging from `tiny` (150 MB) to `large-v3` (3.1 GB). Default is `distil-large-v3`.
+
+## Install & Run from Source
+```bash
+git clone [https://github.com/DanielMevit/Eqho.git](https://github.com/DanielMevit/Eqho.git)
+cd Eqho
+python -m venv venv && venv\Scripts\activate
+pip install -r requirements.txt
+python run.py
