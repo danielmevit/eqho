@@ -147,14 +147,29 @@ class Settings:
 
 
 def is_model_cached(settings: "Settings", model_key: str) -> bool:
-    """True if the given Whisper model is already downloaded to the cache dir."""
+    """True if the given Whisper model is already downloaded to the cache dir.
+
+    Authoritative check: ask faster-whisper itself with local_files_only=True
+    (no network). The old hand-built path list missed the distil models'
+    actual repo naming (faster-DISTIL-whisper-*), which made downloaded distil
+    models look absent and disabled their Select button.
+    """
     cache_dir = settings.resolve_model_dir()
+    try:
+        try:
+            from faster_whisper import download_model
+        except ImportError:
+            from faster_whisper.utils import download_model
+        download_model(model_key, local_files_only=True, cache_dir=str(cache_dir))
+        return True
+    except Exception:
+        pass
+    # Fallback path probes (also covers direct model folders)
     for candidate in (
         cache_dir / model_key,
         cache_dir / f"models--Systran--faster-whisper-{model_key}",
-        cache_dir / f"models--ctranslate2-4you--distil-whisper-{model_key}",
+        cache_dir / f"models--Systran--faster-distil-whisper-{model_key.removeprefix('distil-')}",
         cache_dir / "huggingface" / f"models--Systran--faster-whisper-{model_key}",
-        cache_dir / "huggingface" / f"models--ctranslate2-4you--distil-whisper-{model_key}",
     ):
         if candidate.exists():
             return True

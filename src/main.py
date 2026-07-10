@@ -12,18 +12,31 @@ from typing import Optional
 from . import chime, oskit, textproc
 from .fonts import load_fonts, unload_fonts
 from .history import TranscriptHistory
-from .settings import Settings, VOLUME_DUCK_OPTIONS
+from .settings import Settings, VOLUME_DUCK_OPTIONS, CONFIG_DIR
 from .transcriber import VoiceTranscriber
 from .overlay import TranscriptionOverlay
 from .hotkey import HotkeyManager
 from .injector import type_text, get_foreground_window, set_foreground_window, send_backspaces
 from .tray import TrayApp
 
+_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    format=_LOG_FORMAT,
     datefmt="%H:%M:%S",
 )
+# File log — the packaged exe has no console, so without this, crashes and
+# errors leave no trace at all. Lives next to settings.json.
+try:
+    from logging.handlers import RotatingFileHandler
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    _file_handler = RotatingFileHandler(
+        CONFIG_DIR / "eqho.log", maxBytes=1_000_000, backupCount=2, encoding="utf-8",
+    )
+    _file_handler.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S"))
+    logging.getLogger().addHandler(_file_handler)
+except Exception:
+    pass
 # Silence noisy libraries
 for _quiet in ("PIL", "httpx", "httpcore", "urllib3"):
     logging.getLogger(_quiet).setLevel(logging.WARNING)
@@ -212,12 +225,25 @@ class App:
     # -- Settings change -------------------------------------------------------
 
     def _on_settings_changed(self, reload_model: bool = False) -> None:
-        log.info("Settings changed, re-registering hotkey%s", " and reloading model" if reload_model else "")
-        self.hotkey.unregister()
-        self.hotkey.register()
-        self.tray.set_active(self._is_active())
-        if reload_model:
-            self.transcriber.reload_model()
+        """Apply settings changes on a background thread — callers include the
+        pystray menu thread and dashboard callbacks, and a model reload (or
+        download) must never block either."""
+        def _apply() -> None:
+            try:
+                log.info("Settings changed, re-registering hotkey%s",
+                         " and reloading model" if reload_model else "")
+                self.hotkey.unregister()
+                self.hotkey.register()
+                self.tray.set_active(self._is_active())
+                if reload_model:
+                    self.transcriber.reload_model()
+                    # Eagerly load (and download, with tray notifications) the
+                    # new model so the next dictation starts instantly.
+                    self._preload_model()
+            except Exception:
+                log.exception("Applying settings change failed")
+
+        threading.Thread(target=_apply, daemon=True).start()
 
     def _is_active(self) -> bool:
         return self.transcriber.is_running()
@@ -305,9 +331,26 @@ def _suppress_tk_variable_del() -> None:
         pass
 
 
+def _log_unhandled_exceptions() -> None:
+    """Route unhandled exceptions (main + threads) into the log file."""
+    import sys
+
+    def _hook(exc_type, exc, tb):
+        log.critical("UNHANDLED EXCEPTION", exc_info=(exc_type, exc, tb))
+
+    def _thread_hook(args):
+        name = args.thread.name if args.thread else "?"
+        log.critical("UNHANDLED THREAD EXCEPTION in %s", name,
+                     exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+
+    sys.excepthook = _hook
+    threading.excepthook = _thread_hook
+
+
 def main() -> None:
     import atexit
     atexit.register(_emergency_unmute)
+    _log_unhandled_exceptions()
     _suppress_tk_variable_del()
 
     app = App()
