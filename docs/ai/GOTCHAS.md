@@ -13,6 +13,7 @@ Things that silently break or waste time. Update the moment a new trap is discov
 - Whisper hallucinates on silence/noise ("Thank you.", "Thanks for watching.") — since v0.3.3 gated in `_do_complete`: near-silent buffers skipped (peak RMS < 1.5×threshold), segments with `no_speech_prob>0.6 & avg_logprob<-1.0` dropped, short blocklisted utterances discarded. Don't additionally raise the VAD threshold (breaks quiet speech).
 
 ## CUDA / models
+- **Never run two Eqho instances** (e.g. installed exe autostart + `python run.py` dev copy): both hook the hotkey, fight over the mic, and stack Whisper models into the 6 GB card until CUDA loads hang in WDDM paging — this presented as "app freezes when switching models". A localhost-port single-instance lock (port 48317) exits the second instance since v0.6.6. While developing, disable/uninstall the installed copy's autostart.
 - `_ensure_model()` runs a CUDA smoke test at load time so a missing `cublas64_12.dll` fails fast → automatic CPU fallback (don't remove it).
 - VAD constants (0.003 RMS / 1.2 s / 0.4 s) are tuned; changing them changes the dictation feel everywhere.
 - Model cache resolves (since v0.3.3): `model_dir` setting → legacy `D:\EqhoModels` if it exists (auto-pinned into settings on first load) → platformdirs user cache. `HF_HUB_CACHE` is set from the resolved dir at transcriber construction/model load — not at import.

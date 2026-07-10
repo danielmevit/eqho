@@ -62,6 +62,7 @@ class App:
         self.history = TranscriptHistory()
         self._dictation_start: float = 0.0
         self._last_injected: str = ""  # for the "delete that" voice command
+        self._settings_apply_lock = threading.Lock()  # serialize settings applies
 
         self.transcriber.set_callbacks(
             on_partial=self._on_partial,
@@ -229,19 +230,20 @@ class App:
         pystray menu thread and dashboard callbacks, and a model reload (or
         download) must never block either."""
         def _apply() -> None:
-            try:
-                log.info("Settings changed, re-registering hotkey%s",
-                         " and reloading model" if reload_model else "")
-                self.hotkey.unregister()
-                self.hotkey.register()
-                self.tray.set_active(self._is_active())
-                if reload_model:
-                    self.transcriber.reload_model()
-                    # Eagerly load (and download, with tray notifications) the
-                    # new model so the next dictation starts instantly.
-                    self._preload_model()
-            except Exception:
-                log.exception("Applying settings change failed")
+            with self._settings_apply_lock:
+                try:
+                    log.info("Settings changed, re-registering hotkey%s",
+                             " and reloading model" if reload_model else "")
+                    self.hotkey.unregister()
+                    self.hotkey.register()
+                    self.tray.set_active(self._is_active())
+                    if reload_model:
+                        self.transcriber.reload_model()
+                        # Eagerly load (and download, with tray notifications) the
+                        # new model so the next dictation starts instantly.
+                        self._preload_model()
+                except Exception:
+                    log.exception("Applying settings change failed")
 
         threading.Thread(target=_apply, daemon=True).start()
 
@@ -333,6 +335,25 @@ def _suppress_tk_variable_del() -> None:
         pass
 
 
+_single_instance_socket = None
+
+
+def _acquire_single_instance() -> bool:
+    """One Eqho per machine. Two instances both hook the hotkey, fight over
+    the mic, and stack models into VRAM until CUDA loads hang (the model-
+    switch 'freeze'). A bound localhost port is the cross-platform lock."""
+    global _single_instance_socket
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(("127.0.0.1", 48317))
+        s.listen(1)
+        _single_instance_socket = s  # held for the process lifetime
+        return True
+    except OSError:
+        return False
+
+
 def _log_unhandled_exceptions() -> None:
     """Route unhandled exceptions (main + threads) into the log file."""
     import sys
@@ -350,6 +371,21 @@ def _log_unhandled_exceptions() -> None:
 
 
 def main() -> None:
+    if not _acquire_single_instance():
+        log.error("Eqho is already running — this instance exits. "
+                  "Check the system tray (and Task Manager for frozen instances).")
+        try:
+            import tkinter as tk
+            from tkinter import messagebox
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showinfo(
+                "Eqho", "Eqho is already running — check the system tray.")
+            root.destroy()
+        except Exception:
+            pass
+        return
+
     import atexit
     atexit.register(_emergency_unmute)
     _log_unhandled_exceptions()

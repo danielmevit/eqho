@@ -44,6 +44,9 @@ class HotkeyManager:
         self._registered = False
         self._backend = ""
         self._lock = threading.Lock()
+        # Serializes register/unregister — settings changes re-register from
+        # background threads, and concurrent calls corrupted the hook state
+        self._reg_lock = threading.RLock()
         self._hold_hook = None  # keyboard-lib hold-mode hook
         self._hotkey_handler = None  # keyboard-lib add_hotkey handle
         self._pynput_hotkeys = None  # pynput GlobalHotKeys (toggle mode)
@@ -60,20 +63,26 @@ class HotkeyManager:
         return backend
 
     def register(self) -> None:
-        if self._registered:
-            self.unregister()
+        with self._reg_lock:
+            if self._registered:
+                self.unregister()
 
-        combo = self._settings.hotkey
-        mode = self._settings.hotkey_mode
-        self._backend = self._pick_backend()
+            combo = self._settings.hotkey
+            mode = self._settings.hotkey_mode
+            self._backend = self._pick_backend()
 
-        if self._backend == "keyboard":
-            self._register_keyboard(combo, mode)
-        else:
-            self._register_pynput(combo, mode)
+            try:
+                if self._backend == "keyboard":
+                    self._register_keyboard(combo, mode)
+                else:
+                    self._register_pynput(combo, mode)
+            except Exception:
+                log.exception("HOTKEY REGISTRATION FAILED (%s, %s backend) — "
+                              "the shortcut will not work", combo, self._backend)
+                return
 
-        self._registered = True
-        log.info("Hotkey registered: %s (%s mode, %s backend)", combo, mode, self._backend)
+            self._registered = True
+            log.info("Hotkey registered: %s (%s mode, %s backend)", combo, mode, self._backend)
 
     def _register_keyboard(self, combo: str, mode: str) -> None:
         import keyboard
@@ -151,6 +160,10 @@ class HotkeyManager:
         return "+".join(out)
 
     def unregister(self) -> None:
+        with self._reg_lock:
+            self._unregister_locked()
+
+    def _unregister_locked(self) -> None:
         if self._hold_hook is not None:
             try:
                 import keyboard

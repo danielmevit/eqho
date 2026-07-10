@@ -406,6 +406,11 @@ class VoiceTranscriber:
         with self._model_lock:
             self._model_loaded = False
             self._model = None
+        # Force the old ctranslate2 model's destructor NOW so its VRAM is
+        # actually free before the new (possibly bigger) model loads — on a
+        # 6 GB card, stacking both can push CUDA into WDDM paging hangs.
+        import gc
+        gc.collect()
         if was_running:
             self.start()
 

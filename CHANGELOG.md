@@ -4,6 +4,14 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.6.6] - 2026-07-10
+
+### Fixed
+- **The model-switch freeze — root cause identified from the log.** Frozen sessions were never dying: multiple Eqho instances (installed autostart copy + dev runs + killed-but-zombie relaunches) each held a Whisper model in the 6 GB GPU, and the next CUDA load hung in Windows WDDM paging instead of erroring. Fixes:
+  - **Single-instance lock** — a second Eqho now shows "already running" and exits instead of double-hooking the hotkey and stacking VRAM.
+  - Model switches force garbage collection so the old model's VRAM is freed *before* the new one loads.
+- **Hotkey registration hardened** — register/unregister is serialized behind a lock (background settings threads could race it into a dead state → Alt+Q stopped working), registration failures now log loudly, and settings applies are single-flight.
+
 ## [0.6.5] - 2026-07-10
 
 ### Fixed
