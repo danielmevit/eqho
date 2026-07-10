@@ -13,7 +13,7 @@ from typing import Optional
 
 from .fonts import FONT_FAMILY
 from .settings import Settings
-from .theme import get_colors, RADIUS_LG
+from .theme import get_colors
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +21,16 @@ _PADDING_X = 18
 _PADDING_Y = 10
 _MARGIN = 60
 _MIN_WIDTH = 300
+_PULSE_MS = 650      # recording-dot pulse interval
+_FADE_STEPS = 5      # fade in/out animation steps
+_FADE_INTERVAL = 25  # ms between fade steps
+
+
+def _blend_hex(c1: str, c2: str, t: float) -> str:
+    """Linear blend of two #rrggbb colors (t=0 → c1, t=1 → c2)."""
+    a = [int(c1[i:i + 2], 16) for i in (1, 3, 5)]
+    b = [int(c2[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#%02x%02x%02x" % tuple(round(x + (y - x) * t) for x, y in zip(a, b))
 
 
 def _apply_rounded_corners(hwnd: int) -> None:
@@ -50,6 +60,9 @@ class TranscriptionOverlay:
         self._thread: Optional[threading.Thread] = None
         self._visible = False
         self._ready = threading.Event()
+        self._pulse_job = None
+        self._pulse_phase = 0
+        self._fade_job = None
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -135,12 +148,15 @@ class TranscriptionOverlay:
         x, y = self._calc_position(w, h, sw, sh)
         self._root.geometry(f"{w}x{h}+{x}+{y}")
 
-        # Update opacity in case it changed
-        self._root.attributes("-alpha", self._settings.overlay_opacity)
-
         if not self._visible:
+            self._root.attributes("-alpha", 0.0)
             self._root.deiconify()
             self._visible = True
+            self._fade_to(self._settings.overlay_opacity)
+            self._start_pulse()
+        else:
+            # Update opacity in case the setting changed
+            self._root.attributes("-alpha", self._settings.overlay_opacity)
 
     def _calc_position(self, w: int, h: int, sw: int, sh: int) -> tuple[int, int]:
         """Calculate overlay x, y based on the position preference."""
@@ -180,8 +196,64 @@ class TranscriptionOverlay:
             pass
 
     def _do_hide(self) -> None:
-        self._root.withdraw()
+        self._stop_pulse()
         self._visible = False
+        self._fade_to(0.0, on_done=self._root.withdraw)
+
+    # -- Animations -------------------------------------------------------------
+
+    def _start_pulse(self) -> None:
+        self._stop_pulse()
+        self._pulse_phase = 0
+        self._pulse_tick()
+
+    def _pulse_tick(self) -> None:
+        if not self._visible or not self._status_dot:
+            return
+        bg, _fg, accent = self._get_theme_colors()
+        self._pulse_phase = (self._pulse_phase + 1) % 2
+        color = accent if self._pulse_phase == 0 else _blend_hex(accent, bg, 0.55)
+        try:
+            self._status_dot.itemconfig("dot", fill=color)
+        except Exception:
+            return
+        self._pulse_job = self._root.after(_PULSE_MS, self._pulse_tick)
+
+    def _stop_pulse(self) -> None:
+        if self._pulse_job is not None:
+            try:
+                self._root.after_cancel(self._pulse_job)
+            except Exception:
+                pass
+            self._pulse_job = None
+
+    def _fade_to(self, target: float, on_done=None) -> None:
+        if self._fade_job is not None:
+            try:
+                self._root.after_cancel(self._fade_job)
+            except Exception:
+                pass
+            self._fade_job = None
+        try:
+            current = float(self._root.attributes("-alpha"))
+        except Exception:
+            current = target
+        delta = (target - current) / _FADE_STEPS
+
+        def _step(i: int = 1) -> None:
+            self._fade_job = None
+            try:
+                if i >= _FADE_STEPS:
+                    self._root.attributes("-alpha", target)
+                    if on_done:
+                        on_done()
+                    return
+                self._root.attributes("-alpha", current + delta * i)
+            except Exception:
+                return
+            self._fade_job = self._root.after(_FADE_INTERVAL, _step, i + 1)
+
+        _step()
 
     def shutdown(self) -> None:
         if self._root:

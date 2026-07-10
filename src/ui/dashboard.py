@@ -20,6 +20,7 @@ from ..theme import (
 )
 from .context import DashboardContext
 from .tabs import TAB_CLASSES
+from .win32 import apply_dark_title_bar
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +66,7 @@ class Dashboard(ctk.CTkToplevel):
         self._tab_frames: dict[str, ctk.CTkFrame] = {}
         self._tabs: dict[str, object] = {}
         self._last_col_count = 0  # track responsive state
+        self._tab_built_cols: dict[str, int] = {}  # col count each tab was built with
         self._tab_bottom_spacers: dict[str, ctk.CTkFrame] = {}
         self._assets = Path(__file__).resolve().parent.parent.parent / "assets"
 
@@ -111,6 +113,7 @@ class Dashboard(ctk.CTkToplevel):
         ctk.set_default_color_theme("blue")
 
         self.configure(fg_color=self._colors.bg_primary)
+        apply_dark_title_bar(self, mode == "dark")
 
         # Center on screen
         self.update_idletasks()
@@ -121,29 +124,38 @@ class Dashboard(ctk.CTkToplevel):
         self.geometry(f"{WIN_W}x{WIN_H}+{x}+{y}")
 
     def _set_window_icon(self) -> None:
-        """Set the window title bar icon from the new logo PNGs."""
-        try:
-            from PIL import Image, ImageTk
-            # Use 32px logo for title bar (standard Windows icon size)
-            logo_path = self._assets / "logo_32_dark.png"
-            if not logo_path.exists():
-                logo_path = self._assets / "logo_32.png"
-            if logo_path.exists():
-                img = Image.open(logo_path).convert("RGBA")
-                # Create multiple sizes for Windows (16, 32, 48)
-                sizes = []
-                for s in (16, 32, 48):
-                    sizes.append(img.resize((s, s), Image.LANCZOS))
-                tk_root = self._own_root if self._own_root else self
-                self._icon_photos = [ImageTk.PhotoImage(s, master=tk_root) for s in sizes]
-                self.iconphoto(False, *self._icon_photos)
-                return
-            # Fallback to legacy .ico
-            ico_path = self._assets / "eqho.ico"
-            if ico_path.exists():
-                self.after(200, lambda: self.iconbitmap(str(ico_path)))
-        except Exception as e:
-            log.debug("Failed to set window icon: %s", e)
+        """Set the title-bar icon, theme-matched.
+
+        Deferred past CTkToplevel's own delayed iconbitmap call (~200 ms),
+        which would otherwise overwrite whatever we set at construction —
+        that race was why the old icon kept reappearing.
+        """
+        def _apply() -> None:
+            try:
+                from PIL import Image, ImageTk
+                resolved = self._settings.theme
+                if resolved == "system":
+                    resolved = get_system_theme()
+                name = "logo_32_white.png" if resolved == "dark" else "logo_32_dark.png"
+                logo_path = self._assets / name
+                if not logo_path.exists():
+                    logo_path = self._assets / "logo_32.png"
+                if logo_path.exists():
+                    img = Image.open(logo_path).convert("RGBA")
+                    tk_root = self._own_root if self._own_root else self
+                    self._icon_photos = [
+                        ImageTk.PhotoImage(img.resize((s, s), Image.LANCZOS), master=tk_root)
+                        for s in (16, 32, 48)
+                    ]
+                    self.iconphoto(False, *self._icon_photos)
+                    return
+                ico_path = self._assets / "eqho.ico"
+                if ico_path.exists():
+                    self.iconbitmap(str(ico_path))
+            except Exception as e:
+                log.debug("Failed to set window icon: %s", e)
+
+        self.after(260, _apply)
 
     # -- Sidebar ---------------------------------------------------------------
 
@@ -160,23 +172,24 @@ class Dashboard(ctk.CTkToplevel):
         title_frame = ctk.CTkFrame(self._sidebar, fg_color="transparent")
         title_frame.pack(fill="x", padx=SPACING["lg"], pady=(SPACING["xl"], SPACING["lg"]))
 
-        logo_light = self._assets / "logo_horizontal_dark.png"
-        logo_dark = self._assets / "logo_horizontal_light.png"
-        if logo_light.exists() and logo_dark.exists():
+        # Wordmark variants: dark text for light backgrounds, light text for dark
+        wordmark_for_light_theme = self._assets / "logo_horizontal_dark.png"
+        wordmark_for_dark_theme = self._assets / "logo_horizontal_light.png"
+        if wordmark_for_light_theme.exists() and wordmark_for_dark_theme.exists():
             from PIL import Image, ImageTk
-            pil_light = Image.open(logo_light)
-            pil_dark = Image.open(logo_dark)
+            pil_for_light = Image.open(wordmark_for_light_theme)
+            pil_for_dark = Image.open(wordmark_for_dark_theme)
             # Scale to fit sidebar width with padding
             max_w = SIDEBAR_W - 2 * SPACING["lg"]
-            ratio = max_w / pil_light.width
-            new_h = int(pil_light.height * ratio)
-            pil_light = pil_light.resize((max_w, new_h), Image.LANCZOS)
-            pil_dark = pil_dark.resize((max_w, new_h), Image.LANCZOS)
+            ratio = max_w / pil_for_light.width
+            new_h = int(pil_for_light.height * ratio)
+            pil_for_light = pil_for_light.resize((max_w, new_h), Image.LANCZOS)
+            pil_for_dark = pil_for_dark.resize((max_w, new_h), Image.LANCZOS)
             # Pick the right variant for current theme
             resolved = self._settings.theme
             if resolved == "system":
                 resolved = get_system_theme()
-            pil_img = pil_light if resolved == "light" else pil_dark
+            pil_img = pil_for_light if resolved == "light" else pil_for_dark
             # Bind PhotoImage to this window's Tk instance
             tk_root = self._own_root if self._own_root else self
             self._logo_tk = ImageTk.PhotoImage(pil_img, master=tk_root)
@@ -273,6 +286,8 @@ class Dashboard(ctk.CTkToplevel):
 
         # Rebuild entire UI with new colors
         self._rebuild_ui()
+        apply_dark_title_bar(self, resolved == "dark")
+        self._set_window_icon()
         self._apply_settings(reload_model=False)
 
     def _rebuild_ui(self) -> None:
@@ -290,6 +305,7 @@ class Dashboard(ctk.CTkToplevel):
         self._tabs.clear()
         self._nav_buttons.clear()
         self._last_col_count = 0
+        self._tab_built_cols.clear()
 
         # Update window bg
         self.configure(fg_color=self._colors.bg_primary)
@@ -314,6 +330,11 @@ class Dashboard(ctk.CTkToplevel):
 
     def _show_tab(self, key: str) -> None:
         self._current_tab = key
+        # Rebuild if this tab was built for a different column count — fixes
+        # the stale-layout-until-resize glitch on tabs built before the
+        # window had its real size (deferred issue d)
+        if self._tab_built_cols.get(key) != self._get_col_count():
+            self.rebuild_tab(key)
         # Update nav highlight
         for k, btn in self._nav_buttons.items():
             if k == key:
@@ -338,6 +359,7 @@ class Dashboard(ctk.CTkToplevel):
         tab_obj = TAB_CLASSES[key](self._ctx)
         self._tabs[key] = tab_obj
         tab_obj.build(frame)
+        self._tab_built_cols[key] = self._get_col_count()
 
     def _build_all_tabs(self) -> None:
         for key in TAB_CLASSES:

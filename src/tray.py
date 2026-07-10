@@ -3,6 +3,7 @@
 import logging
 import os
 import sys
+import threading
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -123,10 +124,11 @@ class TrayApp:
         self._icon: Optional[pystray.Icon] = None
         self._is_active = False
         self._dashboard_open = False
+        self._theme_stop = threading.Event()
 
     def _tooltip(self, active: bool = False) -> str:
         lang = SUPPORTED_LANGUAGES.get(self._settings.language, self._settings.language)
-        hotkey = self._settings.hotkey.replace("+", "+").title()
+        hotkey = self._settings.hotkey.title()
         base = f"Eqho — {hotkey} | {lang}"
         return f"{base} — Listening..." if active else base
 
@@ -137,7 +139,25 @@ class TrayApp:
             title=self._tooltip(),
             menu=self._build_menu(),
         )
+        threading.Thread(target=self._watch_taskbar_theme, daemon=True).start()
         self._icon.run()
+
+    def _watch_taskbar_theme(self) -> None:
+        """Reload the tray icon when the Windows taskbar theme flips.
+
+        The registry key has no change notification we can use from here, so
+        poll it — cheap (one registry read) and 15 s is fast enough for a
+        theme switch."""
+        last = _get_taskbar_theme()
+        while not self._theme_stop.wait(15):
+            current = _get_taskbar_theme()
+            if current != last and self._icon:
+                last = current
+                try:
+                    self._icon.icon = _load_icon(self._is_active)
+                    log.info("Taskbar theme changed to %s — tray icon reloaded.", current)
+                except Exception as e:
+                    log.debug("Tray icon reload failed: %s", e)
 
     def set_active(self, active: bool) -> None:
         self._is_active = active
@@ -370,5 +390,6 @@ class TrayApp:
         self._settings.save()
 
     def stop(self) -> None:
+        self._theme_stop.set()
         if self._icon:
             self._icon.stop()

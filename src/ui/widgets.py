@@ -110,29 +110,55 @@ class ThemedDropdown(ctk.CTkFrame):
 
         current = variable.get() if variable else (values[0] if values else "")
 
-        self._button = ctk.CTkButton(
+        # Closed state: bordered frame with the value left-aligned and the
+        # chevron pinned to the right edge (like a native combobox).
+        self._button = ctk.CTkFrame(
             self,
-            text=f"{current}  ▾",
             width=width,
             height=height,
             corner_radius=corner_radius,
-            font=self._font,
             fg_color=self._fg_color,
-            text_color=self._text_color,
-            hover_color=self._hover_color,
             border_width=1 if self._border_color else 0,
             border_color=self._border_color,
-            anchor="w",
-            command=self._toggle_popup,
         )
         self._button.pack()
+        self._button.pack_propagate(False)
+
+        self._text_label = ctk.CTkLabel(
+            self._button, text=current, font=self._font,
+            text_color=self._text_color, fg_color="transparent", anchor="w",
+        )
+        self._text_label.pack(side="left", fill="x", expand=True, padx=(10, 2))
+
+        self._chevron = ctk.CTkLabel(
+            self._button, text="▾", font=self._font,
+            text_color=self._text_color, fg_color="transparent", width=14,
+        )
+        self._chevron.pack(side="right", padx=(0, 8))
+
+        for widget in (self._button, self._text_label, self._chevron):
+            widget.bind("<Button-1>", lambda e: self._toggle_popup())
+            widget.bind("<Enter>", lambda e: self._set_hover(True))
+            widget.bind("<Leave>", lambda e: self._set_hover(False))
+            try:
+                widget.configure(cursor="hand2")
+            except Exception:
+                pass
+
+        self._item_buttons: list[ctk.CTkButton] = []
+        self._scroll_frame = None
+        self._active_index = 0
 
         if self._variable:
             self._variable.trace_add("write", self._on_var_changed)
 
+    def _set_hover(self, hovering: bool) -> None:
+        color = self._hover_color if hovering else self._fg_color
+        if color:
+            self._button.configure(fg_color=color)
+
     def _on_var_changed(self, *args) -> None:
-        val = self._variable.get()
-        self._button.configure(text=f"{val}  ▾")
+        self._text_label.configure(text=self._variable.get())
 
     def _toggle_popup(self) -> None:
         if self._dropdown_open:
@@ -176,26 +202,36 @@ class ThemedDropdown(ctk.CTkFrame):
             )
             scroll.pack(fill="both", expand=True, padx=2, pady=4)
             items_parent = scroll
+            self._scroll_frame = scroll
         else:
             items_parent = container
+            self._scroll_frame = None
 
         current_val = self._variable.get() if self._variable else ""
 
+        self._item_buttons = []
         for val in self._values:
-            is_selected = val == current_val
             btn = ctk.CTkButton(
                 items_parent,
                 text=val,
                 font=self._dropdown_font,
                 height=item_h,
                 corner_radius=RADIUS_SM,
-                fg_color=self._dd_hover if is_selected else "transparent",
+                fg_color="transparent",
                 text_color=self._dd_text,
                 hover_color=self._dd_hover,
                 anchor="w",
                 command=lambda v=val: self._select_value(v),
             )
             btn.pack(fill="x", padx=4, pady=1)
+            self._item_buttons.append(btn)
+
+        try:
+            self._active_index = self._values.index(current_val)
+        except ValueError:
+            self._active_index = 0
+        self._highlight_active()
+        self._scroll_active_into_view()
 
         # Position below the button
         self.update_idletasks()
@@ -225,20 +261,52 @@ class ThemedDropdown(ctk.CTkFrame):
         except Exception:
             pass
 
-        # Close on click outside
+        # Close on click outside; keyboard navigation while open
         self._popup.bind("<FocusOut>", lambda e: self.after(100, self._close_popup))
+        self._popup.bind("<Escape>", lambda e: self._close_popup())
+        self._popup.bind("<Up>", lambda e: self._move_active(-1))
+        self._popup.bind("<Down>", lambda e: self._move_active(1))
+        self._popup.bind("<Return>", lambda e: self._select_active())
         self._popup.focus_set()
+
+    def _highlight_active(self) -> None:
+        for i, btn in enumerate(self._item_buttons):
+            btn.configure(
+                fg_color=self._dd_hover if i == self._active_index else "transparent"
+            )
+
+    def _scroll_active_into_view(self) -> None:
+        if self._scroll_frame is None or not self._item_buttons:
+            return
+        try:
+            fraction = max(0, self._active_index - 2) / max(1, len(self._item_buttons))
+            self._scroll_frame._parent_canvas.yview_moveto(fraction)
+        except Exception:
+            pass
+
+    def _move_active(self, delta: int) -> None:
+        if not self._item_buttons:
+            return
+        self._active_index = (self._active_index + delta) % len(self._item_buttons)
+        self._highlight_active()
+        self._scroll_active_into_view()
+
+    def _select_active(self) -> None:
+        if self._item_buttons:
+            self._select_value(self._values[self._active_index])
 
     def _select_value(self, val: str) -> None:
         if self._variable:
             self._variable.set(val)
-        self._button.configure(text=f"{val}  ▾")
+        self._text_label.configure(text=val)
         self._close_popup()
         if self._command:
             self._command(val)
 
     def _close_popup(self) -> None:
         self._dropdown_open = False
+        self._item_buttons = []
+        self._scroll_frame = None
         if self._popup is not None:
             try:
                 self._popup.destroy()
@@ -252,7 +320,7 @@ class ThemedDropdown(ctk.CTkFrame):
     def set(self, value: str) -> None:
         if self._variable:
             self._variable.set(value)
-        self._button.configure(text=f"{value}  ▾")
+        self._text_label.configure(text=value)
 
     def get(self) -> str:
         return self._variable.get() if self._variable else ""

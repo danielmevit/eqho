@@ -4,6 +4,25 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.4.0] - 2026-07-10
+
+### Changed
+- **UI overhaul (Toolcraft-inspired, original implementation)** — near-black dark theme (`#0a0a0b` canvas, `#151517` cards), hairline 1px borders on cards/inputs/dropdowns, compact radii (4/6/8/12), denser Inter type scale. Light theme keeps Eqho's light palette with the same new geometry. Accent remains Eqho blue `#58a6ff`.
+- **`dashboard.py` split into `src/ui/` package** — widgets / layout / context / tabs / orchestrator (~1700-line file retired); tabs own their state and talk via a small pub-sub (`DashboardContext`); dead `settings_ui.py` removed.
+- **Theme is the single styling source** — new `theme.font()` helper; zero inline font tuples or hex literals in `src/ui/`; primary/secondary/ghost button recipes.
+
+### Fixed (the five deferred 0.3.1 issues)
+- **Dropdown polish** — closed state has a hairline border and a right-pinned chevron; popup supports Up/Down/Enter/Escape and scrolls the selection into view.
+- **Title-bar icon** — now set 260 ms after creation (outlasting CTkToplevel's own deferred icon call that kept overwriting it) and theme-matched (white mark on dark, blue on light).
+- **Tray icon theme detection** — the taskbar theme is now re-polled every 15 s, so switching Windows theme updates the tray icon without toggling recording.
+- **Responsive rebuild glitch** — each tab records the column count it was built with and rebuilds on show if stale (no more resize + re-click).
+- **Column spacing** — unified padding law (card inset = 12 px everywhere, single-column and grid alike).
+
+### Added
+- **Dark title bar** via DWM (attr 20/19) matching the app theme, reapplied on theme switch.
+- **Overlay animations** — pulsing accent recording dot, alpha fade in/out.
+- **New logo assets adopted** — `logo/new logo/` PNGs copied into `assets/` + `logo/`, `eqho.ico` regenerated (`tools/make_icons.py`).
+
 ## [0.3.3] - 2026-07-09
 
 ### Added

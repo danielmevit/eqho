@@ -37,10 +37,10 @@ Planned features and milestones for Eqho. Renumbered 2026-07-09 for the overhaul
 
 ## Phase 4 -- UI Overhaul + Windows Packaging (v0.4.x)
 Toolcraft-inspired restyle (original code only — see DECISIONS.md) + consumer-grade Windows installs.
-- [ ] Split `dashboard.py` into `src/ui/` (widgets / layout / tabs / orchestrator) with pub-sub context
-- [ ] New token system: near-black dark ramp, hairline 1px borders, compact radii (4/6/8/12), `font()` helper
-- [ ] Fix the 5 deferred v0.3.1 issues (dropdown polish, title-bar icon, tray theme refresh, responsive rebuild, unified padding)
-- [ ] Dark title bar (DWM), new logo assets adoption, overlay restyle (pulse + fade)
+- [x] Split `dashboard.py` into `src/ui/` (widgets / layout / tabs / orchestrator) with pub-sub context
+- [x] New token system: near-black dark ramp, hairline 1px borders, compact radii (4/6/8/12), `font()` helper
+- [x] Fix the 5 deferred v0.3.1 issues (dropdown polish, title-bar icon, tray theme refresh, responsive rebuild, unified padding)
+- [x] Dark title bar (DWM), new logo assets adoption, overlay restyle (pulse + fade)
 - [ ] `packaging/windows/`: onedir PyInstaller spec + Inno Setup installer + portable zip
 - [ ] GitHub Actions release workflow (tag → installer + zip artifacts)
 
