@@ -17,16 +17,18 @@ SRC = ROOT / "logo" / "new logo"
 ASSETS = ROOT / "assets"
 LOGO = ROOT / "logo"
 
-# `logo/new logo/` sources are named by ARTWORK COLOR (dark = dark/blue art),
-# but assets are named by the THEME THEY SERVE (dark = shown in dark mode) —
-# Daniel's convention since v0.6.1 — so the copy step swaps each pair.
+# Daniel's `logo/new logo/` sources AND the assets both use the theme-served
+# convention: *_dark.png = shown IN dark mode (lighter art), *_white/_light =
+# shown in light mode (darker/blue art). Verified by pixel luminance
+# (2026-07-10) — so this is a straight same-name copy. Don't "fix" it into a
+# swap again.
 SRC_TO_DEST = {
-    "logo_32_dark.png": "logo_32_white.png",
-    "logo_32_white.png": "logo_32_dark.png",
-    "logo_62_dark.png": "logo_62_white.png",
-    "logo_62_white.png": "logo_62_dark.png",
-    "logo_horizontal_dark.png": "logo_horizontal_light.png",
-    "logo_horizontal_light.png": "logo_horizontal_dark.png",
+    name: name
+    for name in (
+        "logo_32_dark.png", "logo_32_white.png",
+        "logo_62_dark.png", "logo_62_white.png",
+        "logo_horizontal_dark.png", "logo_horizontal_light.png",
+    )
 }
 
 ICO_SIZES = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64)]
@@ -46,7 +48,7 @@ def main() -> None:
             shutil.copy2(src, dest_dir / dest_name)
         print(f"copied: {src_name} -> assets/{dest_name}, logo/{dest_name}")
 
-    # The app icon uses the blue mark — under mode-naming that's *_white.png
+    # The app icon uses the blue (darker) mark — the light-mode variant
     mark = ASSETS / "logo_62_white.png"
     if mark.exists():
         base = Image.open(mark).convert("RGBA")

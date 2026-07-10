@@ -143,31 +143,30 @@ class TabBase:
         return card
 
     def _setting_row(self, parent, label: str, description: str = "") -> ctk.CTkFrame:
-        """A row inside a card: label on the left, widget slot on the right."""
+        """A stacked block inside a card: label + description with the control
+        BELOW them, left-aligned. (The old side-by-side layout crushed
+        controls into labels at narrow widths.)"""
         row = ctk.CTkFrame(parent, fg_color="transparent")
         row.pack(fill="x", padx=SPACING["md"], pady=SPACING["sm"])
 
-        left = ctk.CTkFrame(row, fg_color="transparent")
-        left.pack(side="left", fill="x", expand=True)
-
         ctk.CTkLabel(
-            left, text=label,
+            row, text=label,
             font=font("base"),
             text_color=self._colors.fg_primary,
             anchor="w",
-        ).pack(anchor="w")
+        ).pack(anchor="w", fill="x")
 
         if description:
             ctk.CTkLabel(
-                left, text=description,
+                row, text=description,
                 font=font("xs"),
                 text_color=self._colors.fg_muted,
                 anchor="w",
-            ).pack(anchor="w")
+            ).pack(anchor="w", fill="x")
 
-        right = ctk.CTkFrame(row, fg_color="transparent")
-        right.pack(side="right")
-        return right
+        control = ctk.CTkFrame(row, fg_color="transparent")
+        control.pack(anchor="w", pady=(SPACING["xs"], 0))
+        return control
 
     def _make_grid_container(self, parent) -> ctk.CTkFrame:
         """Grid container distributing columns evenly. Adds no horizontal

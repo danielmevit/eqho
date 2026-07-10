@@ -19,6 +19,11 @@
 
 ## Layout laws
 
+- **Setting rows STACK**: label + description with the control below, left-aligned (`_setting_row`). Never side-by-side — controls crush into labels at narrow widths (Daniel, v0.6.2).
+- **UI zoom**: `settings.ui_scale` (default 1.5) drives `ctk.set_widget_scaling` + `set_window_scaling`; responsive breakpoints multiply by the scale. Zoom control lives in General → Interface.
+- **Logo assets are mode-named**: `*_dark.png` = shown IN dark mode (lighter art). `logo/new logo/` sources use the same convention — `make_icons.py` copies same-name. Verified by pixel luminance 2026-07-10; don't swap.
+
+
 - Dashboard 720×520 (min 600×420); 170px fixed sidebar (`bg_secondary`); content = one scrollable tab at a time.
 - **Breakpoints on content-area width** (sidebar excluded): `BP_2COL=560`, `BP_3COL=900` → 1/2/3 columns.
 - Every tab records the column count it was built with; `_show_tab` rebuilds a tab whose count is stale (fixes deferred issue d — no more resize+re-click).

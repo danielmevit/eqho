@@ -64,6 +64,11 @@ class GeneralTab(TabBase):
         self._build_vocab_setting(card)
         self._build_dictation_settings(card)
 
+        # Interface
+        self._section_label(tab, "INTERFACE")
+        card = self._card(tab)
+        self._build_interface_settings(card)
+
     def _build_general_multi(self, tab, cols: int) -> None:
         """Multi-column grid layout."""
         grid = self._make_grid_container(tab)
@@ -108,12 +113,20 @@ class GeneralTab(TabBase):
             card = self._card(col2)
             self._build_vocab_setting(card)
             self._build_dictation_settings(card)
+
+            self._section_label(col2, "INTERFACE")
+            card = self._card(col2)
+            self._build_interface_settings(card)
         else:
-            # 2-col: dictation section balances under Audio + Hotkey
+            # 2-col: dictation + interface balance under Audio + Hotkey
             self._section_label(col0, "DICTATION")
             card = self._card(col0)
             self._build_vocab_setting(card)
             self._build_dictation_settings(card)
+
+            self._section_label(col0, "INTERFACE")
+            card = self._card(col0)
+            self._build_interface_settings(card)
 
     # -- Dictation section (local features, v0.5.0) ------------------------------
 
@@ -164,6 +177,23 @@ class GeneralTab(TabBase):
             text=f"Edit…  ({len(self._settings.replacements)})", width=100,
             command=self._open_replacements_editor,
         ).pack()
+
+    def _build_interface_settings(self, card) -> None:
+        control = self._setting_row(card, "UI Zoom", "Scale the whole dashboard")
+        levels = ["100%", "125%", "150%", "175%", "200%"]
+        current = f"{int(round(self._settings.ui_scale * 100))}%"
+        self._zoom_var = ctk.StringVar(value=current if current in levels else "150%")
+        segmented(
+            control, self._colors,
+            values=levels,
+            variable=self._zoom_var,
+            command=self._on_zoom_changed,
+        ).pack(anchor="w")
+
+    def _on_zoom_changed(self, value: str) -> None:
+        scale = int(value.rstrip("%")) / 100.0
+        if abs(scale - self._settings.ui_scale) > 0.01:
+            self.ctx.set_ui_scale(scale)
 
     def _on_vocab_changed(self, _event=None) -> None:
         text = self._vocab_box.get("1.0", "end").strip()
@@ -257,27 +287,10 @@ class GeneralTab(TabBase):
         ).pack()
 
     def _build_hotkey_setting(self, card) -> None:
-        hotkey_row = ctk.CTkFrame(card, fg_color="transparent")
-        hotkey_row.pack(fill="x", padx=SPACING["md"], pady=SPACING["sm"])
-
-        left = ctk.CTkFrame(hotkey_row, fg_color="transparent")
-        left.pack(side="left", fill="x", expand=True)
-        ctk.CTkLabel(
-            left, text="Global Hotkey",
-            font=font("base"),
-            text_color=self._colors.fg_primary, anchor="w",
-        ).pack(anchor="w")
-        ctk.CTkLabel(
-            left, text="Press to activate/deactivate dictation",
-            font=font("xs"),
-            text_color=self._colors.fg_muted, anchor="w",
-        ).pack(anchor="w")
-
-        hotkey_right = ctk.CTkFrame(hotkey_row, fg_color="transparent")
-        hotkey_right.pack(side="right")
+        control = self._setting_row(card, "Global Hotkey", "Press to activate/deactivate dictation")
 
         self._hotkey_display = ctk.CTkButton(
-            hotkey_right,
+            control,
             text=self._format_hotkey(self._settings.hotkey),
             font=font("lg", "bold"),
             width=160, height=36,
@@ -289,14 +302,14 @@ class GeneralTab(TabBase):
             border_color=self._colors.border,
             command=self._start_hotkey_capture,
         )
-        self._hotkey_display.pack()
+        self._hotkey_display.pack(anchor="w")
 
         self._hotkey_hint = ctk.CTkLabel(
-            hotkey_right, text="Click to change",
+            control, text="Click to change",
             font=font("xs"),
             text_color=self._colors.fg_muted,
         )
-        self._hotkey_hint.pack(pady=(2, 0))
+        self._hotkey_hint.pack(anchor="w", pady=(2, 0))
 
     def _build_hotkey_mode_setting(self, card) -> None:
         right = self._setting_row(card, "Hotkey Mode", "Toggle on/off or hold to talk")
@@ -309,27 +322,17 @@ class GeneralTab(TabBase):
         ).pack()
 
     def _build_model_setting(self, card) -> None:
-        model_row = ctk.CTkFrame(card, fg_color="transparent")
-        model_row.pack(fill="x", padx=SPACING["md"], pady=SPACING["sm"])
-
-        model_left = ctk.CTkFrame(model_row, fg_color="transparent")
-        model_left.pack(side="left", fill="x", expand=True)
-
-        ctk.CTkLabel(
-            model_left, text="Whisper Model",
-            font=font("base"),
-            text_color=self._colors.fg_primary, anchor="w",
-        ).pack(anchor="w")
+        control = self._setting_row(card, "Whisper Model")
 
         self._model_info_label = ctk.CTkLabel(
-            model_left, text=self._get_model_info_text(self._settings.model_size),
+            control, text=self._get_model_info_text(self._settings.model_size),
             font=font("xs"),
-            text_color=self._colors.fg_muted, anchor="w",
+            text_color=self._colors.fg_muted, anchor="w", justify="left",
         )
         self._model_info_label.pack(anchor="w")
 
-        model_right = ctk.CTkFrame(model_row, fg_color="transparent")
-        model_right.pack(side="right")
+        model_right = ctk.CTkFrame(control, fg_color="transparent")
+        model_right.pack(anchor="w", pady=(SPACING["xs"], 0))
 
         model_display_names = [MODEL_INFO[k]["name"] for k in WHISPER_MODELS]
         model_keys = list(WHISPER_MODELS.keys())

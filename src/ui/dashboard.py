@@ -76,6 +76,7 @@ class Dashboard(ctk.CTkToplevel):
             apply_settings=self._apply_settings,
             get_col_count=self._get_col_count,
             rebuild_tab=self.rebuild_tab,
+            set_ui_scale=self.set_ui_scale,
         )
 
         self._setup_window()
@@ -97,6 +98,11 @@ class Dashboard(ctk.CTkToplevel):
             self._own_root.mainloop()
 
     def _setup_window(self) -> None:
+        # UI zoom (Daniel: default 150%) — must be set before widgets/geometry
+        self._ui_scale = max(1.0, min(2.0, float(getattr(self._settings, "ui_scale", 1.5) or 1.5)))
+        ctk.set_widget_scaling(self._ui_scale)
+        ctk.set_window_scaling(self._ui_scale)
+
         self.title("Eqho Dashboard")
         self.geometry(f"{WIN_W}x{WIN_H}")
         self.minsize(600, 420)
@@ -116,12 +122,12 @@ class Dashboard(ctk.CTkToplevel):
         self.configure(fg_color=self._colors.bg_primary)
         apply_dark_title_bar(self, mode == "dark")
 
-        # Center on screen
+        # Center on screen (geometry sizes get multiplied by window scaling)
         self.update_idletasks()
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
-        x = (sw - WIN_W) // 2
-        y = (sh - WIN_H) // 2
+        x = max(0, (sw - int(WIN_W * self._ui_scale)) // 2)
+        y = max(0, (sh - int(WIN_H * self._ui_scale)) // 2)
         self.geometry(f"{WIN_W}x{WIN_H}+{x}+{y}")
 
     def _set_window_icon(self) -> None:
@@ -376,16 +382,28 @@ class Dashboard(ctk.CTkToplevel):
     # -- Responsive grid helpers -----------------------------------------------
 
     def _get_col_count(self) -> int:
-        """Determine column count from content area width."""
+        """Column count from content width (breakpoints scale with UI zoom —
+        a zoomed column needs proportionally more real pixels)."""
         try:
             w = self._content.winfo_width()
         except Exception:
             w = WIN_W - SIDEBAR_W
-        if w >= BP_3COL:
+        scale = getattr(self, "_ui_scale", 1.0)
+        if w >= BP_3COL * scale:
             return 3
-        elif w >= BP_2COL:
+        elif w >= BP_2COL * scale:
             return 2
         return 1
+
+    def set_ui_scale(self, scale: float) -> None:
+        """Apply a new UI zoom factor and rebuild (called from the General tab)."""
+        scale = max(1.0, min(2.0, scale))
+        self._settings.ui_scale = scale
+        self._settings.save()
+        self._ui_scale = scale
+        ctk.set_widget_scaling(scale)
+        ctk.set_window_scaling(scale)
+        self._rebuild_ui()
 
     def _on_content_resize(self, event=None) -> None:
         """Rebuild the current tab if column count changed."""

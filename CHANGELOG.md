@@ -4,6 +4,20 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.6.2] - 2026-07-10
+
+Second review round + public launch push (dev merged to public `main` at v0.6.1).
+
+### Fixed
+- **Dark-theme logo actually shows the dark-theme artwork now.** Root cause: `logo/new logo/` sources were already mode-named, so the v0.6.1 file swap double-flipped them. Verified by pixel luminance; `tools/make_icons.py` is now a same-name copy with the convention documented.
+
+### Changed
+- **Stacked setting rows** — every label+control pair now stacks vertically (control below, left-aligned) instead of side-by-side, so controls no longer crush into labels at narrow window widths, in any column count.
+- **UI is 50% bigger by default** — dashboard renders at 150% zoom, and a new **UI Zoom** setting (General → Interface: 100–200%) rescales the whole dashboard live. Responsive breakpoints scale with zoom.
+
+### Added
+- **Model downloads in the Models tab** — non-downloaded models show a disabled Select button plus a square ↓ download button; downloading cards show a live percent readout and a thin progress bar filling left→right along the card bottom (size-based estimation). Select enables automatically when the download completes.
+
 ## [0.6.1] - 2026-07-10
 
 Polish pass from Daniel's first installed-build review.

@@ -88,6 +88,7 @@ class Settings:
     volume_duck: str = "mute"  # "off", "50%", "25%", "10%", "mute"
     start_with_windows: bool = False
     theme: str = "dark"  # "dark", "light", "system"
+    ui_scale: float = 1.5  # dashboard zoom factor (1.0–2.0)
     # Local features (v0.5.0)
     history_enabled: bool = True     # save dictations to history.jsonl
     initial_prompt: str = ""         # custom vocabulary bias for Whisper
