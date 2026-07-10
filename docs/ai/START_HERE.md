@@ -7,9 +7,9 @@ Always-on voice-to-text dictation app for Windows 10/11 (Linux/macOS ports plann
 
 ## Current priority
 
-Executing the 2026-07 overhaul plan, tracked as ROADMAP Phases 3–7:
-engine hardening (v0.3.x) → Toolcraft-inspired UI overhaul + Windows installer (v0.4.x) → local features (v0.5.x) → cross-platform (v0.6.x) → public launch (→1.0).
-The top entry of `CHANGELOG.md` tells you where the last session stopped; `TODO.md` lists manual steps waiting on Daniel.
+The 2026-07 overhaul (ROADMAP Phases 3–6) is COMPLETE at v0.6.0: engine hardening, Toolcraft-inspired UI, Windows installer + CI, local features (history/vocab/commands/chime), and cross-platform core with Linux/macOS packages.
+
+Next up: **Daniel's eyeball pass on the new UI + install test**, then **Phase 7 — public launch** (public README with screenshots, first tagged release through the CI pipeline, winget manifest, flip repo public). Tag `v0.6.0` on dev to dry-run the release workflow. The top entry of `CHANGELOG.md` tells you where the last session stopped; `TODO.md` lists manual steps waiting on Daniel.
 
 ## Run it
 
