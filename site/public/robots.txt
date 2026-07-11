@@ -12,3 +12,6 @@ User-agent: anthropic-ai
 Allow: /
 User-agent: Omgili
 Allow: /
+
+# Sitemap location
+Sitemap: https://danielmevit.github.io/eqho/sitemap.xml
