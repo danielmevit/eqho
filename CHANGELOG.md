@@ -7,6 +7,7 @@ Date format: `YYYY-MM-DD`.
 ## [Unreleased]
 
 ### Added
+- **CONTRIBUTING.md** — dev setup, smoke-gate requirement, architecture rules (oskit-only OS code, theme-only styling, Variable helpers), bug-report guidance incl. eqho.log thread dumps. Phase 7 is now complete except Daniel's manual QA + demo GIF.
 - **winget manifests** (`packaging/winget/`, PackageIdentifier `damt.Eqho`) — submitted to microsoft/winget-pkgs as [PR #400796](https://github.com/microsoft/winget-pkgs/pull/400796); once merged, `winget install eqho` works. For future releases: bump PackageVersion + InstallerUrl + SHA256 (`sha256sum` of the release exe, uppercase) and resubmit via a fork branch (see the PR for the pattern).
 
 ### Changed

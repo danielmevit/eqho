@@ -66,10 +66,10 @@ Core dictation on Linux + macOS with graceful degradation.
 - [x] Clean public README with screenshot, feature highlights, install instructions
 - [x] GitHub Releases page with pre-built installers (v0.6.3+, all 3 OSes)
 - [x] winget manifest submitted (microsoft/winget-pkgs PR #400796) · [ ] MSIX/Store (needs signing) 
-- [ ] CONTRIBUTING.md if accepting community contributions
-- [x] Landing page (danielmevit.github.io/eqho, Astro in site/) · [ ] demo GIF/video
-- [ ] Final QA pass on a clean Windows install
-- [ ] Flip repo from private to public
+- [x] CONTRIBUTING.md
+- [x] Landing page (danielmevit.github.io/eqho, Astro in site/) · [ ] demo GIF/video (Daniel — see TODO.md)
+- [ ] Final QA pass on a clean Windows install (Daniel — see TODO.md)
+- [x] Repo public (dev history stays in Eqho-private)
 
 ## Phase 8 -- Native Engine (future)
 Migrate off the Python runtime for a lean commercial-grade product.
