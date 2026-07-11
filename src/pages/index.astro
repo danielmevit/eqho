@@ -131,6 +131,25 @@ const year = 2026;
 
       section { margin-bottom: 6rem; }
 
+      /* Visual Showcase */
+      .visual-comparison {
+        margin: 4rem 0;
+        text-align: center;
+      }
+
+      .visual-comparison img {
+        max-width: 100%;
+        border-radius: 8px;
+        border: 1px solid var(--color-border);
+        box-shadow: 0 12px 24px var(--color-shadow);
+      }
+
+      .visual-caption {
+        margin-top: 1.5rem;
+        font-style: italic;
+        color: var(--color-muted);
+      }
+
       /* Grid for Features */
       .grid-3 {
         display: grid;
@@ -291,6 +310,12 @@ const year = 2026;
         <p class="header-desc">
           Speak anywhere Windows lets you type. Powered by OpenAI's Whisper, running 100% locally on your machine with zero cloud dependency.
         </p>
+
+        <div class="visual-comparison">
+          <img src="https://raw.githubusercontent.com/DanielMevit/Eqho/main/assets/eqho_app_screenshot.webp" alt="Eqho dashboard dark theme screenshot, showing the live transcription overlay and local settings dashboard" />
+          <p class="visual-caption">Eqho features a clean dark theme, adjustable live transcription overlay, and completely local settings dashboard.</p>
+        </div>
+
         <p>
           <a href="https://github.com/DanielMevit/Eqho">View Repository on GitHub</a>
         </p>
