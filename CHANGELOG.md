@@ -14,6 +14,16 @@ Date format: `YYYY-MM-DD`.
 - **Landing page moved into `site/`** (was scattered at the repo root with `src/pages/` inside the Python package) — Pages workflow builds `./site`; screenshot copied to `site/public/assets/` so the page's relative image path resolves; page links updated to `danielmevit/eqho`.
 - Agent docs rewritten for handoff: START_HERE reflects the released v0.6.9 state and next steps; GOTCHAS gains the tkinter default-root deadlock trap, watchdog usage, single-instance port, adaptive VAD, and the web-UI-edits-on-main sync rule.
 
+## [0.7.0] - 2026-07-11
+
+### Added
+- **Auto-format (Tier-1 text cleanup)** — a light-touch, fully deterministic pass over the final transcript before it's typed: fixes sentence capitalization, lone "i" → "I", and mechanical spacing (no space before punctuation, collapsed runs, chunk-seam casing). It is **safe by design — it never rephrases, reorders, or invents words** (idempotent; leaves "had had", "iOS", code-like text intact). On by default; toggle in General → Dictation. Lives in `src/textproc.py` so it's shared logic that ports to a future mobile keyboard.
+- **Remove filler words** (opt-in sub-toggle) — strips a conservative set ("um", "uh", "er", "erm", "hmm", …) when auto-format is on; deliberately excludes meaning-carrying words ("like", "so", "well").
+- Smoke gate now asserts cleanup behavior + idempotence.
+
+### Note
+- LLM "polish" (a local model that could rewrite the transcript into cleaner prose) is intentionally NOT included — parked on the roadmap. Dictation returns exactly what you said.
+
 ## [0.6.9] - 2026-07-11
 
 ### Changed

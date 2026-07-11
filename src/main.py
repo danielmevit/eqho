@@ -205,6 +205,8 @@ class App:
             target_hwnd = self._target_hwnd
 
         full_text = textproc.apply_replacements(full_text, self.settings.replacements)
+        if self.settings.format_cleanup:
+            full_text = textproc.clean_text(full_text, remove_fillers=self.settings.remove_fillers)
 
         if full_text:
             time.sleep(0.4)  # wait for modifier keys to fully release

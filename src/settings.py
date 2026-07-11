@@ -97,6 +97,8 @@ class Settings:
     replacements: dict = field(default_factory=dict)  # text substitutions
     voice_commands: bool = False     # "new line", "period", "delete that", …
     sound_feedback: bool = True      # start/stop chime
+    format_cleanup: bool = True      # light-touch casing/spacing cleanup
+    remove_fillers: bool = False     # strip "um"/"uh"/… (opt-in sub-toggle)
 
     # runtime-only (not persisted)
     _listeners: list = field(default_factory=list, repr=False)

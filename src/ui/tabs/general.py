@@ -161,6 +161,12 @@ class GeneralTab(TabBase):
         self._vocab_box.bind("<FocusOut>", self._on_vocab_changed)
 
     def _build_dictation_settings(self, card) -> None:
+        self._format_var = self._build_switch_row(
+            card, "Auto-format", "Fix capitalization & spacing",
+            self._settings.format_cleanup, self._on_format_changed)
+        self._fillers_var = self._build_switch_row(
+            card, "Remove Filler Words", '"um", "uh", "er" (needs auto-format)',
+            self._settings.remove_fillers, self._on_fillers_changed)
         self._voice_cmd_var = self._build_switch_row(
             card, "Voice Commands", '"new line", "period", "delete that"',
             self._settings.voice_commands, self._on_voice_commands_changed)
@@ -200,6 +206,14 @@ class GeneralTab(TabBase):
         if text != self._settings.initial_prompt:
             self._settings.initial_prompt = text
             self._settings.save()
+
+    def _on_format_changed(self, value: bool) -> None:
+        self._settings.format_cleanup = value
+        self._settings.save()
+
+    def _on_fillers_changed(self, value: bool) -> None:
+        self._settings.remove_fillers = value
+        self._settings.save()
 
     def _on_voice_commands_changed(self, value: bool) -> None:
         self._settings.voice_commands = value

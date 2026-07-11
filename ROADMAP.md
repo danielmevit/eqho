@@ -86,6 +86,9 @@ Migrate off the Python runtime for a lean commercial-grade product.
 - Current faster-whisper stack is ideal for development velocity; whisper.cpp is for shipping
 
 ## Stretch Goals / Backlog
+- [x] Text cleanup — Tier 1 deterministic auto-format (v0.7.0)
+- [ ] Text cleanup — Tier 3 optional local-LLM "polish" mode (opt-in, may rephrase; parked)
+- [ ] Eqho Mobile — private voice keyboard (KMP + Compose, whisper.cpp engine; Android-first). See feasibility notes.
 - [ ] silero-VAD streaming segmenter (replace fixed RMS threshold)
 - [ ] Streaming partials (LocalAgreement) with live injection
 - [ ] Per-application paste mode rules (some apps need typing, not clipboard)
