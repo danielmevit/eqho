@@ -1,0 +1,456 @@
+---
+const title = "Eqho | Free Offline Voice-to-Text Dictation";
+const description = "Speak anywhere Windows lets you type. Powered by OpenAI's Whisper, running 100% locally on your machine with zero cloud dependency.";
+const author = "Daniel Mevit";
+const year = 2026; 
+---
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="keywords" content="speech to text, voice to text, dictation software, offline speech recognition, free dictation app, voice typing for Windows, OpenAI Whisper app, faster-whisper GUI, private speech to text, local voice recognition, no-cloud transcription" />
+    <meta name="author" content={author} />
+
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Open Graph for Link Sharing -->
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://danielmevit.github.io/Eqho/" />
+    <meta property="og:image" content="https://raw.githubusercontent.com/DanielMevit/Eqho/main/logo/logo_horizontal_dark.png" />
+    <meta property="og:site_name" content="Eqho" />
+
+    <style>
+      :root {
+        /* GitHub Dark Theme Palette */
+        --color-bg: #0d1117;
+        --color-card-bg: #161b22;
+        --color-text: #c9d1d9;
+        --color-heading: #ffffff;
+        --color-blue: #58a6ff;
+        --color-muted: #8b949e;
+        --color-border: #30363d;
+        --color-shadow: rgba(0, 0, 0, 0.4);
+        --color-hover: #1f242c;
+      }
+
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background-color: var(--color-bg);
+        color: var(--color-text);
+        line-height: 1.6;
+        margin: 0;
+        padding: 0;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      main {
+        max-width: 960px;
+        margin: 8rem auto;
+        padding: 0 2rem;
+      }
+
+      h1, h2, h3 {
+        color: var(--color-heading);
+      }
+
+      h1 {
+        font-size: 3.5rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        margin: 0;
+      }
+
+      h2 {
+        font-size: 2rem;
+        font-weight: 500;
+        margin-top: 5rem;
+        margin-bottom: 2rem;
+        border-bottom: 1px solid var(--color-border);
+        padding-bottom: 0.5rem;
+      }
+
+      h3 {
+        font-size: 1.25rem;
+        font-weight: 500;
+        margin-top: 3rem;
+        margin-bottom: 1rem;
+        color: var(--color-blue);
+      }
+
+      p { margin-bottom: 1.5rem; }
+
+      ul { margin-bottom: 2rem; padding-left: 1.5rem; }
+      li { margin-bottom: 0.75rem; }
+
+      a {
+        color: var(--color-blue);
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      /* Logo and Header Styling */
+      header {
+        text-align: center;
+        margin-bottom: 6rem;
+      }
+
+      .header-title-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .logo-link {
+        display: flex;
+      }
+
+      .logo-img {
+        width: 160px; 
+        height: auto;
+      }
+
+      .header-desc {
+        font-size: 1.25rem;
+        color: var(--color-muted);
+        max-width: 680px;
+        margin: 0 auto 1.5rem auto;
+      }
+
+      section { margin-bottom: 6rem; }
+
+      /* Visual Showcase */
+      .visual-comparison {
+        margin: 4rem 0;
+        text-align: center;
+      }
+
+      .visual-comparison img {
+        max-width: 100%;
+        border-radius: 8px;
+        border: 1px solid var(--color-border);
+        box-shadow: 0 12px 24px var(--color-shadow);
+      }
+
+      .visual-caption {
+        margin-top: 1.5rem;
+        font-style: italic;
+        color: var(--color-muted);
+      }
+
+      /* Grid for Features */
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        margin-top: 3rem;
+      }
+
+      .grid-card {
+        background-color: var(--color-card-bg);
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        padding: 2rem;
+        box-shadow: 0 4px 12px var(--color-shadow);
+      }
+
+      .grid-card h3 { 
+        margin-top: 0; 
+        color: var(--color-heading); 
+        font-weight: 600;
+      }
+
+      /* FAQ Accordion Styling */
+      .faq-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        margin-top: 2rem;
+      }
+
+      .faq-item {
+        background-color: var(--color-card-bg);
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        overflow: hidden;
+        transition: background-color 0.2s ease;
+      }
+      
+      .faq-item:hover {
+        background-color: var(--color-hover);
+      }
+
+      .faq-item summary {
+        padding: 1.5rem 2rem;
+        font-size: 1.1rem;
+        font-weight: 500;
+        color: var(--color-heading);
+        cursor: pointer;
+        list-style: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        user-select: none;
+      }
+
+      .faq-item summary::-webkit-details-marker { display: none; }
+
+      .faq-item summary::after {
+        content: '+';
+        color: var(--color-blue);
+        font-size: 1.5rem;
+        line-height: 1;
+        font-weight: 400;
+      }
+
+      .faq-item[open] summary {
+        border-bottom: 1px solid var(--color-border);
+        background-color: var(--color-card-bg);
+      }
+
+      .faq-item[open] summary::after { content: '−'; }
+
+      .faq-content {
+        padding: 1.5rem 2rem;
+        color: var(--color-text);
+        background-color: var(--color-bg);
+        border-top: 1px solid var(--color-border);
+      }
+
+      .faq-content p:last-child { margin-bottom: 0; }
+
+      /* Code Block & Copy Button Styling */
+      .code-wrapper {
+        position: relative;
+        margin-bottom: 2rem;
+      }
+
+      pre {
+        background-color: var(--color-card-bg);
+        border: 1px solid var(--color-border);
+        color: var(--color-text);
+        padding: 1.5rem;
+        padding-top: 2.5rem;
+        border-radius: 8px;
+        overflow-x: auto;
+        font-size: 0.9rem;
+        margin: 0;
+      }
+
+      .copy-button {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        background-color: transparent;
+        border: 1px solid var(--color-border);
+        color: var(--color-muted);
+        border-radius: 6px;
+        padding: 0.4rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+      }
+
+      .copy-button:hover {
+        background-color: var(--color-hover);
+        color: var(--color-text);
+        border-color: var(--color-muted);
+      }
+
+      .copy-button svg {
+        width: 16px;
+        height: 16px;
+        fill: currentColor;
+      }
+
+      code { 
+        font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace; 
+      }
+      
+      p code, li code {
+        background-color: rgba(110, 118, 129, 0.4);
+        padding: 0.2em 0.4em;
+        border-radius: 6px;
+        font-size: 0.85em;
+      }
+
+      footer {
+        text-align: center;
+        margin-top: 8rem;
+        padding: 4rem 0;
+        border-top: 1px solid var(--color-border);
+        color: var(--color-muted);
+        font-size: 0.9rem;
+      }
+
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="header-title-container">
+          <a href="https://github.com/DanielMevit/Eqho" class="logo-link">
+            <img src="https://raw.githubusercontent.com/DanielMevit/Eqho/main/logo/logo_horizontal_dark.png" alt="Eqho logo" class="logo-img" />
+          </a>
+        </div>
+        <p class="header-desc">
+          Speak anywhere Windows lets you type. Powered by OpenAI's Whisper, running 100% locally on your machine with zero cloud dependency.
+        </p>
+
+        <div class="visual-comparison">
+          <img src="https://raw.githubusercontent.com/DanielMevit/Eqho/main/assets/eqho_app_screenshot.webp" alt="Eqho dashboard dark theme screenshot, showing the live transcription overlay and local settings dashboard" />
+          <p class="visual-caption">Eqho features a clean dark theme, adjustable live transcription overlay, and completely local settings dashboard.</p>
+        </div>
+
+        <p>
+          <a href="https://github.com/DanielMevit/Eqho">View Repository on GitHub</a>
+        </p>
+      </header>
+
+      <section aria-labelledby="features">
+        <h2 id="features">Core Features</h2>
+        
+        <div class="grid-3">
+          <article class="grid-card">
+            <h3>Private by Design 🔒</h3>
+            <p>No cloud, no accounts, no API keys required. Your voice data never leaves your computer. Settings and history remain strictly local.</p>
+          </article>
+          <article class="grid-card">
+            <h3>Lightning Fast ⚡</h3>
+            <p>GPU-accelerated through NVIDIA CUDA with automatic CPU fallback. Enjoy a real-time transcription preview as you speak.</p>
+          </article>
+          <article class="grid-card">
+            <h3>Universal Support 🌍</h3>
+            <p>Inject text into any focused application—Word, Slack, or IDEs. Features 13 supported languages with one-click model swapping.</p>
+          </article>
+          <article class="grid-card">
+            <h3>Custom Vocabulary</h3>
+            <p>Teach the model your specific names, industry jargon, and acronyms to ensure perfect transcription for technical work.</p>
+          </article>
+          <article class="grid-card">
+            <h3>Smart Voice Commands</h3>
+            <p>Opt-in formatting commands allow you to say things like "new line", "period", or "delete that" for completely hands-free control.</p>
+          </article>
+          <article class="grid-card">
+            <h3>Hallucination Filtering</h3>
+            <p>Fixes the known Whisper quirk where silence is transcribed as "Thank you." Eqho intelligently drops empty audio chunks.</p>
+          </article>
+        </div>
+      </section>
+
+      <section aria-labelledby="how-it-works">
+        <h2 id="how-it-works">How It Works</h2>
+        <ol>
+          <li>Click into any application where you want to type.</li>
+          <li>Press <strong>Alt+Q</strong> (or your custom hotkey). A floating bar will show "Listening…".</li>
+          <li>Speak naturally and watch the live transcription preview.</li>
+          <li>Press <strong>Alt+Q</strong> again—your words are instantly typed into the active app.</li>
+        </ol>
+      </section>
+
+      <section aria-labelledby="install">
+        <h2 id="install">Installation</h2>
+        
+        <h3>Windows (Recommended)</h3>
+        <p>Grab the <code>Eqho-Setup-&lt;version&gt;.exe</code> from the <strong><a href="https://github.com/DanielMevit/Eqho/releases">Releases page</a></strong>, double-click, and you are done. Prefer no installer? Use the portable <code>.zip</code>.</p>
+        
+        <h3>Build From Source (Python)</h3>
+        <p>Requires Python 3.10+. The first run will automatically download the default speech model (distil-large-v3, ~1.5 GB).</p>
+        
+        <div class="code-wrapper">
+          <button class="copy-button" aria-label="Copy code">
+            <svg class="copy-icon" viewBox="0 0 16 16" version="1.1" aria-hidden="true"><path fill-rule="evenodd" d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"></path><path fill-rule="evenodd" d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"></path></svg>
+            <svg class="check-icon" viewBox="0 0 16 16" version="1.1" aria-hidden="true" style="display: none; color: #3fb950;"><path fill-rule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"></path></svg>
+          </button>
+<pre><code>git clone https://github.com/DanielMevit/Eqho.git
+cd Eqho
+python -m venv venv && venv\Scripts\activate
+pip install -r requirements.txt
+python run.py</code></pre>
+        </div>
+      </section>
+
+      <section aria-labelledby="faq">
+        <h2 id="faq">Frequently Asked Questions</h2>
+        
+        <div class="faq-container">
+          <details class="faq-item">
+            <summary>Is my audio uploaded anywhere?</summary>
+            <div class="faq-content">
+              <p>No. Transcription runs locally via CTranslate2. The only network access required is a one-time download for the AI model you choose to use.</p>
+            </div>
+          </details>
+          
+          <details class="faq-item">
+            <summary>Does it cost anything?</summary>
+            <div class="faq-content">
+              <p>No. Eqho is free, open-source, and has no premium tiers, subscriptions, or word limits.</p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary>How accurate is the transcription?</summary>
+            <div class="faq-content">
+              <p>It utilizes Whisper-class accuracy, which is the current state of the art for open speech recognition. You can easily pick a larger model from the settings for tougher audio environments.</p>
+            </div>
+          </details>
+          
+          <details class="faq-item">
+            <summary>Where are my settings and history saved?</summary>
+            <div class="faq-content">
+              <p>Settings persist in your local user config folder (<code>%APPDATA%\Eqho</code> on Windows). Your data is completely under your control and never touches the cloud.</p>
+            </div>
+          </details>
+        </div>
+      </section>
+      
+    </main>
+    
+    <footer>
+      <p>&copy; {year} {author}. Eqho is licensed under the <a href="https://github.com/DanielMevit/Eqho/blob/main/LICENSE">GNU AGPL-3.0 License</a>.</p>
+      <p>Keywords: speech to text, voice typing, OpenAI Whisper, offline dictation.</p>
+    </footer>
+
+    <!-- Script to handle Copy to Clipboard -->
+    <script is:inline>
+      document.querySelectorAll('.code-wrapper').forEach(wrapper => {
+        const button = wrapper.querySelector('.copy-button');
+        const code = wrapper.querySelector('code');
+        const copyIcon = button.querySelector('.copy-icon');
+        const checkIcon = button.querySelector('.check-icon');
+
+        button.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.innerText);
+            
+            // Swap icons
+            copyIcon.style.display = 'none';
+            checkIcon.style.display = 'block';
+            
+            // Revert after 2 seconds
+            setTimeout(() => {
+              copyIcon.style.display = 'block';
+              checkIcon.style.display = 'none';
+            }, 2000);
+          } catch (err) {
+            console.error('Failed to copy text: ', err);
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
