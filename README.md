@@ -16,7 +16,7 @@
 - 🆓 **Free and open source** — no subscription, no word limits, ever.
 - 🌍 **13 languages** — English-optimized by default, multilingual models one click away.
 
-<!-- screenshot: dashboard dark theme -->
+ ![screenshot: dashboard dark theme](assets/eqho_app_screenshot.webp)
 
 ## Install
 
