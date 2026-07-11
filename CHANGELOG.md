@@ -14,6 +14,14 @@ Date format: `YYYY-MM-DD`.
 - **Landing page moved into `site/`** (was scattered at the repo root with `src/pages/` inside the Python package) — Pages workflow builds `./site`; screenshot copied to `site/public/assets/` so the page's relative image path resolves; page links updated to `danielmevit/eqho`.
 - Agent docs rewritten for handoff: START_HERE reflects the released v0.6.9 state and next steps; GOTCHAS gains the tkinter default-root deadlock trap, watchdog usage, single-instance port, adaptive VAD, and the web-UI-edits-on-main sync rule.
 
+## [0.7.1] - 2026-07-11
+
+### Fixed
+- **Lost transcription during/after a model switch** — a rapid model reload could null the model at the exact moment a transcribe ran, raising `'NoneType' object has no attribute 'transcribe'` and silently dropping the text. Transcribe calls now capture the model first and skip gracefully (logged) instead of erroring. (The model loads fine; this was the reload nulling it mid-call.)
+
+### Note
+- The deeper model-SWITCH native crash (loading a 2nd CUDA model in-process — see GOTCHAS) is separate and still pending the process-isolation fix (restart-on-switch vs subprocess host).
+
 ## [0.7.0] - 2026-07-11
 
 ### Added

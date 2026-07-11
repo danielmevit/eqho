@@ -169,7 +169,10 @@ class VoiceTranscriber:
     def transcribe_once(self, audio: np.ndarray) -> str:
         """Synchronously transcribe a float32 mono 16 kHz array (used by --smoke)."""
         self._ensure_model()
-        segments, _ = self._model.transcribe(
+        model = self._model
+        if model is None:
+            return ""
+        segments, _ = model.transcribe(
             audio, language=self._settings.language, beam_size=1,
             initial_prompt=self._settings.initial_prompt or None,
         )
@@ -351,8 +354,11 @@ class VoiceTranscriber:
                               peak_rms=utterance_peak, threshold=threshold)
 
     def _do_partial(self, audio: np.ndarray) -> None:
+        model = self._model  # capture — a model reload must not null it mid-call
+        if model is None:
+            return
         try:
-            segments, _ = self._model.transcribe(
+            segments, _ = model.transcribe(
                 audio,
                 language=self._settings.language,
                 beam_size=1,
@@ -371,8 +377,12 @@ class VoiceTranscriber:
             log.info("Skipping near-silent buffer (peak RMS %.5f < %.5f) — hallucination bait.",
                      peak_rms, threshold * NEAR_SILENCE_FACTOR)
             return
+        model = self._model  # capture — a model reload must not null it mid-call
+        if model is None:
+            log.warning("Model unavailable at transcribe time (reload in progress) — utterance dropped.")
+            return
         try:
-            segments, _ = self._model.transcribe(
+            segments, _ = model.transcribe(
                 audio,
                 language=self._settings.language,
                 beam_size=5,
