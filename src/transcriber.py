@@ -1,4 +1,5 @@
-"""Faster-whisper transcriber with live mic recording and VAD-based chunking."""
+"""Live mic recording + VAD-based chunking. Inference runs OUT OF PROCESS via
+model_host (the model never loads in this process — see model_host.py)."""
 
 import logging
 import os
@@ -9,7 +10,6 @@ from typing import Callable, Optional
 
 import numpy as np
 import sounddevice as sd
-from faster_whisper import WhisperModel
 
 from . import oskit
 from .settings import Settings
@@ -47,21 +47,8 @@ HALLUCINATION_BLOCKLIST = {
 }
 
 
-_CPU_ONLY_MODELS = {"large-v3"}  # too large for 6GB VRAM
-
-def _pick_device_and_compute(model_size: str) -> tuple[str, str]:
-    """Choose CUDA or CPU and appropriate compute type based on model + hardware."""
-    if model_size in _CPU_ONLY_MODELS:
-        return "cpu", "int8"
-    try:
-        import ctranslate2
-        cuda_types = ctranslate2.get_supported_compute_types("cuda")
-        if "int8_float16" in cuda_types:
-            log.info("CUDA compute types available: %s", cuda_types)
-            return "cuda", "int8_float16"
-    except Exception:
-        pass
-    return "cpu", "int8"
+# Device/compute selection lives in the model_host backend (it runs in the
+# child process, where the engine is actually loaded).
 
 
 class VoiceTranscriber:
@@ -69,7 +56,11 @@ class VoiceTranscriber:
 
     def __init__(self, settings: Settings):
         self._settings = settings
-        self._model: Optional[WhisperModel] = None
+        from .model_host import ModelHost
+        # The model runs in a child process — switching = kill+respawn a fresh
+        # child (the only reliable path; a second in-process CUDA model crashes
+        # natively). The main app never loads a model.
+        self._host = ModelHost(backend=getattr(settings, "engine_backend", "faster-whisper"))
         oskit.get().disable_os_mic_ducking()
         self._on_partial: Optional[Callable[[str], None]] = None
         self._on_complete: Optional[Callable[[str], None]] = None
@@ -102,7 +93,7 @@ class VoiceTranscriber:
         self._on_level = on_level
 
     def is_model_ready(self) -> bool:
-        return self._model_loaded and self._current_model_size == self._settings.model_size
+        return self._host.is_ready(self._settings.model_size)
 
     def consume_mic_error(self) -> Optional[str]:
         """Return and clear the last microphone error (None if there was none)."""
@@ -112,71 +103,28 @@ class VoiceTranscriber:
     def _ensure_model(self) -> None:
         with self._model_lock:
             target = self._settings.model_size
-            if self._model_loaded and self._current_model_size == target:
+            if self._host.is_ready(target):
+                self._model_loaded = True
+                self._current_model_size = target
                 return
-
             self._model_dir = self._settings.resolve_model_dir()
-            os.environ["HF_HUB_CACHE"] = str(self._model_dir / "huggingface")
-            self._model_dir.mkdir(parents=True, exist_ok=True)
-
-            device, compute = _pick_device_and_compute(target)
-            log.info(
-                "Loading faster-whisper model=%s device=%s compute=%s cache=%s",
-                target, device, compute, self._model_dir,
-            )
             phase_start = time.monotonic()
-            model = WhisperModel(
-                target,
-                device=device,
-                compute_type=compute,
-                download_root=str(self._model_dir),
-            )
-            log.info("Model weights loaded in %.1fs", time.monotonic() - phase_start)
-
-            # Smoke-test actual inference to catch missing CUDA DLLs (e.g. cublas64_12.dll)
-            if device == "cuda":
-                try:
-                    phase_start = time.monotonic()
-                    dummy = np.zeros(SAMPLE_RATE, dtype=np.float32)
-                    segments, _ = model.transcribe(dummy, language="en", beam_size=1)
-                    list(segments)  # force the generator to run
-                    log.info("CUDA inference verified OK (%.1fs).", time.monotonic() - phase_start)
-                except Exception as e:
-                    log.warning("CUDA inference failed (%s), falling back to CPU.", e)
-                    model = WhisperModel(
-                        target,
-                        device="cpu",
-                        compute_type="int8",
-                        download_root=str(self._model_dir),
-                    )
-                    device, compute = "cpu", "int8"
-
-            if device == "cpu":
-                # Warm-up: the first CPU inference pays one-time kernel-init
-                # cost — spend it now, not on the user's first phrase.
-                try:
-                    dummy = np.zeros(SAMPLE_RATE // 2, dtype=np.float32)
-                    segments, _ = model.transcribe(dummy, language="en", beam_size=1)
-                    list(segments)
-                except Exception as e:
-                    log.debug("CPU warm-up failed: %s", e)
-
-            self._model = model
-            self._current_model_size = target
-            self._model_loaded = True
-            log.info("Model ready: %s on %s (%s)", target, device, compute)
+            ok = self._host.load_model(target, self._model_dir)
+            if ok:
+                self._current_model_size = target
+                self._model_loaded = True
+                log.info("Model ready: %s %s (%.1fs)", target, self._host.info,
+                         time.monotonic() - phase_start)
+            else:
+                self._model_loaded = False
+                raise RuntimeError(f"Model host failed to load {target}")
 
     def transcribe_once(self, audio: np.ndarray) -> str:
         """Synchronously transcribe a float32 mono 16 kHz array (used by --smoke)."""
         self._ensure_model()
-        model = self._model
-        if model is None:
-            return ""
-        segments, _ = model.transcribe(
-            audio, language=self._settings.language, beam_size=1,
-            initial_prompt=self._settings.initial_prompt or None,
-        )
-        return " ".join(s.text.strip() for s in segments if s.text.strip())
+        segs = self._host.transcribe(audio, self._settings.language, 1,
+                                     self._settings.initial_prompt or "")
+        return " ".join(s["text"].strip() for s in segs if s["text"].strip())
 
     def _open_stream(self, device: Optional[int]) -> sd.InputStream:
         stream = sd.InputStream(
@@ -358,17 +306,11 @@ class VoiceTranscriber:
                               peak_rms=utterance_peak, threshold=threshold)
 
     def _do_partial(self, audio: np.ndarray) -> None:
-        model = self._model  # capture — a model reload must not null it mid-call
-        if model is None:
-            return
         try:
-            segments, _ = model.transcribe(
-                audio,
-                language=self._settings.language,
-                beam_size=1,
-                initial_prompt=self._settings.initial_prompt or None,
-            )
-            text = " ".join(s.text.strip() for s in segments if s.text.strip())
+            segments = self._host.transcribe(
+                audio, self._settings.language, 1,
+                self._settings.initial_prompt or "")
+            text = " ".join(s["text"].strip() for s in segments if s["text"].strip())
             if text and self._on_partial:
                 log.info("Partial: %s", text)
                 self._on_partial(text)
@@ -381,26 +323,19 @@ class VoiceTranscriber:
             log.info("Skipping near-silent buffer (peak RMS %.5f < %.5f) — hallucination bait.",
                      peak_rms, threshold * NEAR_SILENCE_FACTOR)
             return
-        model = self._model  # capture — a model reload must not null it mid-call
-        if model is None:
-            log.warning("Model unavailable at transcribe time (reload in progress) — utterance dropped.")
-            return
         try:
-            segments, _ = model.transcribe(
-                audio,
-                language=self._settings.language,
-                beam_size=5,
-                initial_prompt=self._settings.initial_prompt or None,
-            )
+            segments = self._host.transcribe(
+                audio, self._settings.language, 5,
+                self._settings.initial_prompt or "")
             kept = []
             for s in segments:
-                t = s.text.strip()
+                t = s["text"].strip()
                 if not t:
                     continue
-                if s.no_speech_prob > NO_SPEECH_PROB_MAX and s.avg_logprob < AVG_LOGPROB_MIN:
+                if s["no_speech_prob"] > NO_SPEECH_PROB_MAX and s["avg_logprob"] < AVG_LOGPROB_MIN:
                     log.info(
                         "Dropped low-confidence segment %r (no_speech=%.2f logprob=%.2f)",
-                        t, s.no_speech_prob, s.avg_logprob,
+                        t, s["no_speech_prob"], s["avg_logprob"],
                     )
                     continue
                 kept.append(t)
@@ -437,23 +372,22 @@ class VoiceTranscriber:
         return self._running
 
     def reload_model(self) -> None:
-        """Reload after model size or language change."""
+        """Reload after model size change. Seamless — just marks stale; the
+        worker's _ensure_model tells the host to kill its child and spawn a
+        fresh one with the new model (no app restart, no native crash)."""
         was_running = self._running
         if was_running:
             self.stop()
         with self._model_lock:
             self._model_loaded = False
-            self._model = None
-        # Force the old ctranslate2 model's destructor NOW so its VRAM is
-        # actually free before the new (possibly bigger) model loads — on a
-        # 6 GB card, stacking both can push CUDA into WDDM paging hangs.
-        import gc
-        gc.collect()
+            self._current_model_size = None
         if was_running:
             self.start()
 
     def shutdown(self) -> None:
         self.stop()
-        with self._model_lock:
-            self._model = None
-            self._model_loaded = False
+        self._model_loaded = False
+        try:
+            self._host.shutdown()
+        except Exception:
+            pass

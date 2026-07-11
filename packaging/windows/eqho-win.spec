@@ -24,6 +24,7 @@ a = Analysis(
         "faster_whisper",
         "ctranslate2",
         "platformdirs",
+        "src.model_host",
     ],
     hookspath=[],
     runtime_hooks=[],

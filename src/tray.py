@@ -258,12 +258,8 @@ class TrayApp:
             if self._settings.model_size != key:
                 self._settings.model_size = key
                 self._settings.save()
-                # A model change needs a fresh process (in-process swap crashes).
-                if self._on_restart:
-                    self.notify("Restarting to apply the new model…")
-                    self._on_restart()
-                else:
-                    self._on_settings_changed(reload_model=True)
+                # Seamless — the model host swaps the model in the background.
+                self._on_settings_changed(reload_model=True)
         return _set
 
     def _language_submenu(self) -> pystray.Menu:

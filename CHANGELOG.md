@@ -14,6 +14,19 @@ Date format: `YYYY-MM-DD`.
 - **Landing page moved into `site/`** (was scattered at the repo root with `src/pages/` inside the Python package) — Pages workflow builds `./site`; screenshot copied to `site/public/assets/` so the page's relative image path resolves; page links updated to `danielmevit/eqho`.
 - Agent docs rewritten for handoff: START_HERE reflects the released v0.6.9 state and next steps; GOTCHAS gains the tkinter default-root deadlock trap, watchdog usage, single-instance port, adaptive VAD, and the web-UI-edits-on-main sync rule.
 
+## [0.8.0] - 2026-07-11
+
+### Changed
+- **Model switching is now seamless — no restart (Option B: subprocess model host).** The Whisper model runs in a CHILD process (`src/model_host.py`); switching models kills that child and spawns a fresh one, which only ever loads ONE model — the only reliable path on CUDA stacks where a second in-process model crashes natively. The main app never loads a model, so a native inference crash kills only the child (auto-respawned), never the app. Replaces the v0.7.2 restart-on-switch flow: model changes now swap in the background (~a few seconds; overlay shows "Loading model…") while the dashboard stays open.
+- The transcriber no longer imports faster-whisper in the main process (only the child does), so the app starts lighter and never holds CUDA in the UI process.
+
+### Added
+- **Pluggable inference backend** behind the model host. `faster-whisper` (NVIDIA CUDA / CPU) is the default; a **`whisper.cpp` backend** is scaffolded for **AMD/Intel GPUs via Vulkan** (and the shared mobile engine / desktop Phase 8). Selectable via the `engine_backend` setting. The whisper.cpp path still needs a Vulkan-enabled build wired + packaged and can't be verified without AMD hardware — see ROADMAP.
+- `multiprocessing.freeze_support()` in run.py (required so the packaged exe spawns model-host children, not whole-app copies).
+
+### Note
+- AMD GPU acceleration: the current faster-whisper/CTranslate2 engine is CUDA-only. AMD requires the whisper.cpp/Vulkan backend (scaffolded) — the next engine milestone.
+
 ## [0.7.4] - 2026-07-11
 
 ### Added

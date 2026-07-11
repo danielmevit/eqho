@@ -87,7 +87,8 @@ Migrate off the Python runtime for a lean commercial-grade product.
 
 ## Stretch Goals / Backlog
 - [x] Text cleanup — Tier 1 deterministic auto-format (v0.7.0)
-- [x] Model-switch reliability — restart-on-switch (Option A, v0.7.2); subprocess model host (Option B) is the future seamless upgrade
+- [x] Model-switch reliability — subprocess model host, seamless (Option B, v0.8.0). Pluggable backend.
+- [ ] AMD/Intel GPU support — whisper.cpp/Vulkan backend (scaffolded in model_host; needs Vulkan build + packaging + AMD-hardware verification). Shared engine with Eqho Mobile / desktop Phase 8.
 - [ ] Text cleanup — Tier 3 optional local-LLM "polish" mode (opt-in, may rephrase; parked)
 - [ ] Eqho Mobile — private voice keyboard (KMP + Compose, whisper.cpp engine; Android-first). See feasibility notes.
 - [ ] silero-VAD streaming segmenter (replace fixed RMS threshold)
