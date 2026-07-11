@@ -65,7 +65,7 @@ Core dictation on Linux + macOS with graceful degradation.
 - [x] Add AGPL-3.0 license
 - [x] Clean public README with screenshot, feature highlights, install instructions
 - [x] GitHub Releases page with pre-built installers (v0.6.3+, all 3 OSes)
-- [ ] winget manifest (needs public release) · MSIX/Store (needs signing) 
+- [x] winget manifest submitted (microsoft/winget-pkgs PR #400796) · [ ] MSIX/Store (needs signing) 
 - [ ] CONTRIBUTING.md if accepting community contributions
 - [x] Landing page (danielmevit.github.io/eqho, Astro in site/) · [ ] demo GIF/video
 - [ ] Final QA pass on a clean Windows install

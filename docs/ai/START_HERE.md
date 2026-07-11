@@ -15,7 +15,7 @@ Everything through ROADMAP Phase 6 is DONE and released. Recent deep fixes a nex
 
 **Awaiting Daniel's confirmation:** model-switch freeze gone, dictation transcribes at his mic level, chime reliable. If the UI ever stalls >5 s, `%APPDATA%\Eqho\eqho.log` gets a `=== THREAD DUMP` — read it before theorizing.
 
-**Next work, in order:** 1) fixes from Daniel's testing; 2) winget manifest PR (Releases now has an installer URL); 3) CONTRIBUTING.md + demo GIF (Phase 7 finishers); 4) backlog: silero-VAD, streaming partials, per-app paste rules, VAD sensitivity slider, more overlay customization.
+**Next work, in order:** 1) fixes from Daniel's testing; 2) winget PR #400796 — watch validation, address bot feedback (manifests live in `packaging/winget/`); 3) CONTRIBUTING.md + demo GIF (Phase 7 finishers); 4) backlog: silero-VAD, streaming partials, per-app paste rules, VAD sensitivity slider, more overlay customization.
 
 ## Run / verify
 
