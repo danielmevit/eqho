@@ -14,6 +14,11 @@ Date format: `YYYY-MM-DD`.
 - **Landing page moved into `site/`** (was scattered at the repo root with `src/pages/` inside the Python package) — Pages workflow builds `./site`; screenshot copied to `site/public/assets/` so the page's relative image path resolves; page links updated to `danielmevit/eqho`.
 - Agent docs rewritten for handoff: START_HERE reflects the released v0.6.9 state and next steps; GOTCHAS gains the tkinter default-root deadlock trap, watchdog usage, single-instance port, adaptive VAD, and the web-UI-edits-on-main sync rule.
 
+## [0.7.3] - 2026-07-11
+
+### Changed
+- **The dashboard reopens after a model-change restart** — it comes back to the tab you were on (e.g. Models), instead of leaving you at just the tray. The restart passes `--open-dashboard --tab=<name>` to the fresh process, which reopens the dashboard ~1.2s after launch. (Tray-initiated model changes still just restart to the tray, since you weren't in the dashboard.)
+
 ## [0.7.2] - 2026-07-11
 
 ### Fixed

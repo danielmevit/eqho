@@ -276,7 +276,22 @@ class App:
 
         threading.Thread(target=self._preload_model, daemon=True).start()
 
+        # After a model-change restart, reopen the dashboard to the tab the
+        # user was on (passed as --open-dashboard --tab=<name>).
+        import sys
+        if "--open-dashboard" in sys.argv:
+            tab = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--tab=")), None)
+            threading.Timer(1.2, lambda: self._open_dashboard_startup(tab)).start()
+
         self.tray.run()
+
+    def _open_dashboard_startup(self, tab) -> None:
+        try:
+            from .ui import open_dashboard
+            open_dashboard(self.settings, self._on_settings_changed,
+                           self.restart, initial_tab=tab)
+        except Exception as e:
+            log.error("Startup dashboard open failed: %s", e)
 
     def _model_is_cached(self) -> bool:
         """Check if the current model has already been downloaded."""
@@ -299,10 +314,11 @@ class App:
             log.error("Failed to pre-load model: %s", e)
             self.tray.notify(f"Failed to load model: {e}")
 
-    def restart(self) -> None:
+    def restart(self, open_tab=None) -> None:
         """Relaunch the app to apply a model change. A fresh process is the ONLY
         reliable way to load a different Whisper model on this CUDA stack —
-        loading a second model in-process crashes natively (see GOTCHAS)."""
+        loading a second model in-process crashes natively (see GOTCHAS).
+        When open_tab is given, the new process reopens the dashboard to it."""
         import os
         import subprocess
         import sys
@@ -319,11 +335,15 @@ class App:
                 _single_instance_socket = None
         except Exception:
             pass
+        # Rebuild argv without any prior restart flags, then re-add if needed
+        base_argv = [a for a in sys.argv
+                     if a != "--open-dashboard" and not a.startswith("--tab=")]
+        extra = ["--open-dashboard", f"--tab={open_tab}"] if open_tab else []
         try:
             if getattr(sys, "frozen", False):
-                subprocess.Popen([sys.executable])
+                subprocess.Popen([sys.executable] + extra)
             else:
-                subprocess.Popen([sys.executable] + sys.argv)
+                subprocess.Popen([sys.executable] + base_argv + extra)
         except Exception as e:
             log.error("Failed to spawn new instance: %s", e)
         try:

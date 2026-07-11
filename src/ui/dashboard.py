@@ -52,8 +52,10 @@ class Dashboard(ctk.CTkToplevel):
         on_settings_changed: Callable,
         parent: Optional[ctk.CTk] = None,
         on_restart: Optional[Callable] = None,
+        initial_tab: Optional[str] = None,
     ):
         self._on_restart = on_restart
+        self._initial_tab = initial_tab if initial_tab in TAB_CLASSES else "general"
         # Create a hidden root if needed
         self._own_root = None
         if parent is None:
@@ -92,7 +94,7 @@ class Dashboard(ctk.CTkToplevel):
         self._build_content_area()
         # Tabs build lazily on first show — keeps window open and theme
         # switching fast (only the visible tab is rebuilt synchronously)
-        self._show_tab("general")
+        self._show_tab(self._initial_tab)
 
         # Responsive resize handler
         self._content.bind("<Configure>", self._on_content_resize)
@@ -391,7 +393,7 @@ class Dashboard(ctk.CTkToplevel):
             self._settings.model_size = new_model
             self._settings.save()
             if self._on_restart:
-                self._on_restart()
+                self._on_restart(self._current_tab)  # reopen to this tab after restart
 
         if not self._settings.model_restart_notice:
             _do_restart()
@@ -599,7 +601,8 @@ _opening = False  # prevents multiple threads launching at once
 
 
 def open_dashboard(settings: Settings, on_settings_changed: Callable,
-                   on_restart: Optional[Callable] = None) -> None:
+                   on_restart: Optional[Callable] = None,
+                   initial_tab: Optional[str] = None) -> None:
     """Open the dashboard, or focus the existing one if already open."""
     global _active_dashboard, _opening
 
@@ -618,7 +621,8 @@ def open_dashboard(settings: Settings, on_settings_changed: Callable,
     def _run():
         global _opening
         try:
-            Dashboard(settings, on_settings_changed, on_restart=on_restart)
+            Dashboard(settings, on_settings_changed, on_restart=on_restart,
+                      initial_tab=initial_tab)
         finally:
             _opening = False
 
