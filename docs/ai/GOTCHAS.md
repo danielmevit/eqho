@@ -20,6 +20,15 @@ Things that silently break or waste time. Update the moment a new trap is discov
 - Model loading happens on the transcription worker thread (since v0.3.3) so the hotkey callback never blocks; the overlay shows "Loading model…" until ready. Audio spoken during load is queued and transcribed once ready.
 
 ## tkinter / customtkinter
+- **THE deadlock trap (v0.6.7, cost a full day):** the overlay's `tk.Tk()` is created FIRST on its own thread — tkinter makes it the process-wide default root, so any Variable/CTkFont created without an explicit master binds to the OVERLAY's interpreter; dashboard-thread `.set()` calls then marshal cross-thread and intermittently DEADLOCK (and make everything sluggish). Guards now in place: overlay sets `tk._default_root = None` right after creating its root, and tabs create Variables via `TabBase._string_var/_bool_var` (explicit master). NEVER create a bare `ctk.StringVar()`/`CTkFont()` from code that can run while another Tk root owns default — keep using the helpers.
+- **UI freeze diagnosis:** the dashboard heartbeats the watchdog every 1 s; a >5 s stall dumps ALL thread stacks into `eqho.log` (`=== THREAD DUMP`). Read that before theorizing.
+- Single-instance lock = localhost port 48317 (`main._acquire_single_instance`). Two instances double-hook the hotkey and stack models into VRAM until CUDA loads hang (WDDM paging).
+- **Adaptive VAD (v0.6.8):** speech gate = `clamp(noise_floor×3.5, 0.0009, 0.003)`, floor tracked per session (instant down, 2% creep up). The old fixed 0.003 silently ate quiet mics. Level-bar curve `(rms/0.012)^0.6` targets mid-bar at normal voice.
+- Start chime plays BLOCKING after mic start and BEFORE ducking (fire-and-forget raced the mute and was intermittently silent).
+
+## Repo / site
+- **Daniel edits public `main` via the GitHub web UI** (landing page, README tweaks). If a main push is rejected: `git pull origin main` (merge), reconcile, push — NEVER force. Then merge main back into dev.
+- Landing page lives in `site/` (Astro, its own package.json); `.github/workflows/deploy.yml` builds `./site` → GitHub Pages on every main push. The app screenshot is duplicated: `assets/eqho_app_screenshot.webp` (README + bundled) and `site/public/assets/` (served page).
 - Cross-thread tkinter images need the `master=` parameter or they get GC'd/bound to the wrong interpreter.
 - `CTkToplevel` sets its own title-bar icon on a deferred `after()` — setting `iconphoto` at construction gets overwritten (deferred issue b; fix planned v0.4.0).
 - Theme "system" for the app UI reads `AppsUseLightTheme`; the tray reads `SystemUsesLightTheme` (taskbar). They are different keys on purpose.

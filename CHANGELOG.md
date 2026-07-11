@@ -4,6 +4,12 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [Unreleased]
+
+### Changed
+- **Landing page moved into `site/`** (was scattered at the repo root with `src/pages/` inside the Python package) — Pages workflow builds `./site`; screenshot copied to `site/public/assets/` so the page's relative image path resolves; page links updated to `danielmevit/eqho`.
+- Agent docs rewritten for handoff: START_HERE reflects the released v0.6.9 state and next steps; GOTCHAS gains the tkinter default-root deadlock trap, watchdog usage, single-instance port, adaptive VAD, and the web-UI-edits-on-main sync rule.
+
 ## [0.6.9] - 2026-07-11
 
 ### Changed

@@ -63,11 +63,11 @@ Core dictation on Linux + macOS with graceful degradation.
 ## Phase 7 -- Public Launch (→ v1.0)
 - [x] Relocate internal docs (now root AGENTS/SOUL/TODO + docs/ai/)
 - [x] Add AGPL-3.0 license
-- [ ] Clean public README with screenshots, feature highlights, install instructions
-- [ ] GitHub Releases page with pre-built installer
+- [x] Clean public README with screenshot, feature highlights, install instructions
+- [x] GitHub Releases page with pre-built installers (v0.6.3+, all 3 OSes)
 - [ ] winget manifest (needs public release) · MSIX/Store (needs signing) 
 - [ ] CONTRIBUTING.md if accepting community contributions
-- [ ] Optional: landing page, demo GIF/video
+- [x] Landing page (danielmevit.github.io/eqho, Astro in site/) · [ ] demo GIF/video
 - [ ] Final QA pass on a clean Windows install
 - [ ] Flip repo from private to public
 

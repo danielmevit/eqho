@@ -26,7 +26,7 @@ SRC_TO_DEST = {
     name: name
     for name in (
         "logo_32_dark.png", "logo_32_white.png",
-        "logo_62_dark.png", "logo_62_white.png",
+        "logo_64_dark.png", "logo_64_white.png",
         "logo_horizontal_dark.png", "logo_horizontal_light.png",
     )
 }
@@ -49,7 +49,7 @@ def main() -> None:
         print(f"copied: {src_name} -> assets/{dest_name}, logo/{dest_name}")
 
     # The app icon uses the blue (darker) mark — the light-mode variant
-    mark = ASSETS / "logo_62_white.png"
+    mark = ASSETS / "logo_64_white.png"
     if mark.exists():
         base = Image.open(mark).convert("RGBA")
         side = max(base.size)
