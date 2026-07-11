@@ -20,15 +20,15 @@
 
 ## Install
 
-**Windows (recommended):** grab `Eqho-Setup-<version>.exe` from [Releases](https://github.com/DanielMevit/Eqho/releases) → double-click → done. Prefer no installer? Use the portable `.zip`.
+**Windows (recommended):** grab `Eqho-Setup-<version>.exe` from [Releases](https://github.com/danielmevit/eqho/releases) → double-click → done. Prefer no installer? Use the portable `.zip`.
 
 **Linux / macOS:** download the `.tar.gz` / `.dmg` from Releases (core dictation supported since v0.6.0 — see [platform notes](#platform-notes)).
 
 **From source:**
 
 ```bash
-git clone https://github.com/DanielMevit/Eqho.git
-cd Eqho
+git clone https://github.com/danielmevit/eqho.git
+cd eqho
 python -m venv venv && venv\Scripts\activate   # Windows
 pip install -r requirements.txt
 python run.py
@@ -92,7 +92,7 @@ Settings persist to `settings.json` in your config folder — everything is also
 
 ## License
 
-Eqho is licensed under the [GNU AGPL-3.0](LICENSE): free to use, study, and modify — if you redistribute it or a derivative (including as a network service), you must keep the copyright and attribution notices and release your version under the same license. © [Daniel Mevit](https://github.com/DanielMevit).
+Eqho is licensed under the [GNU AGPL-3.0](LICENSE): free to use, study, and modify — if you redistribute it or a derivative (including as a network service), you must keep the copyright and attribution notices and release your version under the same license. © [Daniel Mevit](https://github.com/danielmevit).
 
 Made by **[damt.xyz](https://damt.xyz)** — freelance design & development.
 

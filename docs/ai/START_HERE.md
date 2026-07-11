@@ -3,7 +3,7 @@
 Always-on voice-to-text dictation app for Windows 10/11 (Linux/macOS ports planned — ROADMAP Phase 6). Lives in the system tray: press **Alt+Q**, speak, and the words are typed into whatever app is focused. 100% local — faster-whisper (CTranslate2) with CUDA acceleration, no cloud, no server.
 
 - **Version:** `src/version.py` is the single source of truth.
-- **License:** AGPL-3.0. Public repo `github.com/DanielMevit/Eqho` · WIP repo `Eqho-private` (see AGENTS.md for the two-repo git model).
+- **License:** AGPL-3.0. Public repo `github.com/danielmevit/eqho` · WIP repo `Eqho-private` (see AGENTS.md for the two-repo git model).
 
 ## Current priority
 

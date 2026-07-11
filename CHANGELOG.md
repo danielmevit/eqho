@@ -4,6 +4,12 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.6.9] - 2026-07-11
+
+### Changed
+- GitHub rename adopted everywhere: `danielmevit/eqho` (was `DanielMevit/Eqho`) — remotes, README, installer support URL, About link, agent docs.
+- Tray logo assets renamed to their true size: `logo_64_dark/white.png` (were misnamed `logo_62_*`); all code references updated. Future logo exports should use the `_64` names.
+
 ## [0.6.8] - 2026-07-11
 
 ### Fixed

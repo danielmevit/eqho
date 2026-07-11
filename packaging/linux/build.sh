@@ -24,7 +24,7 @@ rm -rf "$APPDIR"
 mkdir -p "$APPDIR/usr"
 cp -r "$ROOT/dist/Eqho" "$APPDIR/usr/eqho"
 cp "$ROOT/packaging/linux/eqho.desktop" "$APPDIR/eqho.desktop"
-cp "$ROOT/assets/logo_62_dark.png" "$APPDIR/eqho.png"
+cp "$ROOT/assets/logo_64_dark.png" "$APPDIR/eqho.png"
 cat > "$APPDIR/AppRun" <<'EOF'
 #!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"

@@ -68,8 +68,8 @@ python run.py --smoke
 
 ```powershell
 # You have two remotes:
-#   origin  → github.com/DanielMevit/Eqho          (PUBLIC)
-#   private → github.com/DanielMevit/Eqho-private   (private)
+#   origin  → github.com/danielmevit/eqho          (PUBLIC)
+#   private → github.com/danielmevit/Eqho-private   (private)
 #
 # Two branches:
 #   dev  → daily work (default push goes to private)

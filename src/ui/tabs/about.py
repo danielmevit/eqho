@@ -79,7 +79,7 @@ class AboutTab(TabBase):
             cursor="hand2",
         )
         author_link.pack(side="left")
-        author_link.bind("<Button-1>", lambda e: self._open_url("https://github.com/DanielMevit"))
+        author_link.bind("<Button-1>", lambda e: self._open_url("https://github.com/danielmevit"))
 
         # Website row (damt.xyz — the public-facing brand)
         row = ctk.CTkFrame(inner, fg_color="transparent")

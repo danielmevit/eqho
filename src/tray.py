@@ -38,9 +38,9 @@ def _load_icon(active: bool = False) -> Image.Image:
     # (blue art) for a light one.
     taskbar = _get_taskbar_theme()
     if taskbar == "dark":
-        new_logo = _ASSETS / "logo_62_dark.png"
+        new_logo = _ASSETS / "logo_64_dark.png"
     else:
-        new_logo = _ASSETS / "logo_62_white.png"
+        new_logo = _ASSETS / "logo_64_white.png"
 
     if new_logo.exists():
         img = Image.open(new_logo).convert("RGBA")
@@ -50,7 +50,7 @@ def _load_icon(active: bool = False) -> Image.Image:
         return img
 
     # Fallback to the other variant
-    fallback = _ASSETS / "logo_62_white.png"
+    fallback = _ASSETS / "logo_64_white.png"
     if fallback.exists():
         img = Image.open(fallback).convert("RGBA")
         if not active:
