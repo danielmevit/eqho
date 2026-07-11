@@ -14,6 +14,15 @@ Date format: `YYYY-MM-DD`.
 - **Landing page moved into `site/`** (was scattered at the repo root with `src/pages/` inside the Python package) — Pages workflow builds `./site`; screenshot copied to `site/public/assets/` so the page's relative image path resolves; page links updated to `danielmevit/eqho`.
 - Agent docs rewritten for handoff: START_HERE reflects the released v0.6.9 state and next steps; GOTCHAS gains the tkinter default-root deadlock trap, watchdog usage, single-instance port, adaptive VAD, and the web-UI-edits-on-main sync rule.
 
+## [0.7.2] - 2026-07-11
+
+### Fixed
+- **Model switching is now crash-proof (Option A: restart-on-switch).** Changing the Whisper model cleanly restarts the app so the new model loads in a fresh process — the ONLY reliable path on CUDA stacks where loading a second model in-process crashes natively. A one-time dialog explains the restart, with a **"Don't show this again"** checkbox that's remembered; after that, model changes just restart silently. Tray model changes restart too (with a notification).
+- **Language changes no longer reload the model** — the language is passed per-transcription, so switching it is now instant (it was needlessly triggering the fragile model reload).
+
+### Note
+- The seamless alternative (Option B — subprocess model host, no restart) remains on the backlog as a future upgrade; restart-on-switch is the reliable fix for now.
+
 ## [0.7.1] - 2026-07-11
 
 ### Fixed

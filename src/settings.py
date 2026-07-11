@@ -99,6 +99,7 @@ class Settings:
     sound_feedback: bool = True      # start/stop chime
     format_cleanup: bool = True      # light-touch casing/spacing cleanup
     remove_fillers: bool = False     # strip "um"/"uh"/… (opt-in sub-toggle)
+    model_restart_notice: bool = True  # show the "model change needs a restart" dialog
 
     # runtime-only (not persisted)
     _listeners: list = field(default_factory=list, repr=False)

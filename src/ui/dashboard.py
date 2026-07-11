@@ -20,6 +20,7 @@ from ..theme import (
 )
 from .context import DashboardContext
 from .tabs import TAB_CLASSES
+from .widgets import ghost_button, primary_button
 from .win32 import apply_dark_title_bar
 
 log = logging.getLogger(__name__)
@@ -50,7 +51,9 @@ class Dashboard(ctk.CTkToplevel):
         settings: Settings,
         on_settings_changed: Callable,
         parent: Optional[ctk.CTk] = None,
+        on_restart: Optional[Callable] = None,
     ):
+        self._on_restart = on_restart
         # Create a hidden root if needed
         self._own_root = None
         if parent is None:
@@ -78,6 +81,7 @@ class Dashboard(ctk.CTkToplevel):
             rebuild_tab=self.rebuild_tab,
             set_ui_scale=self.set_ui_scale,
             master_getter=lambda: self,
+            change_model=self._change_model,
         )
         # Non-visible tabs rebuild on next show after a model change, so
         # their headers/cards never show a stale active model
@@ -377,6 +381,73 @@ class Dashboard(ctk.CTkToplevel):
         tab_obj.build(frame)
         self._tab_built_cols[key] = self._get_col_count()
 
+    def _change_model(self, new_model: str) -> None:
+        """Apply a model change via a clean restart (in-process swap crashes).
+        Shows a one-time 'needs a restart' dialog with a Don't-show-again box."""
+        if new_model == self._settings.model_size:
+            return
+
+        def _do_restart() -> None:
+            self._settings.model_size = new_model
+            self._settings.save()
+            if self._on_restart:
+                self._on_restart()
+
+        if not self._settings.model_restart_notice:
+            _do_restart()
+            return
+
+        top = ctk.CTkToplevel(self)
+        top.title("Restart to apply")
+        top.geometry("400x210")
+        top.transient(self)
+        top.grab_set()
+        top.configure(fg_color=self._colors.bg_primary)
+        resolved = self._settings.theme
+        if resolved == "system":
+            resolved = get_system_theme()
+        apply_dark_title_bar(top, resolved == "dark")
+
+        ctk.CTkLabel(
+            top, text="Switching models needs a quick restart",
+            font=font("lg", "bold"), text_color=self._colors.fg_primary,
+        ).pack(anchor="w", padx=SPACING["lg"], pady=(SPACING["lg"], 2))
+        ctk.CTkLabel(
+            top, text="Eqho will restart to load the new model. It only takes a second.",
+            font=font("sm"), text_color=self._colors.fg_secondary,
+            wraplength=360, justify="left",
+        ).pack(anchor="w", padx=SPACING["lg"], pady=(0, SPACING["md"]))
+
+        dont_var = ctk.BooleanVar(master=self, value=False)
+        ctk.CTkCheckBox(
+            top, text="Don't show this again", variable=dont_var,
+            font=font("sm"), text_color=self._colors.fg_secondary,
+            fg_color=self._colors.accent, hover_color=self._colors.accent_hover,
+            checkmark_color=self._colors.on_accent,
+            border_color=self._colors.border, corner_radius=RADIUS_SM,
+            checkbox_width=18, checkbox_height=18,
+        ).pack(anchor="w", padx=SPACING["lg"], pady=(0, SPACING["lg"]))
+
+        btns = ctk.CTkFrame(top, fg_color="transparent")
+        btns.pack(fill="x", padx=SPACING["lg"], pady=(0, SPACING["lg"]))
+
+        def _go() -> None:
+            if dont_var.get():
+                self._settings.model_restart_notice = False
+                self._settings.save()
+            top.destroy()
+            _do_restart()
+
+        def _cancel() -> None:
+            top.destroy()
+            self.rebuild_tab(self._current_tab)  # reset any premature UI selection
+
+        primary_button(btns, self._colors, text="Restart now", width=110,
+                       command=_go).pack(side="right")
+        ghost_button(btns, self._colors, text="Cancel", width=80,
+                     command=_cancel).pack(side="right", padx=(0, SPACING["xs"]))
+        top.protocol("WM_DELETE_WINDOW", _cancel)
+
     def _mark_hidden_tabs_stale(self) -> None:
         for key in list(self._tab_built_cols):
             if key != self._current_tab:
@@ -527,7 +598,8 @@ def _focus_existing(dash: Dashboard) -> None:
 _opening = False  # prevents multiple threads launching at once
 
 
-def open_dashboard(settings: Settings, on_settings_changed: Callable) -> None:
+def open_dashboard(settings: Settings, on_settings_changed: Callable,
+                   on_restart: Optional[Callable] = None) -> None:
     """Open the dashboard, or focus the existing one if already open."""
     global _active_dashboard, _opening
 
@@ -546,7 +618,7 @@ def open_dashboard(settings: Settings, on_settings_changed: Callable) -> None:
     def _run():
         global _opening
         try:
-            Dashboard(settings, on_settings_changed)
+            Dashboard(settings, on_settings_changed, on_restart=on_restart)
         finally:
             _opening = False
 

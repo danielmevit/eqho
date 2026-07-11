@@ -259,27 +259,7 @@ class ModelsTab(TabBase):
     # -- Selection (in-place highlight swap) --------------------------------------
 
     def _select_model_from_card(self, key: str) -> None:
-        previous = self._selected_key
-        self._settings.model_size = key
-        self._settings.save()
-        self._selected_key = key
-
-        new_refs = self._card_refs.get(key)
-        if new_refs:
-            new_refs["card"].configure(border_width=2, border_color=self._colors.accent)
-            new_refs["name"].configure(text=new_refs["base_name"] + "  ●",
-                                       text_color=self._colors.accent)
-            new_refs["actions"].pack_forget()
-
-        old_refs = self._card_refs.get(previous)
-        if old_refs and previous != key:
-            old_refs["card"].configure(border_width=1, border_color=self._colors.border_subtle)
-            old_refs["name"].configure(text=old_refs["base_name"],
-                                       text_color=self._colors.fg_primary)
-            old_refs["select"].configure(state="normal", text_color=self._colors.fg_primary)
-            old_refs["actions"].pack(fill="x", pady=(SPACING["xs"], 0))
-
-        # Let other tabs (General) sync their own widgets.
-        self.ctx.emit("model_changed", key)
-        self.refresh_header_status()
-        self._apply_settings(reload_model=True)
+        # A model change needs a fresh process (in-process swap crashes on
+        # this CUDA stack). change_model confirms via a one-time dialog, then
+        # cleanly restarts the app to load the new model.
+        self.ctx.change_model(key)

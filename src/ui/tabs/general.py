@@ -462,12 +462,8 @@ class GeneralTab(TabBase):
         idx = self._model_display_names.index(display_name)
         key = self._model_keys[idx]
         if key != self._settings.model_size:
-            self._settings.model_size = key
-            self._settings.save()
-            self._model_info_label.configure(text=self._get_model_info_text(key))
-            self.refresh_header_status()
-            self.ctx.emit("model_changed", key)
-            self._apply_settings(reload_model=True)
+            # Model change → confirm + clean restart (in-process swap crashes).
+            self.ctx.change_model(key)
 
     def _on_duck_changed(self, val, labels) -> None:
         reverse = {v: k for k, v in labels.items()}
@@ -484,7 +480,8 @@ class GeneralTab(TabBase):
         code = self._lang_codes[idx]
         self._settings.language = code
         self._settings.save()
-        self._apply_settings(reload_model=True)
+        # Language is passed per-transcribe — no model reload/restart needed.
+        self._apply_settings(reload_model=False)
 
     def _on_startup_changed(self) -> None:
         enabled = self._startup_var.get()

@@ -83,6 +83,7 @@ class App:
             on_toggle=self.toggle,
             on_quit=self.quit,
             on_settings_changed=self._on_settings_changed,
+            on_restart=self.restart,
         )
 
     # -- Transcription callbacks -----------------------------------------------
@@ -297,6 +298,40 @@ class App:
         except Exception as e:
             log.error("Failed to pre-load model: %s", e)
             self.tray.notify(f"Failed to load model: {e}")
+
+    def restart(self) -> None:
+        """Relaunch the app to apply a model change. A fresh process is the ONLY
+        reliable way to load a different Whisper model on this CUDA stack —
+        loading a second model in-process crashes natively (see GOTCHAS)."""
+        import os
+        import subprocess
+        import sys
+        log.info("Restarting to apply model change...")
+        try:
+            self.settings.save()
+        except Exception:
+            pass
+        # Release the single-instance lock so the new process can bind the port
+        global _single_instance_socket
+        try:
+            if _single_instance_socket is not None:
+                _single_instance_socket.close()
+                _single_instance_socket = None
+        except Exception:
+            pass
+        try:
+            if getattr(sys, "frozen", False):
+                subprocess.Popen([sys.executable])
+            else:
+                subprocess.Popen([sys.executable] + sys.argv)
+        except Exception as e:
+            log.error("Failed to spawn new instance: %s", e)
+        try:
+            self._restore_volume()  # never leave the system muted
+        except Exception:
+            pass
+        # Hard-exit so CUDA/VRAM is fully released before the new process loads
+        os._exit(0)
 
     def quit(self) -> None:
         log.info("Shutting down...")

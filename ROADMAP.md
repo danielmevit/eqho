@@ -87,6 +87,7 @@ Migrate off the Python runtime for a lean commercial-grade product.
 
 ## Stretch Goals / Backlog
 - [x] Text cleanup — Tier 1 deterministic auto-format (v0.7.0)
+- [x] Model-switch reliability — restart-on-switch (Option A, v0.7.2); subprocess model host (Option B) is the future seamless upgrade
 - [ ] Text cleanup — Tier 3 optional local-LLM "polish" mode (opt-in, may rephrase; parked)
 - [ ] Eqho Mobile — private voice keyboard (KMP + Compose, whisper.cpp engine; Android-first). See feasibility notes.
 - [ ] silero-VAD streaming segmenter (replace fixed RMS threshold)
