@@ -4,6 +4,14 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.6.8] - 2026-07-11
+
+### Fixed
+- **"Mic shows signal but nothing transcribes"** — the speech gate was a fixed RMS threshold (0.003) that quiet mics/voices never crossed. The VAD threshold is now **adaptive**: it tracks the ambient noise floor and triggers at 3.5× it (clamped between 0.0009 and the old 0.003), so quiet setups transcribe reliably while noisy rooms behave as before. Hallucination gating scales with the live threshold, and the periodic mic-level log line now includes the adaptive threshold + noise floor for diagnosis.
+
+### Changed
+- **Audio-level bar recalibrated** — normal speaking volume now lands around the **middle** of the overlay (curve `(rms/0.012)^0.6`); only loud speech approaches full width. Nobody should have to shout at a dictation app.
+
 ## [0.6.7] - 2026-07-10
 
 ### Fixed

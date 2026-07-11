@@ -21,7 +21,13 @@ os.environ.setdefault("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1")
 
 SAMPLE_RATE = 16000
 CHUNK_DURATION = 0.5
-SILENCE_THRESHOLD = 0.003
+# VAD threshold is ADAPTIVE since v0.6.8: it tracks the ambient noise floor
+# and sits at noise_floor×3.5, clamped to [VAD_THRESHOLD_MIN, SILENCE_THRESHOLD].
+# Quiet mics (whose speech never crossed the old fixed 0.003) now trigger
+# reliably; noisy rooms still cap at the old value.
+SILENCE_THRESHOLD = 0.003       # legacy fixed value = upper clamp
+VAD_THRESHOLD_MIN = 0.0009      # never trigger below this (electrical noise)
+VAD_NOISE_MULTIPLIER = 3.5      # speech must be this × the noise floor
 SILENCE_TIMEOUT = 1.2
 MIN_PHRASE_DURATION = 0.4
 PARTIAL_INTERVAL = 1.0  # send a partial transcription every N seconds of active speech
@@ -79,6 +85,7 @@ class VoiceTranscriber:
         self._worker: Optional[threading.Thread] = None
         self._current_model_size: Optional[str] = None
         self._mic_error: Optional[str] = None
+        self._vad_threshold: float = SILENCE_THRESHOLD  # live adaptive value (diagnostics)
         self._model_dir = settings.resolve_model_dir()
         os.environ["HF_HUB_CACHE"] = str(self._model_dir / "huggingface")
 
@@ -254,6 +261,8 @@ class VoiceTranscriber:
         chunk_count = 0
         log_peak = 0.0        # peak since the last level log line
         utterance_peak = 0.0  # peak since the buffer last reset (gates hallucinations)
+        noise_floor: Optional[float] = None
+        threshold = SILENCE_THRESHOLD
 
         while self._running:
             try:
@@ -268,21 +277,31 @@ class VoiceTranscriber:
             log_peak = max(log_peak, rms)
             utterance_peak = max(utterance_peak, rms)
 
+            # Adaptive VAD threshold: drop to a new quietest level instantly,
+            # creep upward very slowly (so speech doesn't inflate the floor)
+            if noise_floor is None or rms < noise_floor:
+                noise_floor = rms
+            else:
+                noise_floor += (rms - noise_floor) * 0.02
+            threshold = max(VAD_THRESHOLD_MIN,
+                            min(SILENCE_THRESHOLD, noise_floor * VAD_NOISE_MULTIPLIER))
+            self._vad_threshold = threshold
+
             if self._on_level:
                 # Normalized mic level for the overlay's audio indicator —
-                # sqrt curve lifts normal speech well into the visible range
-                self._on_level(min(1.0, (rms / 0.045) ** 0.5))
+                # calibrated so NORMAL speaking volume lands around mid-bar
+                self._on_level(min(1.0, (rms / 0.012) ** 0.6))
 
             # Log mic levels periodically so we can diagnose issues
             if chunk_count % 20 == 0:
                 log.info(
-                    "Mic level: RMS=%.5f peak=%.5f threshold=%.4f speaking=%s buf=%.1fs",
-                    rms, log_peak, SILENCE_THRESHOLD, is_speaking,
+                    "Mic level: RMS=%.5f peak=%.5f threshold=%.4f (floor=%.5f) speaking=%s buf=%.1fs",
+                    rms, log_peak, threshold, noise_floor, is_speaking,
                     total_samples / SAMPLE_RATE,
                 )
                 log_peak = 0.0
 
-            if rms > SILENCE_THRESHOLD:
+            if rms > threshold:
                 silence_start = None
                 if not is_speaking:
                     is_speaking = True
@@ -305,7 +324,8 @@ class VoiceTranscriber:
                         buf_duration = total_samples / SAMPLE_RATE
                         if buf_duration >= MIN_PHRASE_DURATION:
                             log.info("Silence detected, transcribing %.1fs of audio", buf_duration)
-                            self._do_complete(np.concatenate(chunks), peak_rms=utterance_peak)
+                            self._do_complete(np.concatenate(chunks),
+                                              peak_rms=utterance_peak, threshold=threshold)
                         chunks = []
                         total_samples = 0
                         utterance_peak = 0.0
@@ -327,7 +347,8 @@ class VoiceTranscriber:
         buf_duration = total_samples / SAMPLE_RATE
         if buf_duration >= MIN_PHRASE_DURATION:
             log.info("Flushing remaining %.1fs of audio on stop", buf_duration)
-            self._do_complete(np.concatenate(chunks), peak_rms=utterance_peak)
+            self._do_complete(np.concatenate(chunks),
+                              peak_rms=utterance_peak, threshold=threshold)
 
     def _do_partial(self, audio: np.ndarray) -> None:
         try:
@@ -344,9 +365,11 @@ class VoiceTranscriber:
         except Exception as e:
             log.error("Partial transcription error: %s", e)
 
-    def _do_complete(self, audio: np.ndarray, peak_rms: Optional[float] = None) -> None:
-        if peak_rms is not None and peak_rms < SILENCE_THRESHOLD * NEAR_SILENCE_FACTOR:
-            log.info("Skipping near-silent buffer (peak RMS %.5f) — hallucination bait.", peak_rms)
+    def _do_complete(self, audio: np.ndarray, peak_rms: Optional[float] = None,
+                     threshold: float = SILENCE_THRESHOLD) -> None:
+        if peak_rms is not None and peak_rms < threshold * NEAR_SILENCE_FACTOR:
+            log.info("Skipping near-silent buffer (peak RMS %.5f < %.5f) — hallucination bait.",
+                     peak_rms, threshold * NEAR_SILENCE_FACTOR)
             return
         try:
             segments, _ = self._model.transcribe(
