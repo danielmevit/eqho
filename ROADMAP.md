@@ -92,7 +92,7 @@ Migrate off the Python runtime for a lean commercial-grade product.
 - [ ] Eqho Mobile — private voice keyboard (KMP + Compose, whisper.cpp engine; Android-first). See feasibility notes.
 - [ ] silero-VAD streaming segmenter (replace fixed RMS threshold)
 - [ ] Streaming partials (LocalAgreement) with live injection
-- [ ] Per-application paste mode rules (some apps need typing, not clipboard)
+- [x] Per-application paste mode rules (v0.7.4)
 - [ ] Wayland-native hotkeys/injection
 - [ ] Speaker identification (who's talking)
 - [ ] Real-time translation (transcribe in one language, output in another)

@@ -71,6 +71,32 @@ class WindowsOsKit(OsKit):
         if handle:
             ctypes.windll.user32.SetForegroundWindow(handle)
 
+    def get_window_process_name(self, handle) -> Optional[str]:
+        if not handle:
+            return None
+        try:
+            import ctypes
+            from ctypes import wintypes
+            pid = wintypes.DWORD()
+            ctypes.windll.user32.GetWindowThreadProcessId(handle, ctypes.byref(pid))
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            h = ctypes.windll.kernel32.OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+            if not h:
+                return None
+            try:
+                buf = ctypes.create_unicode_buffer(260)
+                size = wintypes.DWORD(260)
+                if ctypes.windll.kernel32.QueryFullProcessImageNameW(
+                        h, 0, buf, ctypes.byref(size)):
+                    import os as _os
+                    return _os.path.basename(buf.value)
+            finally:
+                ctypes.windll.kernel32.CloseHandle(h)
+        except Exception as e:
+            log.debug("get_window_process_name failed: %s", e)
+        return None
+
     # -- autostart (HKCU Run key, value "Eqho" — same one the installer uses) -----
 
     def set_autostart(self, enabled: bool, command: str) -> bool:

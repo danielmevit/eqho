@@ -177,11 +177,38 @@ class GeneralTab(TabBase):
             card, "Save History", "Keep dictations in the History tab",
             self._settings.history_enabled, self._on_history_changed)
 
+        # Mic sensitivity slider
+        control = self._setting_row(card, "Mic Sensitivity", "Higher picks up quieter speech")
+        srow = ctk.CTkFrame(control, fg_color="transparent")
+        srow.pack(fill="x")
+        self._sens_label = ctk.CTkLabel(
+            srow, text=self._sens_text(self._settings.vad_sensitivity),
+            font=font("xs"), text_color=self._colors.fg_secondary, width=52,
+        )
+        self._sens_label.pack(side="right", padx=(SPACING["sm"], 0))
+        slider = ctk.CTkSlider(
+            srow, from_=0.5, to=2.0, number_of_steps=15,
+            command=self._on_sens_changed, height=16,
+            fg_color=self._colors.bg_tertiary,
+            progress_color=self._colors.accent,
+            button_color=self._colors.accent,
+            button_hover_color=self._colors.accent_hover,
+        )
+        slider.set(self._settings.vad_sensitivity)
+        slider.pack(side="left", fill="x", expand=True)
+
         right = self._setting_row(card, "Text Replacements", "Auto-correct words after transcription")
         secondary_button(
             right, self._colors,
             text=f"Edit…  ({len(self._settings.replacements)})", width=100,
             command=self._open_replacements_editor,
+        ).pack()
+
+        right = self._setting_row(card, "Per-App Paste Rules", "Force typing or clipboard for specific apps")
+        secondary_button(
+            right, self._colors,
+            text=f"Edit…  ({len(self._settings.paste_rules)})", width=100,
+            command=self._open_paste_rules_editor,
         ).pack()
 
     def _build_interface_settings(self, card) -> None:
@@ -200,6 +227,63 @@ class GeneralTab(TabBase):
         scale = int(value.rstrip("%")) / 100.0
         if abs(scale - self._settings.ui_scale) > 0.01:
             self.ctx.set_ui_scale(scale)
+
+    def _sens_text(self, value: float) -> str:
+        if value <= 0.8:
+            return "Low"
+        if value >= 1.4:
+            return "High"
+        return "Normal"
+
+    def _on_sens_changed(self, value: float) -> None:
+        self._settings.vad_sensitivity = round(value, 2)
+        self._settings.save()
+        self._sens_label.configure(text=self._sens_text(value))
+
+    def _open_paste_rules_editor(self) -> None:
+        parent = self._vocab_box.winfo_toplevel()
+        top = ctk.CTkToplevel(parent)
+        top.title("Per-App Paste Rules")
+        top.geometry("420x340")
+        top.transient(parent)
+        top.grab_set()
+        top.configure(fg_color=self._colors.bg_primary)
+
+        ctk.CTkLabel(
+            top, text="One rule per line:   app.exe = typing   (or = clipboard)",
+            font=font("sm"), text_color=self._colors.fg_secondary,
+        ).pack(anchor="w", padx=SPACING["md"], pady=(SPACING["md"], SPACING["xs"]))
+
+        box = ctk.CTkTextbox(
+            top, corner_radius=RADIUS_SM, font=font("sm"),
+            fg_color=self._colors.bg_tertiary, text_color=self._colors.fg_primary,
+            border_width=1, border_color=self._colors.border,
+        )
+        box.pack(fill="both", expand=True, padx=SPACING["md"])
+        if self._settings.paste_rules:
+            box.insert("1.0", "\n".join(
+                f"{app} = {mode}" for app, mode in self._settings.paste_rules.items()
+            ))
+
+        def _save() -> None:
+            rules = {}
+            for line in box.get("1.0", "end").splitlines():
+                if "=" in line:
+                    app, mode = line.split("=", 1)
+                    app, mode = app.strip().lower(), mode.strip().lower()
+                    if app and mode in ("typing", "clipboard"):
+                        rules[app] = mode
+            self._settings.paste_rules = rules
+            self._settings.save()
+            top.destroy()
+            self.ctx.rebuild_tab(self.KEY)  # refresh the rule count on the button
+
+        buttons = ctk.CTkFrame(top, fg_color="transparent")
+        buttons.pack(fill="x", padx=SPACING["md"], pady=SPACING["md"])
+        primary_button(buttons, self._colors, text="Save", width=80,
+                       command=_save).pack(side="right")
+        ghost_button(buttons, self._colors, text="Cancel", width=70,
+                     command=top.destroy).pack(side="right", padx=(0, SPACING["xs"]))
 
     def _on_vocab_changed(self, _event=None) -> None:
         text = self._vocab_box.get("1.0", "end").strip()

@@ -281,13 +281,17 @@ class VoiceTranscriber:
             utterance_peak = max(utterance_peak, rms)
 
             # Adaptive VAD threshold: drop to a new quietest level instantly,
-            # creep upward very slowly (so speech doesn't inflate the floor)
+            # creep upward very slowly (so speech doesn't inflate the floor).
+            # User sensitivity scales the whole thing: higher sensitivity =
+            # lower threshold = picks up quieter speech (for quiet mics).
             if noise_floor is None or rms < noise_floor:
                 noise_floor = rms
             else:
                 noise_floor += (rms - noise_floor) * 0.02
-            threshold = max(VAD_THRESHOLD_MIN,
-                            min(SILENCE_THRESHOLD, noise_floor * VAD_NOISE_MULTIPLIER))
+            sens = max(0.5, min(2.0, getattr(self._settings, "vad_sensitivity", 1.0)))
+            threshold = max(VAD_THRESHOLD_MIN / sens,
+                            min(SILENCE_THRESHOLD / sens,
+                                noise_floor * VAD_NOISE_MULTIPLIER / sens))
             self._vad_threshold = threshold
 
             if self._on_level:

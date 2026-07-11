@@ -36,6 +36,11 @@ class OsKit:
     def set_foreground_window(self, handle) -> None:
         pass
 
+    def get_window_process_name(self, handle) -> Optional[str]:
+        """Executable name (e.g. 'notepad.exe') of the window's process, for
+        per-app rules. None where unsupported."""
+        return None
+
     # -- Autostart on login ----------------------------------------------------
     def set_autostart(self, enabled: bool, command: str) -> bool:
         return False

@@ -210,11 +210,23 @@ class App:
             full_text = textproc.clean_text(full_text, remove_fillers=self.settings.remove_fillers)
 
         if full_text:
+            # Per-app paste rule overrides the default (some apps mishandle
+            # clipboard paste and need simulated typing, or vice-versa).
+            use_clipboard = self.settings.auto_paste
+            if target_hwnd and self.settings.paste_rules:
+                exe = oskit.get().get_window_process_name(target_hwnd)
+                if exe:
+                    rule = self.settings.paste_rules.get(exe.lower())
+                    if rule == "typing":
+                        use_clipboard = False
+                    elif rule == "clipboard":
+                        use_clipboard = True
+
             time.sleep(0.4)  # wait for modifier keys to fully release
             if target_hwnd:
                 set_foreground_window(target_hwnd)
                 time.sleep(0.15)  # let the window come to focus
-            type_text(full_text, use_clipboard=self.settings.auto_paste)
+            type_text(full_text, use_clipboard=use_clipboard)
             log.info("Injected text: %s", full_text)
             self._last_injected = full_text
             if self.settings.history_enabled:

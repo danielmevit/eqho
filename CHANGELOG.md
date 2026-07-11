@@ -14,6 +14,12 @@ Date format: `YYYY-MM-DD`.
 - **Landing page moved into `site/`** (was scattered at the repo root with `src/pages/` inside the Python package) — Pages workflow builds `./site`; screenshot copied to `site/public/assets/` so the page's relative image path resolves; page links updated to `danielmevit/eqho`.
 - Agent docs rewritten for handoff: START_HERE reflects the released v0.6.9 state and next steps; GOTCHAS gains the tkinter default-root deadlock trap, watchdog usage, single-instance port, adaptive VAD, and the web-UI-edits-on-main sync rule.
 
+## [0.7.4] - 2026-07-11
+
+### Added
+- **Mic Sensitivity slider** (General → Dictation) — scales the adaptive VAD threshold from Low (needs louder speech, for noisy rooms) to High (picks up quieter speech, for soft mics). Directly tunable if speech isn't triggering.
+- **Per-App Paste Rules** (General → Dictation) — force simulated typing or clipboard paste for specific apps by executable name (e.g. `slack.exe = typing`), overriding the global default. The target app is detected by process name at injection time.
+
 ## [0.7.3] - 2026-07-11
 
 ### Changed
