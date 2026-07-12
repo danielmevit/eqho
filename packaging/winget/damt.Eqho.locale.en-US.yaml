@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
 PackageIdentifier: damt.Eqho
-PackageVersion: 0.6.9
+PackageVersion: 0.8.2
 PackageLocale: en-US
 Publisher: damt.xyz
 PublisherUrl: https://damt.xyz
@@ -17,7 +17,7 @@ Description: |-
   global hotkey (default Alt+Q), speak naturally, and the transcribed text is
   typed into whatever application is focused. Speech recognition runs entirely
   on your machine via OpenAI's Whisper models (faster-whisper/CTranslate2) —
-  no cloud, no account, no API keys. GPU-accelerated on NVIDIA hardware with
+  no cloud, no account, no API keys. GPU-accelerated on NVIDIA (CUDA) and AMD/Intel (Vulkan) hardware, with
   automatic CPU fallback. Includes a live transcription overlay, searchable
   local history, custom vocabulary, voice commands, and text replacements.
 Moniker: eqho
@@ -30,6 +30,6 @@ Tags:
 - privacy
 - accessibility
 - transcription
-ReleaseNotesUrl: https://github.com/danielmevit/eqho/releases/tag/v0.6.9
+ReleaseNotesUrl: https://github.com/danielmevit/eqho/releases/tag/v0.8.2
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
