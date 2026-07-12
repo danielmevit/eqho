@@ -20,6 +20,7 @@ from ..theme import (
 )
 from .context import DashboardContext
 from .tabs import TAB_CLASSES
+from .widgets import ghost_button, primary_button
 from .win32 import apply_dark_title_bar
 
 log = logging.getLogger(__name__)
@@ -50,7 +51,11 @@ class Dashboard(ctk.CTkToplevel):
         settings: Settings,
         on_settings_changed: Callable,
         parent: Optional[ctk.CTk] = None,
+        on_restart: Optional[Callable] = None,
+        initial_tab: Optional[str] = None,
     ):
+        self._on_restart = on_restart
+        self._initial_tab = initial_tab if initial_tab in TAB_CLASSES else "general"
         # Create a hidden root if needed
         self._own_root = None
         if parent is None:
@@ -78,6 +83,7 @@ class Dashboard(ctk.CTkToplevel):
             rebuild_tab=self.rebuild_tab,
             set_ui_scale=self.set_ui_scale,
             master_getter=lambda: self,
+            change_model=self._change_model,
         )
         # Non-visible tabs rebuild on next show after a model change, so
         # their headers/cards never show a stale active model
@@ -88,7 +94,7 @@ class Dashboard(ctk.CTkToplevel):
         self._build_content_area()
         # Tabs build lazily on first show — keeps window open and theme
         # switching fast (only the visible tab is rebuilt synchronously)
-        self._show_tab("general")
+        self._show_tab(self._initial_tab)
 
         # Responsive resize handler
         self._content.bind("<Configure>", self._on_content_resize)
@@ -377,6 +383,17 @@ class Dashboard(ctk.CTkToplevel):
         tab_obj.build(frame)
         self._tab_built_cols[key] = self._get_col_count()
 
+    def _change_model(self, new_model: str) -> None:
+        """Switch models seamlessly — the model host swaps in the background (a
+        fresh child process loads the new model), no app restart needed. The
+        overlay shows 'Loading model…' on the next dictation until it's ready."""
+        if new_model == self._settings.model_size:
+            return
+        self._settings.model_size = new_model
+        self._settings.save()
+        self.ctx.emit("model_changed", new_model)
+        self._apply_settings(reload_model=True)
+
     def _mark_hidden_tabs_stale(self) -> None:
         for key in list(self._tab_built_cols):
             if key != self._current_tab:
@@ -527,7 +544,9 @@ def _focus_existing(dash: Dashboard) -> None:
 _opening = False  # prevents multiple threads launching at once
 
 
-def open_dashboard(settings: Settings, on_settings_changed: Callable) -> None:
+def open_dashboard(settings: Settings, on_settings_changed: Callable,
+                   on_restart: Optional[Callable] = None,
+                   initial_tab: Optional[str] = None) -> None:
     """Open the dashboard, or focus the existing one if already open."""
     global _active_dashboard, _opening
 
@@ -546,7 +565,8 @@ def open_dashboard(settings: Settings, on_settings_changed: Callable) -> None:
     def _run():
         global _opening
         try:
-            Dashboard(settings, on_settings_changed)
+            Dashboard(settings, on_settings_changed, on_restart=on_restart,
+                      initial_tab=initial_tab)
         finally:
             _opening = False
 

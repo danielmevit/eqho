@@ -4,12 +4,13 @@
 
 ## Tech Stack
 * Language: Python 3.10+
-* Engine: OpenAI Whisper (via faster-whisper / CTranslate2)
-* Hardware Acceleration: GPU-accelerated (NVIDIA CUDA 12.x) with automatic CPU fallback
+* Engine: OpenAI Whisper — dual backend: faster-whisper / CTranslate2 (NVIDIA CUDA, CPU) and whisper.cpp / GGML (Vulkan for AMD, Intel, and NVIDIA; CPU)
+* Hardware Acceleration: Cross-vendor GPU — NVIDIA (CUDA 12.x) plus AMD & Intel (Vulkan) — auto-selected per hardware, with automatic CPU fallback
 * Environments: Windows 10/11 (primary), Linux X11, macOS
 
 ## Key Features & Differentiators
 * **Universal Dictation:** Types into any focused application (Word, browsers, Slack, IDEs) via clipboard paste or simulated typing.
+* **Runs on Any GPU (dual engine):** Auto-selects faster-whisper (NVIDIA CUDA) or whisper.cpp (AMD/Intel/NVIDIA via Vulkan), with CPU fallback; the engine is also user-selectable in Settings.
 * **100% Local & Private:** No cloud, no accounts, no API keys. Audio never leaves the machine. 
 * **Real-Time Pipeline:** Features a live transcription overlay and hallucination filtering (to prevent silence from being transcribed).
 * **Customization:** Supports custom vocabulary, voice commands ("new line", "delete that"), text replacements, and volume ducking.

@@ -110,11 +110,13 @@ class TrayApp:
         on_toggle: Callable[[], None],
         on_quit: Callable[[], None],
         on_settings_changed: Callable,
+        on_restart: Optional[Callable] = None,
     ):
         self._settings = settings
         self._on_toggle = on_toggle
         self._on_quit = on_quit
         self._on_settings_changed = on_settings_changed
+        self._on_restart = on_restart
         self._icon: Optional[pystray.Icon] = None
         self._is_active = False
         self._dashboard_open = False
@@ -256,6 +258,7 @@ class TrayApp:
             if self._settings.model_size != key:
                 self._settings.model_size = key
                 self._settings.save()
+                # Seamless — the model host swaps the model in the background.
                 self._on_settings_changed(reload_model=True)
         return _set
 
@@ -274,7 +277,8 @@ class TrayApp:
         def _set(icon, item):
             self._settings.language = code
             self._settings.save()
-            self._on_settings_changed(reload_model=True)
+            # Language is passed per-transcribe — no model reload needed.
+            self._on_settings_changed(reload_model=False)
         return _set
 
     def _volume_duck_submenu(self) -> pystray.Menu:
@@ -326,7 +330,7 @@ class TrayApp:
         return _set
 
     def _open_dashboard_click(self, icon, item) -> None:
-        open_dashboard(self._settings, self._on_settings_changed)
+        open_dashboard(self._settings, self._on_settings_changed, self._on_restart)
 
     def _toggle_click(self, icon, item) -> None:
         self._on_toggle()

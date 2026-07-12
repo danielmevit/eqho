@@ -86,9 +86,14 @@ Migrate off the Python runtime for a lean commercial-grade product.
 - Current faster-whisper stack is ideal for development velocity; whisper.cpp is for shipping
 
 ## Stretch Goals / Backlog
+- [x] Text cleanup — Tier 1 deterministic auto-format (v0.7.0)
+- [x] Model-switch reliability — subprocess model host, seamless (Option B, v0.8.0). Pluggable backend.
+- [ ] AMD/Intel GPU support — whisper.cpp/Vulkan backend (scaffolded in model_host; needs Vulkan build + packaging + AMD-hardware verification). Shared engine with Eqho Mobile / desktop Phase 8.
+- [ ] Text cleanup — Tier 3 optional local-LLM "polish" mode (opt-in, may rephrase; parked)
+- [ ] Eqho Mobile — private voice keyboard (KMP + Compose, whisper.cpp engine; Android-first). See feasibility notes.
 - [ ] silero-VAD streaming segmenter (replace fixed RMS threshold)
 - [ ] Streaming partials (LocalAgreement) with live injection
-- [ ] Per-application paste mode rules (some apps need typing, not clipboard)
+- [x] Per-application paste mode rules (v0.7.4)
 - [ ] Wayland-native hotkeys/injection
 - [ ] Speaker identification (who's talking)
 - [ ] Real-time translation (transcribe in one language, output in another)

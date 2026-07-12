@@ -267,18 +267,27 @@ class ThemedDropdown(ctk.CTkFrame):
         self._highlight_active()
         self._scroll_active_into_view()
 
-        # Position below the button
+        # Position below the button. The popup is a raw tk.Toplevel, so its
+        # geometry is in REAL screen pixels — but its CustomTkinter contents
+        # render at the global widget scaling (1.5 at the default 150% zoom).
+        # Scale the box to match, or the last item is clipped off the bottom and
+        # the item text is truncated (looked like whisper.cpp was "missing").
         self.update_idletasks()
+        try:
+            scaling = self._get_widget_scaling()
+        except Exception:
+            scaling = 1.0
         x = self._button.winfo_rootx()
         y = self._button.winfo_rooty() + self._button.winfo_height() + 2
-        popup_w = max(self._btn_width, 160)
+        box_w = int(max(self._btn_width, 160) * scaling)
+        box_h = int(popup_h * scaling)
 
         # Ensure popup doesn't go off-screen
         screen_h = self.winfo_screenheight()
-        if y + popup_h > screen_h - 40:
-            y = self._button.winfo_rooty() - popup_h - 2
+        if y + box_h > screen_h - 40:
+            y = self._button.winfo_rooty() - box_h - 2
 
-        self._popup.geometry(f"{popup_w}x{popup_h}+{x}+{y}")
+        self._popup.geometry(f"{box_w}x{box_h}+{x}+{y}")
         self._popup.deiconify()
 
         # Apply Windows 11 rounded corners

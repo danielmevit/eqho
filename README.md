@@ -6,13 +6,13 @@
 
 # Eqho — free, offline voice-to-text dictation
 
-**Speak anywhere Windows lets you type.** Press a hotkey, talk, and your words appear in whatever app is focused — Word, your browser, Slack, code editors, anything. Powered by OpenAI's Whisper (via [faster-whisper](https://github.com/SYSTRAN/faster-whisper)), running **100% on your machine**.
+**Speak anywhere Windows lets you type.** Press a hotkey, talk, and your words appear in whatever app is focused — Word, your browser, Slack, code editors, anything. Powered by OpenAI's Whisper (via [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and [whisper.cpp](https://github.com/ggml-org/whisper.cpp)), running **100% on your machine** — accelerated on any modern GPU: **NVIDIA, AMD, or Intel**.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-informational)](#install)
 
 - 🔒 **Private by design** — no cloud, no account, no API key. Your voice never leaves your computer.
-- ⚡ **Fast** — GPU-accelerated (NVIDIA CUDA) with automatic CPU fallback; real-time preview as you speak.
+- ⚡ **Fast on any GPU** — NVIDIA (CUDA), **AMD and Intel (Vulkan)**, or CPU. Eqho auto-detects your hardware and picks the fastest local engine; real-time preview as you speak.
 - 🆓 **Free and open source** — no subscription, no word limits, ever.
 - 🌍 **13 languages** — English-optimized by default, multilingual models one click away.
 
@@ -57,6 +57,7 @@ Toggle or hold-to-talk, your choice. The hotkey is customizable.
 - **Volume ducking** — quiets your speakers while you dictate
 - **Hallucination filtering** — silence won't be transcribed as "Thank you." (a known [Whisper quirk](https://github.com/openai/whisper/discussions/928))
 - **Model picker** — from `tiny` (150 MB, fastest) to `large-v3` (3.1 GB, most accurate); `distil-large-v3` default hits the sweet spot for English
+- **Dual-engine, cross-vendor GPU** — NVIDIA acceleration via CUDA ([faster-whisper](https://github.com/SYSTRAN/faster-whisper)) *and* **AMD / Intel / NVIDIA acceleration via Vulkan** ([whisper.cpp](https://github.com/ggml-org/whisper.cpp)), with a CPU fallback. Eqho auto-selects the best engine for your machine — or choose it yourself in **Settings → General → Inference Engine**
 
 ## Languages
 
@@ -68,7 +69,9 @@ Distil models are English-optimized; for other languages pick `large-v3-turbo` o
 
 - Windows 10/11 (primary), Linux X11, or macOS
 - Python 3.10+ (only when running from source)
-- Optional: NVIDIA GPU + [CUDA Toolkit 12.x](https://developer.nvidia.com/cuda-downloads) for ~5× faster transcription (`winget install Nvidia.CUDA`)
+- Optional GPU acceleration — **auto-detected, no configuration**:
+  - **NVIDIA** — [CUDA Toolkit 12.x](https://developer.nvidia.com/cuda-downloads) for ~5× faster transcription (`winget install Nvidia.CUDA`)
+  - **AMD & Intel** — no toolkit to install; the Windows build ships the Vulkan engine (whisper.cpp), which also runs on NVIDIA
 
 ## Platform notes
 
@@ -81,6 +84,8 @@ Distil models are English-optimized; for other languages pick `large-v3-turbo` o
 **Is my audio uploaded anywhere?** No. Transcription runs locally via CTranslate2. The only network access is the one-time model download.
 
 **Does it cost anything?** No. Free, open source, no premium tier.
+
+**Does it work on AMD or Intel GPUs?** Yes. Besides the NVIDIA (CUDA) engine, Eqho ships a cross-vendor **Vulkan engine (whisper.cpp)** that accelerates dictation on **AMD Radeon** and **Intel Arc / Iris** graphics — and NVIDIA too. Eqho detects your hardware and picks the fastest engine automatically; you can also set it manually under Settings → General → Inference Engine.
 
 **How accurate is it?** Whisper-class accuracy — state of the art for open speech recognition. Pick a bigger model for tougher audio.
 
@@ -100,4 +105,4 @@ Provided "as is", without warranty of any kind.
 
 ---
 
-<sub><b>Keywords:</b> speech to text · voice to text · dictation software · offline speech recognition · free dictation app · voice typing for Windows · OpenAI Whisper app · whisper.cpp alternative · faster-whisper GUI · private speech to text · local voice recognition · no-cloud transcription · talk to type · voice keyboard · speech recognition without internet · dictate into any app · Dragon NaturallySpeaking alternative · Windows Voice Access alternative · open source dictation · GPU accelerated transcription · CUDA speech to text · real-time transcription overlay · hands-free typing · accessibility voice input · multilingual dictation</sub>
+<sub><b>Keywords:</b> speech to text · voice to text · dictation software · offline speech recognition · free dictation app · voice typing for Windows · OpenAI Whisper app · whisper.cpp GUI · faster-whisper GUI · private speech to text · local voice recognition · no-cloud transcription · talk to type · voice keyboard · speech recognition without internet · dictate into any app · Dragon NaturallySpeaking alternative · Windows Voice Access alternative · open source dictation · GPU accelerated transcription · CUDA speech to text · Vulkan speech to text · AMD GPU dictation · AMD Radeon voice to text · Intel Arc dictation · Intel GPU speech recognition · cross-vendor GPU transcription · Whisper on AMD · runs on any GPU · real-time transcription overlay · hands-free typing · accessibility voice input · multilingual dictation</sub>

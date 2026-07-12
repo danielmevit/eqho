@@ -36,3 +36,4 @@
 - Update `DECISIONS.md` the moment a durable choice is made; `DESIGN_SYSTEM.md` on token/layout changes.
 - Keep START_HERE's "current priority" in sync with `ROADMAP.md` / `TODO.md`.
 - The version lives in `src/version.py` ONLY — the About tab and build scripts read it; never hardcode it elsewhere.
+- **Versioning (pre-1.0 BETA — do not violate):** Eqho stays in the `0.x` range for the entire beta. Bump the **patch** (third digit) for ongoing releases, freely — `0.8.1 → 0.8.2 → … → 0.8.999`. Bump the **minor** (`0.8 → 0.9`) only for a larger milestone. **NEVER release `1.0`** — 1.0 is reserved for "out of beta, everything agreed," and only Daniel decides that explicitly. Until then the ceiling is `0.9.x`.

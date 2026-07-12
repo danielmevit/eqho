@@ -6,13 +6,80 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-07-12
+
+Completes and hardware-verifies the dual-engine arc — whisper.cpp/Vulkan (cross-vendor GPU, incl. AMD) now runs and is verified alongside faster-whisper, with a UI engine picker and seamless runtime switching. First release since 0.6.9, so it also carries the v0.7.x–0.8.x work (auto-format, per-app paste rules, mic sensitivity, subprocess model host). (0.9.0 is reserved for a larger milestone.)
+
 ### Added
 - **CONTRIBUTING.md** — dev setup, smoke-gate requirement, architecture rules (oskit-only OS code, theme-only styling, Variable helpers), bug-report guidance incl. eqho.log thread dumps. Phase 7 is now complete except Daniel's manual QA + demo GIF.
 - **winget manifests** (`packaging/winget/`, PackageIdentifier `damt.Eqho`) — submitted to microsoft/winget-pkgs as [PR #400796](https://github.com/microsoft/winget-pkgs/pull/400796); once merged, `winget install eqho` works. For future releases: bump PackageVersion + InstallerUrl + SHA256 (`sha256sum` of the release exe, uppercase) and resubmit via a fork branch (see the PR for the pattern).
+- **Inference Engine picker (UI) + seamless runtime engine switching.** The General tab's Model card now has an **Inference Engine** dropdown — Auto / faster-whisper (NVIDIA·CPU) / whisper.cpp (AMD·Intel·CPU); shows "not installed" when `pywhispercpp` is absent. Switching respawns the subprocess model host on the new backend with no app restart, via new `ModelHost.set_backend()` + `VoiceTranscriber.set_engine()`, reconciled in `App._on_settings_changed` (a no-op unless `engine_backend` actually changed, so mic/model changes are unaffected).
+- **whisper.cpp/Vulkan backend is now runtime-verified end-to-end** (supersedes the v0.8.1 "not yet verified" note). A Vulkan-enabled `pywhispercpp` wheel builds + imports, and dictation transcribes on Vulkan: `ggml_vulkan: Found 2 Vulkan devices` (NVIDIA RTX 3060 + **AMD Radeon**), proving the AMD-support goal. A runtime engine switch (faster-whisper → whisper.cpp) was verified transcribing through the real model host. Build notes in `TODO.md`: the old failure was Windows **MAX_PATH(260)** at the nested `vulkan-shaders-gen` link step (not compiler inheritance); a self-contained redistributable wheel is produced by `mkwheel.py` (DLLs co-located at wheel root).
+- **Windows build now bundles whisper.cpp.** `packaging/windows/eqho-win.spec` collects `pywhispercpp` + all five whisper/ggml DLLs — **explicitly**, since PyInstaller's static analysis misses the runtime-`LoadLibrary`'d `ggml-vulkan.dll`/`ggml-cpu.dll`. A build was verified to place all six files in `dist\Eqho\_internal\`; the Inno installer already globs the folder, so no `installer.iss` change was needed. The wheel builder is committed at `tools/mkwheel.py`. Builds without pywhispercpp still succeed (whisper.cpp simply absent → `engine_backend` "auto" uses faster-whisper).
 
 ### Changed
 - **Landing page moved into `site/`** (was scattered at the repo root with `src/pages/` inside the Python package) — Pages workflow builds `./site`; screenshot copied to `site/public/assets/` so the page's relative image path resolves; page links updated to `danielmevit/eqho`.
-- Agent docs rewritten for handoff: START_HERE reflects the released v0.6.9 state and next steps; GOTCHAS gains the tkinter default-root deadlock trap, watchdog usage, single-instance port, adaptive VAD, and the web-UI-edits-on-main sync rule.
+- Agent docs rewritten for handoff: START_HERE now reflects the v0.8.x engine arc (dual-engine, subprocess model host) with whisper.cpp/Vulkan hardware-verified; GOTCHAS gains the tkinter default-root deadlock trap, watchdog usage, single-instance port, adaptive VAD, and the web-UI-edits-on-main sync rule.
+
+### Fixed
+- **Dropdown popups now size correctly at UI zoom.** The themed dropdown's popup is a raw `tk.Toplevel` sized in real screen pixels, but its CustomTkinter contents render at the global widget scaling (1.5 at the default 150% zoom) — so at zoom the popup box was too short (the last item clipped off the bottom) and too narrow (item text truncated). This made the **whisper.cpp** engine option look like it was missing entirely. The popup now multiplies its width/height (and the off-screen check) by the widget scaling, so every item and full label shows at any zoom level. Affects all themed dropdowns (engine, model, language, etc.).
+
+## [0.8.1] - 2026-07-12
+
+### Added
+- **whisper.cpp backend wired (dual-engine).** The model host's second backend is now real (via `pywhispercpp`): cross-vendor GPU through Vulkan (AMD/Intel/NVIDIA) or CPU — the same engine as Eqho Mobile. `engine_backend` is now **"auto"**: NVIDIA+CUDA → faster-whisper (fastest there), otherwise whisper.cpp if installed, else faster-whisper CPU. Includes Eqho→whisper.cpp model-name mapping (distil variants → closest standard model) and safe-default segment confidence (whisper.cpp exposes text only).
+- The app runs unchanged without pywhispercpp installed (auto stays on faster-whisper). Activating whisper.cpp needs a Vulkan-enabled `pywhispercpp` build — see TODO/setup. **The whisper.cpp backend code itself is not yet runtime-verified** (pending the binding install); resolve/auto-detect and the faster-whisper path are verified.
+
+## [0.8.0] - 2026-07-11
+
+### Changed
+- **Model switching is now seamless — no restart (Option B: subprocess model host).** The Whisper model runs in a CHILD process (`src/model_host.py`); switching models kills that child and spawns a fresh one, which only ever loads ONE model — the only reliable path on CUDA stacks where a second in-process model crashes natively. The main app never loads a model, so a native inference crash kills only the child (auto-respawned), never the app. Replaces the v0.7.2 restart-on-switch flow: model changes now swap in the background (~a few seconds; overlay shows "Loading model…") while the dashboard stays open.
+- The transcriber no longer imports faster-whisper in the main process (only the child does), so the app starts lighter and never holds CUDA in the UI process.
+
+### Added
+- **Pluggable inference backend** behind the model host. `faster-whisper` (NVIDIA CUDA / CPU) is the default; a **`whisper.cpp` backend** is scaffolded for **AMD/Intel GPUs via Vulkan** (and the shared mobile engine / desktop Phase 8). Selectable via the `engine_backend` setting. The whisper.cpp path still needs a Vulkan-enabled build wired + packaged and can't be verified without AMD hardware — see ROADMAP.
+- `multiprocessing.freeze_support()` in run.py (required so the packaged exe spawns model-host children, not whole-app copies).
+
+### Note
+- AMD GPU acceleration: the current faster-whisper/CTranslate2 engine is CUDA-only. AMD requires the whisper.cpp/Vulkan backend (scaffolded) — the next engine milestone.
+
+## [0.7.4] - 2026-07-11
+
+### Added
+- **Mic Sensitivity slider** (General → Dictation) — scales the adaptive VAD threshold from Low (needs louder speech, for noisy rooms) to High (picks up quieter speech, for soft mics). Directly tunable if speech isn't triggering.
+- **Per-App Paste Rules** (General → Dictation) — force simulated typing or clipboard paste for specific apps by executable name (e.g. `slack.exe = typing`), overriding the global default. The target app is detected by process name at injection time.
+
+## [0.7.3] - 2026-07-11
+
+### Changed
+- **The dashboard reopens after a model-change restart** — it comes back to the tab you were on (e.g. Models), instead of leaving you at just the tray. The restart passes `--open-dashboard --tab=<name>` to the fresh process, which reopens the dashboard ~1.2s after launch. (Tray-initiated model changes still just restart to the tray, since you weren't in the dashboard.)
+
+## [0.7.2] - 2026-07-11
+
+### Fixed
+- **Model switching is now crash-proof (Option A: restart-on-switch).** Changing the Whisper model cleanly restarts the app so the new model loads in a fresh process — the ONLY reliable path on CUDA stacks where loading a second model in-process crashes natively. A one-time dialog explains the restart, with a **"Don't show this again"** checkbox that's remembered; after that, model changes just restart silently. Tray model changes restart too (with a notification).
+- **Language changes no longer reload the model** — the language is passed per-transcription, so switching it is now instant (it was needlessly triggering the fragile model reload).
+
+### Note
+- The seamless alternative (Option B — subprocess model host, no restart) remains on the backlog as a future upgrade; restart-on-switch is the reliable fix for now.
+
+## [0.7.1] - 2026-07-11
+
+### Fixed
+- **Lost transcription during/after a model switch** — a rapid model reload could null the model at the exact moment a transcribe ran, raising `'NoneType' object has no attribute 'transcribe'` and silently dropping the text. Transcribe calls now capture the model first and skip gracefully (logged) instead of erroring. (The model loads fine; this was the reload nulling it mid-call.)
+
+### Note
+- The deeper model-SWITCH native crash (loading a 2nd CUDA model in-process — see GOTCHAS) is separate and still pending the process-isolation fix (restart-on-switch vs subprocess host).
+
+## [0.7.0] - 2026-07-11
+
+### Added
+- **Auto-format (Tier-1 text cleanup)** — a light-touch, fully deterministic pass over the final transcript before it's typed: fixes sentence capitalization, lone "i" → "I", and mechanical spacing (no space before punctuation, collapsed runs, chunk-seam casing). It is **safe by design — it never rephrases, reorders, or invents words** (idempotent; leaves "had had", "iOS", code-like text intact). On by default; toggle in General → Dictation. Lives in `src/textproc.py` so it's shared logic that ports to a future mobile keyboard.
+- **Remove filler words** (opt-in sub-toggle) — strips a conservative set ("um", "uh", "er", "erm", "hmm", …) when auto-format is on; deliberately excludes meaning-carrying words ("like", "so", "well").
+- Smoke gate now asserts cleanup behavior + idempotence.
+
+### Note
+- LLM "polish" (a local model that could rewrite the transcript into cleaner prose) is intentionally NOT included — parked on the roadmap. Dictation returns exactly what you said.
 
 ## [0.6.9] - 2026-07-11
 

@@ -26,3 +26,13 @@ settings.json
 
 # CodeGraph index (local, per-machine — rebuild with `codegraph init`)
 .codegraph/
+
+# whisper.cpp local build helpers (dev-only)
+_pwcpp_build.bat
+pwcpp_build*.txt
+
+# Astro landing page (site/) build artifacts — deps + generated files
+site/node_modules/
+site/.astro/
+site/dist/
+site/src/env.d.ts

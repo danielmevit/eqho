@@ -1,11 +1,15 @@
 """Text post-processing between transcription and injection — all local.
 
-Three stages, each opt-in via settings:
+Stages (each opt-in via settings):
 - voice commands: a whole utterance like "new line" or "period" becomes the
   symbol; "delete that" removes the previous utterance
 - replacements: user-defined word/phrase substitutions (word-boundary,
   case-insensitive)
 - smart join: punctuation and newline segments attach without a leading space
+- clean_text: light-touch deterministic formatting cleanup (casing + spacing;
+  optional filler removal). Tier 1 only — NEVER rephrases or reorders words.
+  (LLM "polish" that could reword the transcript is deliberately NOT here —
+  parked on the roadmap; dictation must return exactly what you said.)
 """
 
 import re
@@ -73,3 +77,54 @@ def smart_join(parts: list) -> str:
         else:
             out += " " + part
     return out
+
+
+# -- Tier-1 formatting cleanup ------------------------------------------------
+# Deterministic, safe, and idempotent. Fixes the mechanical grime in Whisper
+# output (chunk-seam casing, stray spacing) without ever changing your words.
+
+# Conservative filler list — only removed when the user opts in. Deliberately
+# excludes ambiguous words ("like", "so", "well", "right") that carry meaning.
+_FILLERS = ("um", "umm", "uh", "uhh", "er", "erm", "hmm", "mm", "mmm")
+_FILLER_RE = re.compile(r"\b(?:" + "|".join(_FILLERS) + r")\b[ \t]*,?", re.IGNORECASE)
+
+
+def _strip_fillers(text: str) -> str:
+    return _FILLER_RE.sub("", text)
+
+
+def _fix_i(text: str) -> str:
+    """Lone 'i' and its contractions → 'I' (leaves words like 'iOS' alone)."""
+    text = re.sub(r"\bi\b", "I", text)
+    text = re.sub(r"\bi('m|'ll|'ve|'d)\b", lambda m: "I" + m.group(1), text)
+    return text
+
+
+def _capitalize_sentences(text: str) -> str:
+    """Capitalize the first letter of the text and of each sentence (after
+    . ! ? or a newline). Casing only — never touches the words themselves."""
+    text = re.sub(r"^(\s*)([a-z])", lambda m: m.group(1) + m.group(2).upper(), text)
+    text = re.sub(r"([.!?][ \t]+)([a-z])",
+                  lambda m: m.group(1) + m.group(2).upper(), text)
+    text = re.sub(r"(\n[ \t]*)([a-z])",
+                  lambda m: m.group(1) + m.group(2).upper(), text)
+    return text
+
+
+def clean_text(text: str, remove_fillers: bool = False) -> str:
+    """Light-touch formatting cleanup. Safe and idempotent."""
+    if not text:
+        return text
+    if remove_fillers:
+        text = _strip_fillers(text)
+    # Whitespace: collapse runs of spaces/tabs (NOT newlines), trim line edges
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    text = re.sub(r"\n[ \t]+", "\n", text)
+    # No space before ,.!?;: (newlines preserved)
+    text = re.sub(r"[ \t]+([,.!?;:])", r"\1", text)
+    # Drop any leading punctuation/space a filler strip may have left behind
+    text = re.sub(r"^[\s,;:]+", "", text)
+    text = _capitalize_sentences(text)
+    text = _fix_i(text)
+    return text.strip()

@@ -27,7 +27,7 @@ def run_smoke() -> int:
         report["steps"]["audio_devices"] = len(devices)
 
         from src.textproc import (
-            apply_replacements, is_delete_command, match_command, smart_join,
+            apply_replacements, clean_text, is_delete_command, match_command, smart_join,
         )
         assert match_command("Period.") == "."
         assert match_command("New line") == "\n"
@@ -36,6 +36,14 @@ def run_smoke() -> int:
         assert apply_replacements("hello eqho app", {"eqho": "Eqho"}) == "hello Eqho app"
         assert smart_join(["hello", ".", "world"]) == "hello. world"
         assert smart_join(["one", "\n", "two"]) == "one\ntwo"
+        # clean_text: casing + spacing, idempotent, never reorders words
+        assert clean_text("hello world") == "Hello world"
+        assert clean_text("i think i'm right . yes") == "I think I'm right. Yes"
+        assert clean_text("hello  ,  world") == "Hello, world"
+        assert clean_text("um so uh hi", remove_fillers=True) == "So hi"
+        assert clean_text("um so uh hi", remove_fillers=False) == "Um so uh hi"
+        assert clean_text("one\ntwo") == "One\nTwo"
+        assert clean_text(clean_text("i said hi")) == clean_text("i said hi")  # idempotent
         report["steps"]["textproc"] = "ok"
 
         import tempfile

@@ -83,6 +83,7 @@ class App:
             on_toggle=self.toggle,
             on_quit=self.quit,
             on_settings_changed=self._on_settings_changed,
+            on_restart=self.restart,
         )
 
     # -- Transcription callbacks -----------------------------------------------
@@ -205,13 +206,27 @@ class App:
             target_hwnd = self._target_hwnd
 
         full_text = textproc.apply_replacements(full_text, self.settings.replacements)
+        if self.settings.format_cleanup:
+            full_text = textproc.clean_text(full_text, remove_fillers=self.settings.remove_fillers)
 
         if full_text:
+            # Per-app paste rule overrides the default (some apps mishandle
+            # clipboard paste and need simulated typing, or vice-versa).
+            use_clipboard = self.settings.auto_paste
+            if target_hwnd and self.settings.paste_rules:
+                exe = oskit.get().get_window_process_name(target_hwnd)
+                if exe:
+                    rule = self.settings.paste_rules.get(exe.lower())
+                    if rule == "typing":
+                        use_clipboard = False
+                    elif rule == "clipboard":
+                        use_clipboard = True
+
             time.sleep(0.4)  # wait for modifier keys to fully release
             if target_hwnd:
                 set_foreground_window(target_hwnd)
                 time.sleep(0.15)  # let the window come to focus
-            type_text(full_text, use_clipboard=self.settings.auto_paste)
+            type_text(full_text, use_clipboard=use_clipboard)
             log.info("Injected text: %s", full_text)
             self._last_injected = full_text
             if self.settings.history_enabled:
@@ -242,7 +257,12 @@ class App:
                     self.hotkey.register()
                     self.tray.set_active(self._is_active())
                     if reload_model:
-                        self.transcriber.reload_model()
+                        # Reconcile the inference engine first (no-op unless the
+                        # engine_backend setting changed). A switch respawns the
+                        # model-host child on the new backend, so skip the
+                        # redundant reload_model when that already happened.
+                        if not self.transcriber.set_engine(self.settings.engine_backend):
+                            self.transcriber.reload_model()
                         # Eagerly load (and download, with tray notifications) the
                         # new model so the next dictation starts instantly.
                         self._preload_model()
@@ -273,7 +293,22 @@ class App:
 
         threading.Thread(target=self._preload_model, daemon=True).start()
 
+        # After a model-change restart, reopen the dashboard to the tab the
+        # user was on (passed as --open-dashboard --tab=<name>).
+        import sys
+        if "--open-dashboard" in sys.argv:
+            tab = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--tab=")), None)
+            threading.Timer(1.2, lambda: self._open_dashboard_startup(tab)).start()
+
         self.tray.run()
+
+    def _open_dashboard_startup(self, tab) -> None:
+        try:
+            from .ui import open_dashboard
+            open_dashboard(self.settings, self._on_settings_changed,
+                           self.restart, initial_tab=tab)
+        except Exception as e:
+            log.error("Startup dashboard open failed: %s", e)
 
     def _model_is_cached(self) -> bool:
         """Check if the current model has already been downloaded."""
@@ -295,6 +330,45 @@ class App:
         except Exception as e:
             log.error("Failed to pre-load model: %s", e)
             self.tray.notify(f"Failed to load model: {e}")
+
+    def restart(self, open_tab=None) -> None:
+        """Relaunch the app to apply a model change. A fresh process is the ONLY
+        reliable way to load a different Whisper model on this CUDA stack —
+        loading a second model in-process crashes natively (see GOTCHAS).
+        When open_tab is given, the new process reopens the dashboard to it."""
+        import os
+        import subprocess
+        import sys
+        log.info("Restarting to apply model change...")
+        try:
+            self.settings.save()
+        except Exception:
+            pass
+        # Release the single-instance lock so the new process can bind the port
+        global _single_instance_socket
+        try:
+            if _single_instance_socket is not None:
+                _single_instance_socket.close()
+                _single_instance_socket = None
+        except Exception:
+            pass
+        # Rebuild argv without any prior restart flags, then re-add if needed
+        base_argv = [a for a in sys.argv
+                     if a != "--open-dashboard" and not a.startswith("--tab=")]
+        extra = ["--open-dashboard", f"--tab={open_tab}"] if open_tab else []
+        try:
+            if getattr(sys, "frozen", False):
+                subprocess.Popen([sys.executable] + extra)
+            else:
+                subprocess.Popen([sys.executable] + base_argv + extra)
+        except Exception as e:
+            log.error("Failed to spawn new instance: %s", e)
+        try:
+            self._restore_volume()  # never leave the system muted
+        except Exception:
+            pass
+        # Hard-exit so CUDA/VRAM is fully released before the new process loads
+        os._exit(0)
 
     def quit(self) -> None:
         log.info("Shutting down...")

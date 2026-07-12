@@ -52,6 +52,7 @@ class GeneralTab(TabBase):
         self._section_label(tab, "MODEL")
         card = self._card(tab)
         self._build_model_setting(card)
+        self._build_engine_setting(card)
 
         # Behavior
         self._section_label(tab, "BEHAVIOR")
@@ -94,6 +95,7 @@ class GeneralTab(TabBase):
         self._section_label(col1, "MODEL")
         card = self._card(col1)
         self._build_model_setting(card)
+        self._build_engine_setting(card)
 
         self._section_label(col1, "BEHAVIOR")
         card = self._card(col1)
@@ -161,6 +163,12 @@ class GeneralTab(TabBase):
         self._vocab_box.bind("<FocusOut>", self._on_vocab_changed)
 
     def _build_dictation_settings(self, card) -> None:
+        self._format_var = self._build_switch_row(
+            card, "Auto-format", "Fix capitalization & spacing",
+            self._settings.format_cleanup, self._on_format_changed)
+        self._fillers_var = self._build_switch_row(
+            card, "Remove Filler Words", '"um", "uh", "er" (needs auto-format)',
+            self._settings.remove_fillers, self._on_fillers_changed)
         self._voice_cmd_var = self._build_switch_row(
             card, "Voice Commands", '"new line", "period", "delete that"',
             self._settings.voice_commands, self._on_voice_commands_changed)
@@ -171,11 +179,38 @@ class GeneralTab(TabBase):
             card, "Save History", "Keep dictations in the History tab",
             self._settings.history_enabled, self._on_history_changed)
 
+        # Mic sensitivity slider
+        control = self._setting_row(card, "Mic Sensitivity", "Higher picks up quieter speech")
+        srow = ctk.CTkFrame(control, fg_color="transparent")
+        srow.pack(fill="x")
+        self._sens_label = ctk.CTkLabel(
+            srow, text=self._sens_text(self._settings.vad_sensitivity),
+            font=font("xs"), text_color=self._colors.fg_secondary, width=52,
+        )
+        self._sens_label.pack(side="right", padx=(SPACING["sm"], 0))
+        slider = ctk.CTkSlider(
+            srow, from_=0.5, to=2.0, number_of_steps=15,
+            command=self._on_sens_changed, height=16,
+            fg_color=self._colors.bg_tertiary,
+            progress_color=self._colors.accent,
+            button_color=self._colors.accent,
+            button_hover_color=self._colors.accent_hover,
+        )
+        slider.set(self._settings.vad_sensitivity)
+        slider.pack(side="left", fill="x", expand=True)
+
         right = self._setting_row(card, "Text Replacements", "Auto-correct words after transcription")
         secondary_button(
             right, self._colors,
             text=f"Edit…  ({len(self._settings.replacements)})", width=100,
             command=self._open_replacements_editor,
+        ).pack()
+
+        right = self._setting_row(card, "Per-App Paste Rules", "Force typing or clipboard for specific apps")
+        secondary_button(
+            right, self._colors,
+            text=f"Edit…  ({len(self._settings.paste_rules)})", width=100,
+            command=self._open_paste_rules_editor,
         ).pack()
 
     def _build_interface_settings(self, card) -> None:
@@ -195,11 +230,76 @@ class GeneralTab(TabBase):
         if abs(scale - self._settings.ui_scale) > 0.01:
             self.ctx.set_ui_scale(scale)
 
+    def _sens_text(self, value: float) -> str:
+        if value <= 0.8:
+            return "Low"
+        if value >= 1.4:
+            return "High"
+        return "Normal"
+
+    def _on_sens_changed(self, value: float) -> None:
+        self._settings.vad_sensitivity = round(value, 2)
+        self._settings.save()
+        self._sens_label.configure(text=self._sens_text(value))
+
+    def _open_paste_rules_editor(self) -> None:
+        parent = self._vocab_box.winfo_toplevel()
+        top = ctk.CTkToplevel(parent)
+        top.title("Per-App Paste Rules")
+        top.geometry("420x340")
+        top.transient(parent)
+        top.grab_set()
+        top.configure(fg_color=self._colors.bg_primary)
+
+        ctk.CTkLabel(
+            top, text="One rule per line:   app.exe = typing   (or = clipboard)",
+            font=font("sm"), text_color=self._colors.fg_secondary,
+        ).pack(anchor="w", padx=SPACING["md"], pady=(SPACING["md"], SPACING["xs"]))
+
+        box = ctk.CTkTextbox(
+            top, corner_radius=RADIUS_SM, font=font("sm"),
+            fg_color=self._colors.bg_tertiary, text_color=self._colors.fg_primary,
+            border_width=1, border_color=self._colors.border,
+        )
+        box.pack(fill="both", expand=True, padx=SPACING["md"])
+        if self._settings.paste_rules:
+            box.insert("1.0", "\n".join(
+                f"{app} = {mode}" for app, mode in self._settings.paste_rules.items()
+            ))
+
+        def _save() -> None:
+            rules = {}
+            for line in box.get("1.0", "end").splitlines():
+                if "=" in line:
+                    app, mode = line.split("=", 1)
+                    app, mode = app.strip().lower(), mode.strip().lower()
+                    if app and mode in ("typing", "clipboard"):
+                        rules[app] = mode
+            self._settings.paste_rules = rules
+            self._settings.save()
+            top.destroy()
+            self.ctx.rebuild_tab(self.KEY)  # refresh the rule count on the button
+
+        buttons = ctk.CTkFrame(top, fg_color="transparent")
+        buttons.pack(fill="x", padx=SPACING["md"], pady=SPACING["md"])
+        primary_button(buttons, self._colors, text="Save", width=80,
+                       command=_save).pack(side="right")
+        ghost_button(buttons, self._colors, text="Cancel", width=70,
+                     command=top.destroy).pack(side="right", padx=(0, SPACING["xs"]))
+
     def _on_vocab_changed(self, _event=None) -> None:
         text = self._vocab_box.get("1.0", "end").strip()
         if text != self._settings.initial_prompt:
             self._settings.initial_prompt = text
             self._settings.save()
+
+    def _on_format_changed(self, value: bool) -> None:
+        self._settings.format_cleanup = value
+        self._settings.save()
+
+    def _on_fillers_changed(self, value: bool) -> None:
+        self._settings.remove_fillers = value
+        self._settings.save()
 
     def _on_voice_commands_changed(self, value: bool) -> None:
         self._settings.voice_commands = value
@@ -353,6 +453,35 @@ class GeneralTab(TabBase):
             command=self._on_model_changed,
         ).pack()
 
+    def _build_engine_setting(self, card) -> None:
+        import importlib.util
+
+        control = self._setting_row(
+            card, "Inference Engine", "Auto picks the fastest for your hardware")
+
+        cpp_available = importlib.util.find_spec("pywhispercpp") is not None
+        self._engine_keys = ["auto", "faster-whisper", "whisper.cpp"]
+        self._engine_display_names = [
+            "Auto (recommended)",
+            "faster-whisper (NVIDIA / CPU)",
+            "whisper.cpp (AMD / Intel / CPU)" if cpp_available
+            else "whisper.cpp (not installed)",
+        ]
+        current = self._settings.engine_backend
+        idx = self._engine_keys.index(current) if current in self._engine_keys else 0
+        self._engine_var = self._string_var(value=self._engine_display_names[idx])
+
+        self._dropdown(
+            control,
+            variable=self._engine_var,
+            values=self._engine_display_names,
+            width=200, height=30,
+            corner_radius=RADIUS_SM,
+            font=font("sm"),
+            dropdown_font=font("sm"),
+            command=self._on_engine_changed,
+        ).pack()
+
     def _build_behavior_settings(self, card) -> None:
         # Volume while speaking
         right = self._setting_row(card, "Volume While Speaking", "System volume during dictation")
@@ -448,11 +577,17 @@ class GeneralTab(TabBase):
         idx = self._model_display_names.index(display_name)
         key = self._model_keys[idx]
         if key != self._settings.model_size:
-            self._settings.model_size = key
+            # Model change → confirm + clean restart (in-process swap crashes).
+            self.ctx.change_model(key)
+
+    def _on_engine_changed(self, display_name) -> None:
+        idx = self._engine_display_names.index(display_name)
+        key = self._engine_keys[idx]
+        if key != self._settings.engine_backend:
+            self._settings.engine_backend = key
             self._settings.save()
-            self._model_info_label.configure(text=self._get_model_info_text(key))
-            self.refresh_header_status()
-            self.ctx.emit("model_changed", key)
+            # Respawns the model host on the new backend (seamless, like a mic
+            # change) — see App._on_settings_changed and transcriber.set_engine.
             self._apply_settings(reload_model=True)
 
     def _on_duck_changed(self, val, labels) -> None:
@@ -470,7 +605,8 @@ class GeneralTab(TabBase):
         code = self._lang_codes[idx]
         self._settings.language = code
         self._settings.save()
-        self._apply_settings(reload_model=True)
+        # Language is passed per-transcribe — no model reload/restart needed.
+        self._apply_settings(reload_model=False)
 
     def _on_startup_changed(self) -> None:
         enabled = self._startup_var.get()
