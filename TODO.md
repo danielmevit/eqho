@@ -4,22 +4,21 @@ Things Daniel needs to do that can't be automated by the agent.
 
 ## Open
 
-### Activate the whisper.cpp engine (needs good internet — parked on travel connection 2026-07-12)
-The dual-engine code is DONE and committed (v0.8.1), dormant — the app auto-selects
-faster-whisper on NVIDIA, so nothing's broken. To light up whisper.cpp (AMD/Intel/CPU):
-
-1. **Install a C++ compiler** (the blocker — needs ~3-5 GB, failed on travel internet):
-   ```powershell
-   winget install --id Microsoft.VisualStudio.2022.BuildTools --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended" --accept-package-agreements --accept-source-agreements
-   ```
-   (Approve the UAC prompt.) The Vulkan SDK Core is ALREADY installed at `C:\VulkanSDK\1.4.350.0`.
-2. **Build pywhispercpp with Vulkan** (PowerShell, in the venv):
-   ```powershell
-   cd "D:\Vibe Coding\Eqho"; venv\Scripts\activate
-   $env:VULKAN_SDK = "C:\VulkanSDK\1.4.350.0"; $env:GGML_VULKAN = "1"
-   pip install --no-cache-dir git+https://github.com/absadiki/pywhispercpp
-   ```
-   (Or CPU-only, no compiler/Vulkan needed: `pip install pywhispercpp` — ~15 MB PyPI wheel.)
+### Activate the whisper.cpp engine (dual-engine code DONE + dormant; build blocked, parked 2026-07-12)
+The v0.8.1 code auto-selects faster-whisper on NVIDIA, so nothing's broken. To light up
+whisper.cpp (AMD/Intel/CPU), the Vulkan build must succeed. STATUS:
+- ✅ **C++ compiler installed** — VS 2022 BuildTools + VCTools (`cl.exe` at MSVC 14.44).
+- ✅ **Vulkan SDK Core installed** — `C:\VulkanSDK\1.4.350.0`; build detects it (`glslc` found).
+- ❌ **Build fails at `vulkan-shaders-gen`** — the nested host-tool build errors at CMake
+  `project()` = it isn't inheriting the C++ compiler (a known whisper.cpp Windows-Vulkan
+  pain point). Plain build AND vcvars64 both hit it.
+- **NEXT FIX TO TRY:** force the Ninja generator so the nested build uses `cl.exe` too.
+  Run `_pwcpp_build.bat` (in repo root, gitignored): it does `call vcvars64.bat` +
+  `pip install ninja` + `CMAKE_GENERATOR=Ninja` + `GGML_VULKAN=1` + the pip install.
+  If Ninja still fails: fall back to a [pre-built Vulkan whisper.cpp binary](https://github.com/jerryshell/whisper.cpp-windows-vulkan-bin),
+  or pin an older pywhispercpp/whisper.cpp (v1.8.0 broke Vulkan; ~1.7.6 worked).
+- **Zero-hassle fallback (no compiler/Vulkan, CPU only, ~15 MB):** `pip install pywhispercpp`.
+  Validates the whole backend on CPU; GPU/Vulkan can come later.
 3. **Sanity check** — look for `ggml_vulkan: Found ... devices` in the output:
    ```powershell
    venv\Scripts\python.exe -c "from pywhispercpp.model import Model; import numpy as np; print(len(Model('tiny').transcribe(np.zeros(16000,dtype=np.float32))))"
