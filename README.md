@@ -55,7 +55,6 @@ Toggle or hold-to-talk, your choice. The hotkey is customizable.
 - **Voice commands** — "new line", "period", "delete that" (opt-in)
 - **Text replacements** — auto-correct words the model keeps missing
 - **Volume ducking** — quiets your speakers while you dictate
-- **Hallucination filtering** — silence won't be transcribed as "Thank you." (a known [Whisper quirk](https://github.com/openai/whisper/discussions/928))
 - **Model picker** — from `tiny` (150 MB, fastest) to `large-v3` (3.1 GB, most accurate); `distil-large-v3` default hits the sweet spot for English
 - **Dual-engine, cross-vendor GPU** — NVIDIA acceleration via CUDA ([faster-whisper](https://github.com/SYSTRAN/faster-whisper)) *and* **AMD / Intel / NVIDIA acceleration via Vulkan** ([whisper.cpp](https://github.com/ggml-org/whisper.cpp)), with a CPU fallback. Eqho auto-selects the best engine for your machine — or choose it yourself in **Settings → General → Inference Engine**
 

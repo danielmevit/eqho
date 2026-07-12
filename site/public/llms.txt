@@ -12,7 +12,7 @@
 * **Universal Dictation:** Types into any focused application (Word, browsers, Slack, IDEs) via clipboard paste or simulated typing.
 * **Runs on Any GPU (dual engine):** Auto-selects faster-whisper (NVIDIA CUDA) or whisper.cpp (AMD/Intel/NVIDIA via Vulkan), with CPU fallback; the engine is also user-selectable in Settings.
 * **100% Local & Private:** No cloud, no accounts, no API keys. Audio never leaves the machine. 
-* **Real-Time Pipeline:** Features a live transcription overlay and hallucination filtering (to prevent silence from being transcribed).
+* **Real-Time Pipeline:** Features a live transcription overlay.
 * **Customization:** Supports custom vocabulary, voice commands ("new line", "delete that"), text replacements, and volume ducking.
 * **Multilingual:** 13 supported languages using models ranging from `tiny` (150 MB) to `large-v3` (3.1 GB). Default is `distil-large-v3`.
 
