@@ -257,7 +257,12 @@ class App:
                     self.hotkey.register()
                     self.tray.set_active(self._is_active())
                     if reload_model:
-                        self.transcriber.reload_model()
+                        # Reconcile the inference engine first (no-op unless the
+                        # engine_backend setting changed). A switch respawns the
+                        # model-host child on the new backend, so skip the
+                        # redundant reload_model when that already happened.
+                        if not self.transcriber.set_engine(self.settings.engine_backend):
+                            self.transcriber.reload_model()
                         # Eagerly load (and download, with tray notifications) the
                         # new model so the next dictation starts instantly.
                         self._preload_model()

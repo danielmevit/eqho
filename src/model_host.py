@@ -255,6 +255,19 @@ class ModelHost:
         return (self._current == model_size and self._proc is not None
                 and self._proc.is_alive())
 
+    @property
+    def backend(self) -> str:
+        return self._backend
+
+    def set_backend(self, backend: str) -> None:
+        """Switch the inference backend (e.g. faster-whisper <-> whisper.cpp).
+        Kills the current child so the next load_model() spawns a fresh one on
+        the new backend."""
+        with self._io:
+            if backend != self._backend:
+                self._kill()
+                self._backend = backend
+
     def shutdown(self) -> None:
         with self._io:
             if self._proc is not None and self._to is not None:

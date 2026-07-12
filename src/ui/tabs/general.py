@@ -52,6 +52,7 @@ class GeneralTab(TabBase):
         self._section_label(tab, "MODEL")
         card = self._card(tab)
         self._build_model_setting(card)
+        self._build_engine_setting(card)
 
         # Behavior
         self._section_label(tab, "BEHAVIOR")
@@ -94,6 +95,7 @@ class GeneralTab(TabBase):
         self._section_label(col1, "MODEL")
         card = self._card(col1)
         self._build_model_setting(card)
+        self._build_engine_setting(card)
 
         self._section_label(col1, "BEHAVIOR")
         card = self._card(col1)
@@ -451,6 +453,35 @@ class GeneralTab(TabBase):
             command=self._on_model_changed,
         ).pack()
 
+    def _build_engine_setting(self, card) -> None:
+        import importlib.util
+
+        control = self._setting_row(
+            card, "Inference Engine", "Auto picks the fastest for your hardware")
+
+        cpp_available = importlib.util.find_spec("pywhispercpp") is not None
+        self._engine_keys = ["auto", "faster-whisper", "whisper.cpp"]
+        self._engine_display_names = [
+            "Auto (recommended)",
+            "faster-whisper (NVIDIA / CPU)",
+            "whisper.cpp (AMD / Intel / CPU)" if cpp_available
+            else "whisper.cpp (not installed)",
+        ]
+        current = self._settings.engine_backend
+        idx = self._engine_keys.index(current) if current in self._engine_keys else 0
+        self._engine_var = self._string_var(value=self._engine_display_names[idx])
+
+        self._dropdown(
+            control,
+            variable=self._engine_var,
+            values=self._engine_display_names,
+            width=200, height=30,
+            corner_radius=RADIUS_SM,
+            font=font("sm"),
+            dropdown_font=font("sm"),
+            command=self._on_engine_changed,
+        ).pack()
+
     def _build_behavior_settings(self, card) -> None:
         # Volume while speaking
         right = self._setting_row(card, "Volume While Speaking", "System volume during dictation")
@@ -548,6 +579,16 @@ class GeneralTab(TabBase):
         if key != self._settings.model_size:
             # Model change → confirm + clean restart (in-process swap crashes).
             self.ctx.change_model(key)
+
+    def _on_engine_changed(self, display_name) -> None:
+        idx = self._engine_display_names.index(display_name)
+        key = self._engine_keys[idx]
+        if key != self._settings.engine_backend:
+            self._settings.engine_backend = key
+            self._settings.save()
+            # Respawns the model host on the new backend (seamless, like a mic
+            # change) — see App._on_settings_changed and transcriber.set_engine.
+            self._apply_settings(reload_model=True)
 
     def _on_duck_changed(self, val, labels) -> None:
         reverse = {v: k for k, v in labels.items()}

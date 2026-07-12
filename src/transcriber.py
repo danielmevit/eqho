@@ -387,6 +387,28 @@ class VoiceTranscriber:
         if was_running:
             self.start()
 
+    def set_engine(self, engine_setting: str) -> bool:
+        """Switch the inference engine. Resolves `engine_setting`
+        ("auto" | "faster-whisper" | "whisper.cpp") to a concrete backend and,
+        if it differs from the one currently running, respawns the model-host
+        child on the new backend — the same seamless kill+reload path as a model
+        change. Returns True if the backend actually changed."""
+        from .model_host import resolve_backend
+        new_backend = resolve_backend(engine_setting)
+        if new_backend == self._host.backend:
+            return False
+        was_running = self._running
+        if was_running:
+            self.stop()
+        self._host.set_backend(new_backend)
+        with self._model_lock:
+            self._model_loaded = False
+            self._current_model_size = None
+        log.info("Inference backend switched to: %s", new_backend)
+        if was_running:
+            self.start()
+        return True
+
     def shutdown(self) -> None:
         self.stop()
         self._model_loaded = False
