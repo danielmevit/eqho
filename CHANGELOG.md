@@ -6,6 +6,10 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-07-12
+
+Completes and hardware-verifies the dual-engine arc — whisper.cpp/Vulkan (cross-vendor GPU, incl. AMD) now runs and is verified alongside faster-whisper, with a UI engine picker and seamless runtime switching. First release since 0.6.9, so it also carries the v0.7.x–0.8.x work (auto-format, per-app paste rules, mic sensitivity, subprocess model host). (0.9.0 is reserved for a larger milestone.)
+
 ### Added
 - **CONTRIBUTING.md** — dev setup, smoke-gate requirement, architecture rules (oskit-only OS code, theme-only styling, Variable helpers), bug-report guidance incl. eqho.log thread dumps. Phase 7 is now complete except Daniel's manual QA + demo GIF.
 - **winget manifests** (`packaging/winget/`, PackageIdentifier `damt.Eqho`) — submitted to microsoft/winget-pkgs as [PR #400796](https://github.com/microsoft/winget-pkgs/pull/400796); once merged, `winget install eqho` works. For future releases: bump PackageVersion + InstallerUrl + SHA256 (`sha256sum` of the release exe, uppercase) and resubmit via a fork branch (see the PR for the pattern).
@@ -15,7 +19,7 @@ Date format: `YYYY-MM-DD`.
 
 ### Changed
 - **Landing page moved into `site/`** (was scattered at the repo root with `src/pages/` inside the Python package) — Pages workflow builds `./site`; screenshot copied to `site/public/assets/` so the page's relative image path resolves; page links updated to `danielmevit/eqho`.
-- Agent docs rewritten for handoff: START_HERE reflects the released v0.6.9 state and next steps; GOTCHAS gains the tkinter default-root deadlock trap, watchdog usage, single-instance port, adaptive VAD, and the web-UI-edits-on-main sync rule.
+- Agent docs rewritten for handoff: START_HERE now reflects the v0.8.x engine arc (dual-engine, subprocess model host) with whisper.cpp/Vulkan hardware-verified; GOTCHAS gains the tkinter default-root deadlock trap, watchdog usage, single-instance port, adaptive VAD, and the web-UI-edits-on-main sync rule.
 
 ## [0.8.1] - 2026-07-12
 

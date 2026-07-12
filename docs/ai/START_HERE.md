@@ -2,20 +2,26 @@
 
 Always-on voice-to-text dictation app. System tray, **Alt+Q**, speak, text lands in the focused app. 100% local: faster-whisper (CTranslate2) + CUDA. Windows primary; Linux X11 + macOS core dictation since v0.6.0.
 
-- **Version:** `src/version.py` only. Current: 0.6.9, publicly released (tag `v0.6.9` → CI built installers for all 3 OSes).
+- **Version:** `src/version.py` only. Dev is **0.8.2** (the v0.7.x–0.8.x engine arc, **unreleased**). Last **public** release: **0.6.9** (tag `v0.6.9` → CI built installers for all 3 OSes).
 - **Repos:** `origin` = github.com/danielmevit/eqho (PUBLIC, `main` = releases) · `private` = danielmevit/Eqho-private (`dev` = all work). Merge dev→main ONLY on Daniel's explicit release request. ⚠ Daniel sometimes edits `main` via the GitHub web UI — if a push bounces, `git pull origin main`, merge, NEVER force-push, then merge main back into dev.
 - **Landing page:** `site/` (Astro) → GitHub Pages at danielmevit.github.io/eqho via `.github/workflows/deploy.yml` (builds `./site` on every main push). Exists for SEO + AI-scraper reach (`site/public/llms.txt`).
 
-## State (2026-07-11)
+## State (2026-07-12)
 
-Everything through ROADMAP Phase 6 is DONE and released. Recent deep fixes a next agent must NOT regress:
-- **tkinter cross-interpreter deadlock** (v0.6.7) — see GOTCHAS "tkinter", the most important trap in this codebase.
-- **Adaptive VAD** (v0.6.8) — speech gate = clamp(noise_floor×3.5, 0.0009, 0.003); never reintroduce a fixed threshold.
+Everything through ROADMAP **Phase 7 (public launch)** is DONE — AGPL, public README, landing page, CONTRIBUTING, repo public, winget submitted (PR #400796, awaiting a moderator). Last **public** release: **0.6.9**. Since then a **dev-only v0.7.x–0.8.x engine arc** landed and is **unreleased**:
+- **Auto-format** Tier-1 text cleanup (v0.7.0) · **mic-sensitivity slider** + **per-app paste rules** (v0.7.4).
+- **Seamless model switching** — a subprocess **model host** (v0.8.0); inference runs in a CHILD process, the main app never loads a model (GOTCHAS "CUDA / models").
+- **Dual engine + cross-vendor GPU** (v0.8.1–0.8.2) — a **whisper.cpp** backend (`pywhispercpp`/Vulkan) beside faster-whisper; `engine_backend="auto"` = faster-whisper on NVIDIA+CUDA, whisper.cpp (AMD/Intel/CPU) otherwise; UI **Inference Engine picker** (General → Model) switches at runtime. ✅ **Runtime-verified on hardware 2026-07-12:** Vulkan enumerated NVIDIA RTX 3060 **+ AMD Radeon** and transcribed — the AMD-support goal is proven.
+
+Deep fixes a next agent must NOT regress:
+- **Subprocess model host** (v0.8.0) — never load a Whisper model in the main process.
+- **tkinter cross-interpreter deadlock** (v0.6.7) — GOTCHAS "tkinter", the most important trap here.
+- **Adaptive VAD** (v0.6.8) — gate = clamp(noise_floor×3.5, 0.0009, 0.003); never a fixed threshold.
 - **Single-instance lock** (v0.6.6) — localhost port 48317.
 
-**Awaiting Daniel's confirmation:** model-switch freeze gone, dictation transcribes at his mic level, chime reliable. If the UI ever stalls >5 s, `%APPDATA%\Eqho\eqho.log` gets a `=== THREAD DUMP` — read it before theorizing.
+If the UI ever stalls >5 s, `%APPDATA%\Eqho\eqho.log` gets a `=== THREAD DUMP` — read it before theorizing.
 
-**Next work, in order:** 1) fixes from Daniel's testing; 2) winget PR #400796 — watch validation, address bot feedback (manifests live in `packaging/winget/`); 3) CONTRIBUTING.md + demo GIF (Phase 7 finishers); 4) backlog: silero-VAD, streaming partials, per-app paste rules, VAD sensitivity slider, more overlay customization.
+**Next work:** the engine arc is code-complete and hardware-verified. Before any release: 1) Daniel's manual QA + demo GIF (TODO.md); 2) cut a release of the unreleased dev arc — bump `version.py`, merge `dev`→`main` — **only on Daniel's explicit request**; 3) backlog features: silero-VAD, streaming partials, more overlay customization, Eqho Mobile shared engine.
 
 ## Run / verify
 
