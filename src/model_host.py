@@ -111,21 +111,63 @@ class _FasterWhisperBackend:
                  "avg_logprob": s.avg_logprob} for s in segments]
 
 
-class _WhisperCppBackend:
-    """whisper.cpp backend — cross-vendor GPU via Vulkan (AMD/Intel/NVIDIA),
-    Metal (Apple), or CPU. This is the AMD path and the shared mobile engine.
+# Eqho model name -> whisper.cpp model name. whisper.cpp doesn't ship the
+# distil variants, so they map to their closest standard model.
+_WHISPERCPP_NAME = {
+    "tiny": "tiny", "tiny.en": "tiny.en",
+    "base": "base", "base.en": "base.en",
+    "small": "small", "small.en": "small.en",
+    "medium": "medium", "medium.en": "medium.en",
+    "large-v3": "large-v3", "large-v3-turbo": "large-v3-turbo",
+    "distil-large-v3": "large-v3-turbo",   # fast, near-large accuracy
+    "distil-medium.en": "medium.en",
+    "distil-small.en": "small.en",
+}
 
-    Scaffolded: needs a whisper.cpp Python binding (e.g. pywhispercpp) and, for
-    AMD acceleration, a Vulkan-enabled build. Falls through with a clear error
-    until that's wired + packaged (can't be verified without AMD hardware)."""
+
+class _WhisperCppBackend:
+    """whisper.cpp backend via pywhispercpp — cross-vendor GPU (Vulkan on
+    AMD/Intel/NVIDIA, Metal on Apple) or CPU. Same engine as Eqho Mobile.
+    The GPU backend is chosen at pywhispercpp BUILD time (GGML_VULKAN=1)."""
 
     def __init__(self, cfg: dict):
-        raise NotImplementedError(
-            "whisper.cpp backend not yet wired — needs a Vulkan-enabled build "
-            "for AMD (see ROADMAP). Use the faster-whisper backend for now.")
+        from pywhispercpp.model import Model  # requires pywhispercpp installed
+        target = cfg["model_size"]
+        name = _WHISPERCPP_NAME.get(target, "base")
+        # pywhispercpp auto-downloads the GGML model by name to its own cache
+        self._model = Model(name)
+        self.info = {"backend": "whisper.cpp", "model": name}
 
     def transcribe(self, p: dict):
-        raise NotImplementedError
+        lang = p["language"] or "auto"
+        # pywhispercpp accepts a float32 mono 16 kHz numpy array directly
+        segments = self._model.transcribe(p["audio"], language=lang)
+        # whisper.cpp segments carry text only — no per-segment confidence, so
+        # return safe defaults (the transcriber's confidence gate then never
+        # wrongly drops them; the RMS gate + blocklist still apply).
+        return [{"text": s.text, "no_speech_prob": 0.0, "avg_logprob": 0.0}
+                for s in segments]
+
+
+def resolve_backend(setting: str) -> str:
+    """Turn the engine_backend setting into a concrete backend.
+    "auto": NVIDIA+CUDA -> faster-whisper (fastest there); otherwise
+    whisper.cpp if installed (AMD/Intel GPU or faster CPU), else faster-whisper."""
+    if setting in ("faster-whisper", "whisper.cpp"):
+        return setting
+    try:
+        import ctranslate2
+        if "int8_float16" in ctranslate2.get_supported_compute_types("cuda"):
+            return "faster-whisper"
+    except Exception:
+        pass
+    try:
+        import importlib.util
+        if importlib.util.find_spec("pywhispercpp") is not None:
+            return "whisper.cpp"
+    except Exception:
+        pass
+    return "faster-whisper"
 
 
 # -- Main process --------------------------------------------------------------

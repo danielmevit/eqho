@@ -56,11 +56,14 @@ class VoiceTranscriber:
 
     def __init__(self, settings: Settings):
         self._settings = settings
-        from .model_host import ModelHost
+        from .model_host import ModelHost, resolve_backend
         # The model runs in a child process — switching = kill+respawn a fresh
         # child (the only reliable path; a second in-process CUDA model crashes
-        # natively). The main app never loads a model.
-        self._host = ModelHost(backend=getattr(settings, "engine_backend", "faster-whisper"))
+        # natively). The main app never loads a model. The engine backend
+        # auto-resolves (NVIDIA->faster-whisper, else->whisper.cpp if installed).
+        backend = resolve_backend(getattr(settings, "engine_backend", "auto"))
+        log.info("Inference backend: %s", backend)
+        self._host = ModelHost(backend=backend)
         oskit.get().disable_os_mic_ducking()
         self._on_partial: Optional[Callable[[str], None]] = None
         self._on_complete: Optional[Callable[[str], None]] = None

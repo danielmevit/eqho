@@ -14,6 +14,12 @@ Date format: `YYYY-MM-DD`.
 - **Landing page moved into `site/`** (was scattered at the repo root with `src/pages/` inside the Python package) — Pages workflow builds `./site`; screenshot copied to `site/public/assets/` so the page's relative image path resolves; page links updated to `danielmevit/eqho`.
 - Agent docs rewritten for handoff: START_HERE reflects the released v0.6.9 state and next steps; GOTCHAS gains the tkinter default-root deadlock trap, watchdog usage, single-instance port, adaptive VAD, and the web-UI-edits-on-main sync rule.
 
+## [0.8.1] - 2026-07-12
+
+### Added
+- **whisper.cpp backend wired (dual-engine).** The model host's second backend is now real (via `pywhispercpp`): cross-vendor GPU through Vulkan (AMD/Intel/NVIDIA) or CPU — the same engine as Eqho Mobile. `engine_backend` is now **"auto"**: NVIDIA+CUDA → faster-whisper (fastest there), otherwise whisper.cpp if installed, else faster-whisper CPU. Includes Eqho→whisper.cpp model-name mapping (distil variants → closest standard model) and safe-default segment confidence (whisper.cpp exposes text only).
+- The app runs unchanged without pywhispercpp installed (auto stays on faster-whisper). Activating whisper.cpp needs a Vulkan-enabled `pywhispercpp` build — see TODO/setup. **The whisper.cpp backend code itself is not yet runtime-verified** (pending the binding install); resolve/auto-detect and the faster-whisper path are verified.
+
 ## [0.8.0] - 2026-07-11
 
 ### Changed

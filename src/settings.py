@@ -99,7 +99,7 @@ class Settings:
     sound_feedback: bool = True      # start/stop chime
     format_cleanup: bool = True      # light-touch casing/spacing cleanup
     remove_fillers: bool = False     # strip "um"/"uh"/… (opt-in sub-toggle)
-    engine_backend: str = "faster-whisper"  # "faster-whisper" (NVIDIA/CPU) | "whisper.cpp" (AMD/Vulkan, WIP)
+    engine_backend: str = "auto"     # "auto" | "faster-whisper" (NVIDIA/CPU) | "whisper.cpp" (AMD/Intel Vulkan, CPU)
     vad_sensitivity: float = 1.0     # mic sensitivity 0.5 (needs louder) .. 2.0 (picks up quiet)
     paste_rules: dict = field(default_factory=dict)  # exe name (lower) -> "clipboard"|"typing"
 

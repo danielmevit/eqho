@@ -3,6 +3,7 @@
 Things Daniel needs to do that can't be automated by the agent.
 
 ## Open
+- [ ] **Install pywhispercpp with Vulkan** to activate the whisper.cpp engine (see setup below). Then set `engine_backend`=`whisper.cpp` in %APPDATA%\\Eqho\\settings.json to test it on the NVIDIA card via Vulkan.
 - [ ] Record a short demo GIF (hotkey → speak → text appears) for README + landing page. Tools: ScreenToGif or Xbox Game Bar.
 - [ ] Final QA on a clean Windows machine/VM: install Eqho-Setup, dictate, uninstall.
 - [ ] **winget PR #400796 — waiting on Microsoft moderator.** CLA signed ✓, validation passed ✓. Nothing to do but wait for a volunteer moderator to merge (do NOT comment/resubmit — it resets the queue). When merged, `winget install eqho` goes live.
