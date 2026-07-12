@@ -21,6 +21,9 @@ Completes and hardware-verifies the dual-engine arc — whisper.cpp/Vulkan (cros
 - **Landing page moved into `site/`** (was scattered at the repo root with `src/pages/` inside the Python package) — Pages workflow builds `./site`; screenshot copied to `site/public/assets/` so the page's relative image path resolves; page links updated to `danielmevit/eqho`.
 - Agent docs rewritten for handoff: START_HERE now reflects the v0.8.x engine arc (dual-engine, subprocess model host) with whisper.cpp/Vulkan hardware-verified; GOTCHAS gains the tkinter default-root deadlock trap, watchdog usage, single-instance port, adaptive VAD, and the web-UI-edits-on-main sync rule.
 
+### Fixed
+- **Dropdown popups now size correctly at UI zoom.** The themed dropdown's popup is a raw `tk.Toplevel` sized in real screen pixels, but its CustomTkinter contents render at the global widget scaling (1.5 at the default 150% zoom) — so at zoom the popup box was too short (the last item clipped off the bottom) and too narrow (item text truncated). This made the **whisper.cpp** engine option look like it was missing entirely. The popup now multiplies its width/height (and the off-screen check) by the widget scaling, so every item and full label shows at any zoom level. Affects all themed dropdowns (engine, model, language, etc.).
+
 ## [0.8.1] - 2026-07-12
 
 ### Added
