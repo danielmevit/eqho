@@ -1,0 +1,124 @@
+---
+const title = "Changelog | Eqho";
+const description = "Version history for Eqho — the free, offline voice-to-text dictation app. Every release, what changed, and when.";
+const home = "/eqho/";
+
+// Newest first. Add new releases at the top.
+const releases = [
+  { v: "0.8.2", d: "2026-07-12", notes: `Dual-engine complete: the whisper.cpp/Vulkan backend (cross-vendor GPU — AMD, Intel, and NVIDIA) is hardware-verified alongside faster-whisper, with a UI Inference Engine picker and seamless runtime switching. The Windows build now bundles whisper.cpp, and dropdown popups size correctly at UI zoom. First public release since 0.6.9, so it also carries the whole 0.7.x–0.8.x engine arc.` },
+  { v: "0.8.1", d: "2026-07-12", notes: `whisper.cpp backend wired as a real second engine (via pywhispercpp). engine_backend is now "auto": faster-whisper on NVIDIA+CUDA, whisper.cpp (AMD/Intel/CPU) otherwise.` },
+  { v: "0.8.0", d: "2026-07-11", notes: `Seamless model switching — the Whisper model runs in a subprocess model host, so switching swaps in the background with no app restart and a native inference crash never takes down the app. Introduces a pluggable inference backend.` },
+  { v: "0.7.4", d: "2026-07-11", notes: `Mic Sensitivity slider (tune the speech gate for noisy rooms or soft mics) and per-app paste rules (force typing or clipboard per application).` },
+  { v: "0.7.3", d: "2026-07-11", notes: `The dashboard reopens to the tab you were on after a model-change restart.` },
+  { v: "0.7.2", d: "2026-07-11", notes: `Crash-proof model switching (restart-on-switch) with a one-time explainer dialog. Language changes are now instant (no model reload).` },
+  { v: "0.7.1", d: "2026-07-11", notes: `Fixed lost transcription when a model reload nulled the model mid-transcribe.` },
+  { v: "0.7.0", d: "2026-07-11", notes: `Auto-format (Tier-1 text cleanup) — safe, deterministic capitalization and spacing that never rephrases your words. Optional filler-word removal.` },
+  { v: "0.6.9", d: "2026-07-11", notes: `GitHub rename (danielmevit/eqho) adopted everywhere; tray logo assets renamed to their true size.` },
+  { v: "0.6.8", d: "2026-07-11", notes: `Adaptive VAD — fixes "mic shows signal but nothing transcribes" on quiet mics by tracking the ambient noise floor instead of a fixed threshold. Audio-level bar recalibrated so normal speech sits mid-overlay.` },
+  { v: "0.6.7", d: "2026-07-10", notes: `Eliminated the model-switch freeze (a tkinter cross-interpreter deadlock). Reliable start chime, exact overlay positioning, and left-aligned multi-line overlay text.` },
+  { v: "0.6.6", d: "2026-07-10", notes: `Branding to damt.xyz. Single-instance lock stops a second copy from fighting over the hotkey and VRAM. Hotkey registration hardened.` },
+  { v: "0.6.5", d: "2026-07-10", notes: `Freeze watchdog dumps thread stacks on a >5 s stall; new --diagnose model-switch tool; stale active-model display fixed.` },
+  { v: "0.6.4", d: "2026-07-10", notes: `Fixed distil models showing "Not downloaded". Rotating file log plus crash hooks so the windowed exe leaves evidence.` },
+  { v: "0.6.3", d: "2026-07-10", notes: `First public GitHub Release. Fixed italic headings, Models-tab flashing, and silent download failures. New overlay audio-level indicator.` },
+  { v: "0.6.2", d: "2026-07-10", notes: `Stacked setting rows for narrow windows; 150% default zoom with a live UI Zoom setting; model downloads directly in the Models tab.` },
+  { v: "0.6.1", d: "2026-07-10", notes: `Polish pass: softer chime, fast theme switching, segmented-control and toggle restyle, README rewrite for launch.` },
+  { v: "0.6.0", d: "2026-07-10", notes: `Cross-platform — Linux (.tar.gz/AppImage) and macOS (.app/.dmg) packages. New oskit platform layer, pynput hotkeys, and a Windows/Linux/macOS CI build matrix.` },
+  { v: "0.5.0", d: "2026-07-10", notes: `Local features — transcript history, custom vocabulary, text replacements, opt-in voice commands ("new line", "delete that"), and synthesized sound feedback.` },
+  { v: "0.4.1", d: "2026-07-10", notes: `Windows packaging pipeline: PyInstaller onedir spec, per-user Inno Setup installer, portable zip, and a tag-triggered GitHub Actions release workflow.` },
+  { v: "0.4.0", d: "2026-07-10", notes: `UI overhaul (Toolcraft-inspired, near-black theme, hairline borders). dashboard.py split into an src/ui/ package. Dark title bar and overlay animations.` },
+  { v: "0.3.3", d: "2026-07-09", notes: `Headless --smoke self-check, hallucination gating, CPU warm-up, a configurable model cache directory, and platformdirs config paths.` },
+  { v: "0.3.2", d: "2026-07-09", notes: `CodeGraph index for structural navigation; src/version.py as the single source of truth; docs restructured.` },
+  { v: "0.3.1", d: "2026-04-01", notes: `Custom ThemedDropdown widget, tray-icon theme detection, and a window title-bar icon.` },
+  { v: "0.3.0", d: "2026-03-31", notes: `The Dashboard — a full settings window with sidebar navigation, model cards, a dark/light/system theme system, and rounded overlay corners.` },
+  { v: "0.2.1", d: "2026-03-31", notes: `Hotkey customization UI, "Start with Windows" toggle, overlay position preference, and the bundled Inter font.` },
+  { v: "0.2.0", d: "2026-03-31", notes: `Renamed Ekho → Eqho. Default hotkey is now Alt+Q. Microphone selector and volume ducking while speaking (pycaw).` },
+  { v: "0.1.4", d: "2026-03-30", notes: `Text injection now targets the correct window; modifier keys are released before paste.` },
+  { v: "0.1.3", d: "2026-03-30", notes: `Default model switched to distil-large-v3 (~6× faster than large-v3). Distil and Turbo models added.` },
+  { v: "0.1.2", d: "2026-03-30", notes: `Graceful CUDA → CPU fallback; Eqho's own energy-based VAD replaces Whisper's over-aggressive filter.` },
+  { v: "0.1.1", d: "2026-03-30", notes: `Renamed Echo → Eqho; standardized on the faster-whisper transcription engine.` },
+  { v: "0.1.0", d: "2026-03-29", notes: `Initial release — the full dictation pipeline: system tray, global hotkey, live overlay, text injection, faster-whisper on-device transcription, and 13 languages.` },
+];
+---
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/DanielMevit/eqho/main/assets/logo_32_dark.png" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/DanielMevit/eqho/main/assets/logo_32_white.png" media="(prefers-color-scheme: dark)" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://danielmevit.github.io/eqho/changelog/" />
+    <style>
+      :root {
+        --color-bg: #0d1117;
+        --color-card-bg: #161b22;
+        --color-text: #c9d1d9;
+        --color-heading: #ffffff;
+        --color-blue: #58a6ff;
+        --color-muted: #8b949e;
+        --color-border: #30363d;
+      }
+      * { box-sizing: border-box; }
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background-color: var(--color-bg);
+        color: var(--color-text);
+        line-height: 1.6;
+        margin: 0;
+        -webkit-font-smoothing: antialiased;
+      }
+      main { max-width: 820px; margin: 5rem auto; padding: 0 1.5rem; }
+      a { color: var(--color-blue); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 3rem; }
+      .logo-img { height: 34px; display: block; }
+      h1 { color: var(--color-heading); font-size: 2.5rem; font-weight: 600; letter-spacing: -0.02em; margin: 2rem 0 0.25rem; }
+      .lede { color: var(--color-muted); margin: 0 0 3rem; }
+      .release { padding: 1.75rem 0; border-top: 1px solid var(--color-border); display: grid; grid-template-columns: 130px 1fr; gap: 1.5rem; }
+      .release:first-of-type { border-top: none; }
+      .rel-head { display: flex; flex-direction: column; gap: 0.15rem; }
+      .rel-v { color: var(--color-blue); font-weight: 600; font-size: 1.15rem; }
+      .rel-d { color: var(--color-muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+      .rel-notes { margin: 0; }
+      footer { text-align: center; margin-top: 5rem; padding: 3rem 0; border-top: 1px solid var(--color-border); color: var(--color-muted); font-size: 0.9rem; }
+      @media (max-width: 620px) {
+        .release { grid-template-columns: 1fr; gap: 0.4rem; }
+        h1 { font-size: 2rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="top">
+        <a href={home} aria-label="Eqho home">
+          <img src="https://raw.githubusercontent.com/DanielMevit/eqho/main/logo/logo_horizontal_dark.png" alt="Eqho logo" class="logo-img" />
+        </a>
+        <a href={home}>&larr; Back to home</a>
+      </div>
+
+      <h1>Changelog</h1>
+      <p class="lede">Every Eqho release, what changed, and when. Newest first. Full details live in <a href="https://github.com/DanielMevit/eqho/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
+
+      {releases.map((r) => (
+        <article class="release">
+          <div class="rel-head">
+            <span class="rel-v">{r.v}</span>
+            <time class="rel-d" datetime={r.d}>{r.d}</time>
+          </div>
+          <p class="rel-notes">{r.notes}</p>
+        </article>
+      ))}
+    </main>
+
+    <footer>
+      <p><a href={home}>Home</a> · <a href="https://github.com/DanielMevit/eqho/releases">Releases</a> · <a href="https://github.com/DanielMevit/eqho">GitHub</a></p>
+    </footer>
+  </body>
+</html>

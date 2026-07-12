@@ -6,7 +6,7 @@
 * Language: Python 3.10+
 * Engine: OpenAI Whisper — dual backend: faster-whisper / CTranslate2 (NVIDIA CUDA, CPU) and whisper.cpp / GGML (Vulkan for AMD, Intel, and NVIDIA; CPU)
 * Hardware Acceleration: Cross-vendor GPU — NVIDIA (CUDA 12.x) plus AMD & Intel (Vulkan) — auto-selected per hardware, with automatic CPU fallback
-* Environments: Windows 10/11 (primary), Linux X11, macOS
+* Environments: 64-bit Windows 10/11 (primary; no 32-bit build — the local AI models require a 64-bit system), Linux X11, macOS
 
 ## Key Features & Differentiators
 * **Universal Dictation:** Types into any focused application (Word, browsers, Slack, IDEs) via clipboard paste or simulated typing.

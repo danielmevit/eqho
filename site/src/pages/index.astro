@@ -36,6 +36,26 @@ const year = 2026;
     <meta property="og:image" content="https://raw.githubusercontent.com/DanielMevit/eqho/main/logo/logo_horizontal_dark.png" />
     <meta property="og:site_name" content="Eqho" />
 
+    <!-- Structured data for search engines + AI scrapers (SoftwareApplication) -->
+    <script type="application/ld+json" is:inline>
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Eqho",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Windows 10 (64-bit), Windows 11 (64-bit), macOS, Linux",
+        "description": "Free, offline voice-to-text dictation powered by OpenAI's Whisper. Press a hotkey, speak, and your words appear in any app — 100% local, GPU-accelerated on NVIDIA, AMD, and Intel.",
+        "url": "https://danielmevit.github.io/eqho/",
+        "downloadUrl": "https://github.com/DanielMevit/eqho/releases",
+        "softwareVersion": "0.8.2",
+        "author": { "@type": "Person", "name": "Daniel Mevit" },
+        "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "keywords": "speech to text, voice typing, offline dictation, OpenAI Whisper, whisper.cpp, faster-whisper, Vulkan speech to text, AMD GPU dictation, AMD Radeon voice to text, Intel Arc dictation, cross-vendor GPU transcription, runs on any GPU, private speech to text, local voice recognition, no-cloud transcription"
+      }
+    </script>
+
     <style>
       :root {
         /* GitHub Dark Theme Palette */
@@ -414,6 +434,7 @@ const year = 2026;
             <summary>Windows (Recommended)</summary>
             <div class="accordion-content">
               <p>Grab the <code>Eqho-Setup-&lt;version&gt;.exe</code> from the <strong><a href="https://github.com/DanielMevit/eqho/releases">Releases page</a></strong>, double-click, and you are done. Prefer no installer? Use the portable <code>.zip</code>.</p>
+              <p><strong>Requirements:</strong> 64-bit Windows 10 or 11. There is no 32-bit build — the on-device AI models require a 64-bit system.</p>
               <p><em>Note: Unsigned binaries will show a SmartScreen prompt on first run — click "More info" → "Run anyway".</em></p>
             </div>
           </details>
@@ -484,6 +505,13 @@ python run.py</code></pre>
           </details>
 
           <details class="accordion-item">
+            <summary>What are the system requirements?</summary>
+            <div class="accordion-content">
+              <p><strong>Windows:</strong> 64-bit Windows 10 or 11 — there is no 32-bit build, because the local AI models require a 64-bit system. <strong>macOS</strong> and <strong>Linux</strong> (X11) are also supported. A GPU (NVIDIA, AMD, or Intel) is recommended for speed, but Eqho falls back to CPU. The first run downloads your chosen speech model (~1.5 GB for the default).</p>
+            </div>
+          </details>
+
+          <details class="accordion-item">
             <summary>How accurate is the transcription?</summary>
             <div class="accordion-content">
               <p>It utilizes Whisper-class accuracy, which is the current state of the art for open speech recognition. You can easily pick a larger model from the settings for tougher audio environments.</p>
@@ -503,7 +531,7 @@ python run.py</code></pre>
     
     <footer>
       <p>&copy; {year} {author}. Eqho is licensed under the <a href="https://github.com/DanielMevit/eqho/blob/main/LICENSE">GNU AGPL-3.0 License</a>.</p>
-      <p>Keywords: speech to text, voice typing, OpenAI Whisper, whisper.cpp, offline dictation, Vulkan speech to text, AMD &amp; Intel GPU dictation, runs on any GPU.</p>
+      <p><a href="/eqho/changelog/">Changelog</a> · <a href="https://github.com/DanielMevit/eqho">GitHub</a> · <a href="https://github.com/DanielMevit/eqho/releases">Releases</a></p>
     </footer>
 
     <!-- Script to handle Copy to Clipboard -->

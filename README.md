@@ -66,7 +66,7 @@ Distil models are English-optimized; for other languages pick `large-v3-turbo` o
 
 ## Requirements
 
-- Windows 10/11 (primary), Linux X11, or macOS
+- **64-bit** Windows 10/11 (primary), Linux X11, or macOS — there is no 32-bit build; the on-device AI models require a 64-bit system
 - Python 3.10+ (only when running from source)
 - Optional GPU acceleration — **auto-detected, no configuration**:
   - **NVIDIA** — [CUDA Toolkit 12.x](https://developer.nvidia.com/cuda-downloads) for ~5× faster transcription (`winget install Nvidia.CUDA`)
