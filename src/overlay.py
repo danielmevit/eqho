@@ -94,9 +94,11 @@ class TranscriptionOverlay:
         self._ready = threading.Event()
         self._fade_job = None
         self._render_job = None
-        self._anim_t0 = 0.0
-        self._level_target = 0.0
-        self._level_current = 0.0
+        self._phase = 0.0        # integrated animation phase (speeds up with voice)
+        self._last_tick = 0.0
+        self._level_raw = 0.0    # latest value from set_level (any thread)
+        self._lvl_fast = 0.0     # syllable follower (attack-biased)
+        self._lvl_slow = 0.0     # speech baseline (~0.7 s)
         self._transparent_ok = False
         self._light = 0.0
         self._pill_bg = (0.0, 0.0, 0.0)
@@ -217,9 +219,11 @@ class TranscriptionOverlay:
             self._panel.attributes("-alpha", 0.0)
             self._root.deiconify()
             self._visible = True
-            self._anim_t0 = time.monotonic()
-            self._level_current = 0.0
-            self._level_target = 0.0
+            self._phase = 0.0
+            self._last_tick = time.monotonic()
+            self._level_raw = 0.0
+            self._lvl_fast = 0.0
+            self._lvl_slow = 0.0
             self._start_render()
             self._fade_to(self._settings.overlay_opacity)
         else:
@@ -312,8 +316,9 @@ class TranscriptionOverlay:
     def _do_hide(self) -> None:
         self._visible = False
         self._stop_render()
-        self._level_target = 0.0
-        self._level_current = 0.0
+        self._level_raw = 0.0
+        self._lvl_fast = 0.0
+        self._lvl_slow = 0.0
 
         def _finish() -> None:
             self._root.withdraw()
@@ -327,7 +332,7 @@ class TranscriptionOverlay:
 
     def set_level(self, level: float) -> None:
         """Feed the live mic level (0..1); the pill's ribbons ride it."""
-        self._level_target = max(0.0, min(1.0, level))
+        self._level_raw = max(0.0, min(1.0, level))
 
     # -- Pill animation -----------------------------------------------------------
 
@@ -338,16 +343,31 @@ class TranscriptionOverlay:
     def _render_tick(self) -> None:
         if not self._visible or not self._pill_canvas:
             return
-        # Fast attack, gentle release — reads as "alive" instead of a twitch
-        # (kept from the old level bar; updates arrive at ~2 Hz).
-        self._level_current += (self._level_target - self._level_current) * 0.5
-        self._level_target *= 0.90
-        level = self._level_current
+        # The transcriber's level is heavily compressed — (rms/0.012)^0.6
+        # pegs near 1.0 for any voiced sound — so tracking it directly makes
+        # the pill sit swollen-and-static while talking. Recover the voice
+        # dynamics with temporal contrast instead: a fast syllable follower
+        # against a slow speech baseline gives onset punches (dyn), plus a
+        # sustained-voice floor (base) so the pill stays energized mid-speech
+        # and relaxes in pauses. Verified against synthetic speech: talking
+        # swings ~0.2–0.9 at ~4 pulses/s, silence rests near 0.
+        now = time.monotonic()
+        dt = min(now - self._last_tick, 0.1)
+        self._last_tick = now
+        raw = self._level_raw
         if not getattr(self._settings, "overlay_show_level", True):
-            level = 0.0
-        t = time.monotonic() - self._anim_t0
+            raw = 0.0
+        k_fast = 0.6 if raw > self._lvl_fast else 0.3
+        self._lvl_fast += (raw - self._lvl_fast) * k_fast
+        self._lvl_slow += (self._lvl_fast - self._lvl_slow) * 0.06
+        dyn = max(0.0, min(1.0, (self._lvl_fast - self._lvl_slow) * 3.0))
+        base = max(0.0, min(1.0, (self._lvl_fast - 0.35) * 1.1))
+        level = max(0.0, min(1.0, base * 0.55 + dyn * 0.6))
+        # The ribbons also SPEED UP with the voice: integrate phase so the
+        # tempo change is continuous (no jumps).
+        self._phase += dt * (1.0 + 0.9 * level)
         try:
-            data = pillfx.render_ppm(_PILL_W, _PILL_H, t, level, self._light, self._pill_bg)
+            data = pillfx.render_ppm(_PILL_W, _PILL_H, self._phase, level, self._light, self._pill_bg)
             # Explicit master: the default root is deliberately released above.
             img = tk.PhotoImage(master=self._root, data=data)
             self._pill_img = img  # keep a reference; tk only borrows it

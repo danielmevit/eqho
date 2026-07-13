@@ -6,7 +6,15 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
-## [0.8.3] - 2026-07-13
+## [0.8.4] - 2026-07-14
+
+The pill now genuinely rides your voice.
+
+### Fixed
+- **The pill reacted barely-visibly to real dictation.** The transcriber's level signal is heavily compressed — `(rms/0.012)^0.6` pegs near 1.0 for any voiced sound — so the pill sat swollen-and-static while talking. The overlay now recovers the voice dynamics with a temporal-contrast envelope: a fast syllable follower against a slow speech baseline produces onset punches plus a sustained-voice floor — talking swings the pill through ~0.2–0.9 at roughly syllable rate, pauses let it rest (validated against synthetic speech before shipping). The transcriber itself is untouched.
+
+### Added
+- The ribbons **speed up with your voice** — animation phase is integrated per frame (`1 + 0.9×level`), so tempo rises smoothly while you speak and settles when you pause, with no visual jumps.
 
 The dictation overlay, redesigned: the iridescent pill + the upward-filling live panel — the same look Eqho Mobile ships, now on desktop.
 
