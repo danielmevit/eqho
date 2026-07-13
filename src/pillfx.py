@@ -66,8 +66,10 @@ def render_rgb(
         """mix(col, target, factor) with a per-pixel (h,w,3) factor."""
         return col + (target - col) * factor
 
-    body = _mix(v3(0.055, 0.050, 0.170), v3(0.965, 0.965, 0.985), light)
-    tint = _mix(v3(0.160, 0.130, 0.380), v3(0.900, 0.950, 0.860), light)
+    # Brand-blue palette (theme ACCENT #58a6ff / light #0969da): navy body,
+    # indigo drift, azure + ice ribbons, electric arc — blues only, no purple.
+    body = _mix(v3(0.035, 0.060, 0.140), v3(0.955, 0.970, 0.995), light)
+    tint = _mix(v3(0.080, 0.170, 0.420), v3(0.800, 0.890, 0.990), light)
 
     wx = uvx + 0.22 * np.sin(1.7 * uvy + t * 0.33)
     wy = uvy + 0.22 * np.sin(1.9 * uvx + t * 0.27)
@@ -81,14 +83,14 @@ def render_rgb(
     c1 = amp * np.sin(uvx * 2.6 - t * 1.15) + amp * 0.45 * np.sin(uvx * 4.9 + t * 0.70)
     y1 = uvy - c1
     b1 = np.stack([_gs(y1 - fr, th), _gs(y1, th), _gs(y1 + fr, th)], axis=-1)
-    col = col + b1 * v3(0.560, 0.420, 0.980) * (1.0 - light)
-    col = paint(col, v3(0.630, 0.570, 0.880), b1 * (light * 0.60))
+    col = col + b1 * v3(0.250, 0.550, 1.000) * ((1.0 - light) * 0.80)
+    col = paint(col, v3(0.100, 0.420, 0.850), b1 * (light * 0.78))
 
     c2 = amp * 0.75 * np.sin(uvx * 3.4 + t * 0.90 + 1.7) - r * 0.16
     y2 = uvy - c2
     b2 = np.stack([_gs(y2 + fr, th * 0.55), _gs(y2, th * 0.55), _gs(y2 - fr, th * 0.55)], axis=-1)
-    col = col + b2 * v3(0.250, 0.780, 0.980) * ((1.0 - light) * 0.45)
-    col = paint(col, v3(0.550, 0.780, 0.880), b2 * (light * 0.45))
+    col = col + b2 * v3(0.450, 0.850, 1.000) * ((1.0 - light) * 0.35)
+    col = paint(col, v3(0.150, 0.620, 0.920), b2 * (light * 0.60))
 
     ad = d + r * 0.24
     aw = r * 0.085
@@ -96,22 +98,23 @@ def render_rgb(
     lower = lower * lower * (3.0 - 2.0 * lower)
     pulse = 0.6 + 0.4 * np.sin(t * 0.8 + uvx * 1.7)
     arc = np.stack([_gs(ad - fr, aw), _gs(ad, aw), _gs(ad + fr, aw)], axis=-1)
-    col = col + arc * v3(0.950, 0.350, 0.750) * ((lower * pulse)[..., None]) * (1.0 - light) * 0.80
-    col = paint(col, v3(0.760, 0.700, 0.880), arc * ((lower * pulse)[..., None]) * (light * 0.30))
+    col = col + arc * v3(0.250, 0.450, 1.000) * ((lower * pulse)[..., None]) * (1.0 - light) * 0.85
+    col = paint(col, v3(0.250, 0.500, 0.920), arc * ((lower * pulse)[..., None]) * (light * 0.42))
 
     fres = (1.0 - np.clip(n_z, 0.0, 1.0)) ** 2.3
-    col = col + v3(0.400, 0.420, 1.000) * (fres * (1.0 - light) * 0.85 * (0.7 + 0.5 * lvl))[..., None]
-    col = paint(col, v3(0.780, 0.800, 0.940), (fres * light * 0.45)[..., None])
+    col = col + v3(0.300, 0.550, 1.000) * (fres * (1.0 - light) * 0.65 * (0.7 + 0.5 * lvl))[..., None]
+    col = paint(col, v3(0.450, 0.620, 0.920), (fres * light * 0.55)[..., None])
 
     ld = np.array([-0.45, -0.60, 0.66], dtype=np.float32)
     ld /= np.linalg.norm(ld)
     ndl = np.maximum(n_x * ld[0] + n_y * ld[1] + n_z * ld[2], 0.0)
-    sheen = (ndl ** 64.0) * 0.55 + (ndl ** 6.0) * 0.15
+    sheen = (ndl ** 64.0) * 0.42 + (ndl ** 6.0) * 0.12
     col = col + sheen[..., None] * v3(1.0, 0.97, 0.98) * _mix(1.0, 0.6, light)
 
-    col = paint(col, v3(0.975, 0.975, 0.990), light * 0.16)
+    # Light theme stays vibrant — only a whisper of frost (0.16 washed it out).
+    col = paint(col, v3(0.975, 0.975, 0.990), light * 0.06)
 
-    mapped = 1.0 - np.exp(-col * 1.4)
+    mapped = 1.0 - np.exp(-col * 1.25)
     col = _mix(mapped, np.clip(col, 0.0, 1.0), light)
 
     aa = 1.5 / h

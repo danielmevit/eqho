@@ -6,7 +6,15 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
-## [0.8.4] - 2026-07-14
+## [0.8.5] - 2026-07-14
+
+The pill goes on-brand: blue, vibrant, and smaller.
+
+### Changed
+- **Brand-blue palette** (anchored on theme `ACCENT #58a6ff` / light `#0969da`) replaces the purple look in both themes: navy body, indigo drift, azure main ribbon, ice-cyan secondary, electric-blue caustic arc, blue rim — multiple blue shades, no purple. Dark additive gains rebalanced so the shades stay saturated and separated instead of piling into a pale haze.
+- **Light theme pops now** — deeper pigment ribbons at stronger mix, frost wash cut from 0.16 → 0.06; vibrancy comparable to dark.
+- **Pill resized** ~20% shorter and ~30% narrower (400×64 → 280×51), per Daniel.
+- Mirrored 1:1 in Eqho Mobile v0.5.2 (AGSL shader + gradient fallback).
 
 The pill now genuinely rides your voice.
 
