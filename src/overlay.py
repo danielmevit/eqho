@@ -1,16 +1,30 @@
-"""Floating transparent overlay showing real-time partial transcription.
+"""Dictation overlay: the iridescent pill + the live-transcription panel.
 
-Uses a frameless tkinter window. Theme-aware colors from theme.py.
-Rounded corners via Windows 11 DWM API (DWMWA_WINDOW_CORNER_PREFERENCE).
+Two frameless tkinter windows (one tk thread, marshaled via `after`):
+
+- **The pill** — a small capsule at the work-area edge (bottom-center by
+  default) running the iridescent fluid animation from ``pillfx``: it breathes,
+  its ribbons ride the live mic level, and it doubles as the "listening"
+  indicator. On Windows the window is color-keyed transparent so the capsule
+  floats free of any plate.
+- **The panel** — a rounded rectangle stacked toward screen center from the
+  pill (above it for bottom anchors), filling *upward* with the words as the
+  partial transcription grows — the Gemini-style dictation look. Hidden until
+  there are real words.
+
+Theme-aware via theme.py; rounded corners via the Windows 11 DWM API.
+Public surface is unchanged: start/show/update_text/set_level/hide/shutdown.
 """
 
 import ctypes
 import logging
 import sys
 import threading
+import time
 import tkinter as tk
 from typing import Optional
 
+from . import pillfx
 from .fonts import FONT_FAMILY
 from .settings import Settings
 from .theme import get_colors
@@ -18,26 +32,25 @@ from .theme import get_colors
 log = logging.getLogger(__name__)
 
 _PADDING_X = 18
-_PADDING_Y = 10
-_MARGIN = 24  # distance from the work-area edge (was 60 — floated too far in)
-_MIN_WIDTH = 300
-_PULSE_MS = 650      # recording-dot pulse interval
-_FADE_STEPS = 5      # fade in/out animation steps
-_FADE_INTERVAL = 25  # ms between fade steps
-_MAX_TEXT_CHARS = 220  # show only the TAIL of long dictations (latest words win)
+_PADDING_Y = 12
+_MARGIN = 24            # distance from the work-area edge
+_GAP = 10               # space between the pill and the panel
+_PILL_W = 400
+_PILL_H = 64
+_PANEL_MAX_W = 640
+_WRAP_LENGTH = 560
+_FADE_STEPS = 5
+_FADE_INTERVAL = 25     # ms between fade steps
+_FRAME_MS = 40          # pill animation cadence (~25 fps)
+_MAX_TEXT_CHARS = 220   # show only the TAIL of long dictations (latest words win)
+_PLACEHOLDER = "Listening..."
+_TRANSPARENT_KEY = "#010203"  # color-key for the pill window (Windows only)
 
 
 def _tail_text(text: str) -> str:
     if len(text) <= _MAX_TEXT_CHARS:
         return text
     return "…" + text[-(_MAX_TEXT_CHARS - 1):]
-
-
-def _blend_hex(c1: str, c2: str, t: float) -> str:
-    """Linear blend of two #rrggbb colors (t=0 → c1, t=1 → c2)."""
-    a = [int(c1[i:i + 2], 16) for i in (1, 3, 5)]
-    b = [int(c2[i:i + 2], 16) for i in (1, 3, 5)]
-    return "#%02x%02x%02x" % tuple(round(x + (y - x) * t) for x, y in zip(a, b))
 
 
 def _apply_rounded_corners(hwnd: int) -> None:
@@ -56,25 +69,39 @@ def _apply_rounded_corners(hwnd: int) -> None:
         pass
 
 
+def _round_window(widget: tk.Misc) -> None:
+    try:
+        hwnd = ctypes.windll.user32.GetParent(widget.winfo_id())
+        _apply_rounded_corners(hwnd)
+    except Exception:
+        pass
+
+
 class TranscriptionOverlay:
-    """A small floating bar showing live transcription text."""
+    """The floating pill + upward-filling live transcription panel."""
 
     def __init__(self, settings: Settings):
         self._settings = settings
-        self._root: Optional[tk.Tk] = None
-        self._label: Optional[tk.Label] = None
-        self._status_dot: Optional[tk.Canvas] = None
+        self._root: Optional[tk.Tk] = None           # the pill window
+        self._panel: Optional[tk.Toplevel] = None    # the text panel
+        self._panel_label: Optional[tk.Label] = None
+        self._pill_canvas: Optional[tk.Canvas] = None
+        self._pill_item = None
+        self._pill_img: Optional[tk.PhotoImage] = None
         self._thread: Optional[threading.Thread] = None
         self._visible = False
+        self._panel_shown = False
         self._ready = threading.Event()
-        self._pulse_job = None
-        self._pulse_phase = 0
         self._fade_job = None
-        self._level_canvas: Optional[tk.Canvas] = None
-        self._level_rect = None
-        self._level_job = None
+        self._render_job = None
+        self._anim_t0 = 0.0
         self._level_target = 0.0
         self._level_current = 0.0
+        self._transparent_ok = False
+        self._light = 0.0
+        self._pill_bg = (0.0, 0.0, 0.0)
+        self._pill_x = 0
+        self._pill_y = 0
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -83,14 +110,7 @@ class TranscriptionOverlay:
         self._thread.start()
         self._ready.wait(timeout=3)
 
-    def _get_theme_colors(self) -> tuple[str, str, str]:
-        """Return (bg, fg, accent) based on current theme setting."""
-        colors = get_colors(self._settings.theme)
-        return colors.overlay_bg, colors.overlay_fg, colors.overlay_accent
-
     def _run_tk(self) -> None:
-        bg, fg, accent = self._get_theme_colors()
-
         self._root = tk.Tk()
         # CRITICAL: release tkinter's process-wide "default root" claim.
         # The overlay's Tk is created first (on THIS thread); if it stays the
@@ -98,57 +118,83 @@ class TranscriptionOverlay:
         # an explicit master binds to THIS interpreter — and the dashboard
         # thread then makes cross-thread Tcl calls that intermittently
         # DEADLOCK (the model-switch freeze; see eqho.log thread dumps).
+        # Consequence here: every tk object below needs an explicit master.
         tk._default_root = None
         self._root.title("Eqho")
         self._root.overrideredirect(True)
         self._root.attributes("-topmost", True)
         self._root.attributes("-alpha", self._settings.overlay_opacity)
 
-        self._root.configure(bg=bg)
+        # Color-key transparency lets the capsule float without a plate
+        # (Windows layered windows only; elsewhere the pill sits on a
+        # theme-colored rounded plate).
+        if sys.platform == "win32":
+            try:
+                self._root.configure(bg=_TRANSPARENT_KEY)
+                self._root.attributes("-transparentcolor", _TRANSPARENT_KEY)
+                self._transparent_ok = True
+            except Exception:
+                self._transparent_ok = False
 
-        # Apply rounded corners (Windows 11+; no-op elsewhere)
-        self._root.update_idletasks()
-        try:
-            hwnd = ctypes.windll.user32.GetParent(self._root.winfo_id())
-            _apply_rounded_corners(hwnd)
-        except Exception:
-            pass
-
-        frame = tk.Frame(self._root, bg=bg, padx=_PADDING_X, pady=_PADDING_Y)
-        frame.pack(fill=tk.BOTH, expand=True)
-
-        self._status_dot = tk.Canvas(
-            frame, width=10, height=10, bg=bg, highlightthickness=0,
+        self._pill_canvas = tk.Canvas(
+            self._root,
+            width=_PILL_W,
+            height=_PILL_H,
+            highlightthickness=0,
+            bd=0,
         )
-        self._status_dot.create_oval(1, 1, 9, 9, fill=accent, outline="", tags="dot")
-        self._status_dot.pack(side=tk.LEFT, padx=(0, 8))
+        self._pill_canvas.pack()
+        self._pill_item = self._pill_canvas.create_image(0, 0, anchor="nw")
 
-        self._label = tk.Label(
-            frame,
-            text="Listening...",
-            font=(FONT_FAMILY, self._settings.overlay_font_size),
-            fg=fg,
-            bg=bg,
+        self._panel = tk.Toplevel(self._root)
+        self._panel.overrideredirect(True)
+        self._panel.attributes("-topmost", True)
+        panel_frame = tk.Frame(self._panel, padx=_PADDING_X, pady=_PADDING_Y)
+        panel_frame.pack(fill=tk.BOTH, expand=True)
+        self._panel_label = tk.Label(
+            panel_frame,
+            text="",
             anchor="w",
-            justify="left",  # multi-line text aligns left, not centered
-            wraplength=600,
+            justify="left",
+            wraplength=_WRAP_LENGTH,
         )
-        self._label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._panel_label.pack(fill=tk.BOTH, expand=True)
+        self._panel.withdraw()
 
-        # Audio-level line: short accent bar at the bottom edge that moves
-        # with the mic level — subtle, never covering the text
-        self._level_canvas = tk.Canvas(
-            self._root, height=3, bg=bg, highlightthickness=0,
-        )
-        self._level_rect = self._level_canvas.create_rectangle(
-            0, 0, 0, 3, fill=accent, outline="",
-        )
+        self._refresh_theme()
+
+        self._root.update_idletasks()
+        if not self._transparent_ok:
+            _round_window(self._root)
+        _round_window(self._panel)
 
         self._root.withdraw()
         self._ready.set()
         self._root.mainloop()
 
-    def show(self, text: str = "Listening...") -> None:
+    def _refresh_theme(self) -> None:
+        colors = get_colors(self._settings.theme)
+        bg, fg = colors.overlay_bg, colors.overlay_fg
+        r, g, b = pillfx.hex_rgb01(bg)
+        self._light = 1.0 if (0.2126 * r + 0.7152 * g + 0.0722 * b) > 0.5 else 0.0
+        if self._transparent_ok:
+            self._pill_bg = pillfx.hex_rgb01(_TRANSPARENT_KEY)
+            self._pill_canvas.configure(bg=_TRANSPARENT_KEY)
+        else:
+            self._pill_bg = (r, g, b)
+            self._root.configure(bg=bg)
+            self._pill_canvas.configure(bg=bg)
+        self._panel.configure(bg=bg)
+        self._panel_label.master.configure(bg=bg)
+        self._panel_label.config(
+            bg=bg,
+            fg=fg,
+            font=(FONT_FAMILY, self._settings.overlay_font_size),
+        )
+
+    # -- Show / hide --------------------------------------------------------------
+
+    def show(self, text: str = _PLACEHOLDER) -> None:
         if not self._settings.overlay_enabled:
             return
         if not self._root:
@@ -159,52 +205,32 @@ class TranscriptionOverlay:
             pass
 
     def _do_show(self, text: str) -> None:
-        # Update theme colors on each show (in case theme changed)
-        bg, fg, accent = self._get_theme_colors()
-        self._root.configure(bg=bg)
-        self._label.config(
-            text=_tail_text(text) if text else "Listening...",
-            fg=fg, bg=bg,
-            font=(FONT_FAMILY, self._settings.overlay_font_size),
-        )
-        self._status_dot.configure(bg=bg)
-        self._status_dot.itemconfig("dot", fill=accent)
-        self._label.master.configure(bg=bg)
+        self._refresh_theme()
 
-        show_level = getattr(self._settings, "overlay_show_level", True)
-        if show_level:
-            self._level_canvas.configure(bg=bg)
-            self._level_canvas.itemconfig(self._level_rect, fill=accent)
-            self._level_canvas.pack(side=tk.BOTTOM, fill=tk.X,
-                                    padx=_PADDING_X, pady=(0, 4))
-        else:
-            self._level_canvas.pack_forget()
-
-        self._root.update_idletasks()
-
-        w = max(_MIN_WIDTH, self._label.winfo_reqwidth() + 2 * _PADDING_X + 26)
-        h = self._label.winfo_reqheight() + 2 * _PADDING_Y + (7 if show_level else 0)
         sw = self._root.winfo_screenwidth()
         sh = self._root.winfo_screenheight()
-        x, y = self._calc_position(w, h, sw, sh)
-        self._root.geometry(f"{w}x{h}+{x}+{y}")
+        self._pill_x, self._pill_y = self._calc_position(_PILL_W, _PILL_H, sw, sh)
+        self._root.geometry(f"{_PILL_W}x{_PILL_H}+{self._pill_x}+{self._pill_y}")
 
         if not self._visible:
             self._root.attributes("-alpha", 0.0)
+            self._panel.attributes("-alpha", 0.0)
             self._root.deiconify()
             self._visible = True
+            self._anim_t0 = time.monotonic()
+            self._level_current = 0.0
+            self._level_target = 0.0
+            self._start_render()
             self._fade_to(self._settings.overlay_opacity)
-            self._start_pulse()
-            if show_level:
-                self._start_level_animation()
         else:
-            # Update opacity in case the setting changed
             self._root.attributes("-alpha", self._settings.overlay_opacity)
 
+        self._set_panel_text(text)
+
     def _calc_position(self, w: int, h: int, sw: int, sh: int) -> tuple[int, int]:
-        """Overlay x, y from the position preference, anchored to the WORK
-        AREA (excludes the taskbar) so bottom-center sits exactly where it
-        should instead of floating above a taskbar-sized gap."""
+        """Pill x, y from the position preference, anchored to the WORK AREA
+        (excludes the taskbar) so bottom-center sits exactly where it should
+        instead of floating above a taskbar-sized gap."""
         left, top, right, bottom = 0, 0, sw, sh
         try:
             from . import oskit
@@ -228,31 +254,52 @@ class TranscriptionOverlay:
                 return right - w - margin, bottom - h - margin
         return cx, bottom - h - margin  # bottom-center (default)
 
+    def _anchored_top(self) -> bool:
+        return (self._settings.overlay_position or "").startswith("top")
+
     def update_text(self, text: str) -> None:
         if not self._root:
             return
         try:
-            self._root.after(0, self._do_update, text)
+            self._root.after(0, self._set_panel_text, text)
         except Exception:
             pass
 
-    def _do_update(self, text: str) -> None:
-        if not self._label:
+    def _set_panel_text(self, text: str) -> None:
+        """Show/grow the panel for real words; hide it for the placeholder.
+        The panel is bottom-anchored relative to the pill, so extra lines make
+        it fill UPWARD — the window rises as the text grows."""
+        if not self._visible or not self._panel:
             return
-        self._label.config(text=_tail_text(text) if text else "Listening...")
-        if self._visible:
-            # Grow/reposition as lines wrap so the box always fits the text
-            try:
-                self._root.update_idletasks()
-                w = max(_MIN_WIDTH, self._label.winfo_reqwidth() + 2 * _PADDING_X + 26)
-                show_level = getattr(self._settings, "overlay_show_level", True)
-                h = self._label.winfo_reqheight() + 2 * _PADDING_Y + (7 if show_level else 0)
-                sw = self._root.winfo_screenwidth()
-                sh = self._root.winfo_screenheight()
-                x, y = self._calc_position(w, h, sw, sh)
-                self._root.geometry(f"{w}x{h}+{x}+{y}")
-            except Exception:
-                pass
+        content = (text or "").strip()
+        if not content or content == _PLACEHOLDER:
+            if self._panel_shown:
+                self._panel.withdraw()
+                self._panel_shown = False
+            return
+        try:
+            self._panel_label.config(text=_tail_text(content))
+            self._panel.update_idletasks()
+            w = min(
+                max(self._panel_label.winfo_reqwidth() + 2 * _PADDING_X, _PILL_W),
+                _PANEL_MAX_W,
+            )
+            h = self._panel_label.winfo_reqheight() + 2 * _PADDING_Y
+            pill_cx = self._pill_x + _PILL_W // 2
+            x = pill_cx - w // 2
+            if self._anchored_top():
+                y = self._pill_y + _PILL_H + _GAP
+            else:
+                y = self._pill_y - _GAP - h
+            self._panel.geometry(f"{w}x{h}+{x}+{y}")
+            if not self._panel_shown:
+                self._panel.attributes("-alpha", float(self._root.attributes("-alpha")))
+                self._panel.deiconify()
+                self._panel_shown = True
+            else:
+                self._panel.attributes("-alpha", float(self._root.attributes("-alpha")))
+        except Exception:
+            pass
 
     def hide(self) -> None:
         if not self._root:
@@ -263,75 +310,61 @@ class TranscriptionOverlay:
             pass
 
     def _do_hide(self) -> None:
-        self._stop_pulse()
-        self._stop_level_animation()
         self._visible = False
-        self._fade_to(0.0, on_done=self._root.withdraw)
+        self._stop_render()
+        self._level_target = 0.0
+        self._level_current = 0.0
 
-    # -- Audio level indicator ---------------------------------------------------
+        def _finish() -> None:
+            self._root.withdraw()
+            self._panel.withdraw()
+            self._panel_shown = False
+            self._panel_label.config(text="")
+
+        self._fade_to(0.0, on_done=_finish)
+
+    # -- Audio level --------------------------------------------------------------
 
     def set_level(self, level: float) -> None:
-        """Feed the live mic level (0..1); the bar eases toward it."""
+        """Feed the live mic level (0..1); the pill's ribbons ride it."""
         self._level_target = max(0.0, min(1.0, level))
 
-    def _start_level_animation(self) -> None:
-        self._stop_level_animation()
-        self._level_current = 0.0
-        self._level_target = 0.0
-        self._level_tick()
+    # -- Pill animation -----------------------------------------------------------
 
-    def _level_tick(self) -> None:
-        if not self._visible or not self._level_canvas:
+    def _start_render(self) -> None:
+        self._stop_render()
+        self._render_tick()
+
+    def _render_tick(self) -> None:
+        if not self._visible or not self._pill_canvas:
             return
-        # Ease toward the target, and let the target itself breathe down so
-        # the bar falls gently between the 2 Hz level updates
         # Fast attack, gentle release — reads as "alive" instead of a twitch
+        # (kept from the old level bar; updates arrive at ~2 Hz).
         self._level_current += (self._level_target - self._level_current) * 0.5
         self._level_target *= 0.90
+        level = self._level_current
+        if not getattr(self._settings, "overlay_show_level", True):
+            level = 0.0
+        t = time.monotonic() - self._anim_t0
         try:
-            width = self._level_canvas.winfo_width()
-            bar_w = int(width * 0.9 * self._level_current)
-            self._level_canvas.coords(self._level_rect, 0, 0, bar_w, 3)
+            data = pillfx.render_ppm(_PILL_W, _PILL_H, t, level, self._light, self._pill_bg)
+            # Explicit master: the default root is deliberately released above.
+            img = tk.PhotoImage(master=self._root, data=data)
+            self._pill_img = img  # keep a reference; tk only borrows it
+            self._pill_canvas.itemconfig(self._pill_item, image=img)
         except Exception:
             return
-        self._level_job = self._root.after(60, self._level_tick)
+        self._render_job = self._root.after(_FRAME_MS, self._render_tick)
 
-    def _stop_level_animation(self) -> None:
-        if self._level_job is not None:
+    def _stop_render(self) -> None:
+        if self._render_job is not None:
             try:
-                self._root.after_cancel(self._level_job)
+                self._root.after_cancel(self._render_job)
             except Exception:
                 pass
-            self._level_job = None
-        self._level_target = 0.0
-        self._level_current = 0.0
+            self._render_job = None
 
-    # -- Animations -------------------------------------------------------------
-
-    def _start_pulse(self) -> None:
-        self._stop_pulse()
-        self._pulse_phase = 0
-        self._pulse_tick()
-
-    def _pulse_tick(self) -> None:
-        if not self._visible or not self._status_dot:
-            return
-        bg, _fg, accent = self._get_theme_colors()
-        self._pulse_phase = (self._pulse_phase + 1) % 2
-        color = accent if self._pulse_phase == 0 else _blend_hex(accent, bg, 0.55)
-        try:
-            self._status_dot.itemconfig("dot", fill=color)
-        except Exception:
-            return
-        self._pulse_job = self._root.after(_PULSE_MS, self._pulse_tick)
-
-    def _stop_pulse(self) -> None:
-        if self._pulse_job is not None:
-            try:
-                self._root.after_cancel(self._pulse_job)
-            except Exception:
-                pass
-            self._pulse_job = None
+    # -- Fade ---------------------------------------------------------------------
 
     def _fade_to(self, target: float, on_done=None) -> None:
         if self._fade_job is not None:
@@ -346,15 +379,20 @@ class TranscriptionOverlay:
             current = target
         delta = (target - current) / _FADE_STEPS
 
+        def _apply(alpha: float) -> None:
+            self._root.attributes("-alpha", alpha)
+            if self._panel_shown:
+                self._panel.attributes("-alpha", alpha)
+
         def _step(i: int = 1) -> None:
             self._fade_job = None
             try:
                 if i >= _FADE_STEPS:
-                    self._root.attributes("-alpha", target)
+                    _apply(target)
                     if on_done:
                         on_done()
                     return
-                self._root.attributes("-alpha", current + delta * i)
+                _apply(current + delta * i)
             except Exception:
                 return
             self._fade_job = self._root.after(_FADE_INTERVAL, _step, i + 1)
@@ -362,8 +400,34 @@ class TranscriptionOverlay:
         _step()
 
     def shutdown(self) -> None:
-        if self._root:
+        root = self._root
+        if not root:
+            return
+
+        def _destroy() -> None:
+            # Free every Tcl-backed object ON the tk thread. If the last
+            # PhotoImage/widget reference instead dies with this overlay
+            # object on another thread, CPython runs their __del__ against a
+            # dead/foreign interpreter → "main thread is not in main loop" +
+            # Tcl_AsyncDelete noise at app exit.
+            self._stop_render()
+            if self._pill_canvas is not None:
+                try:
+                    self._pill_canvas.itemconfig(self._pill_item, image="")
+                except Exception:
+                    pass
+            self._pill_img = None
+            self._pill_canvas = None
+            self._pill_item = None
+            self._panel_label = None
+            self._panel = None
+            self._root = None
             try:
-                self._root.after(0, self._root.destroy)
+                root.destroy()
             except Exception:
                 pass
+
+        try:
+            root.after(0, _destroy)
+        except Exception:
+            pass

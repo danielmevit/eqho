@@ -6,6 +6,18 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-07-13
+
+The dictation overlay, redesigned: the iridescent pill + the upward-filling live panel — the same look Eqho Mobile ships, now on desktop.
+
+### Added
+- **The pill** (`src/pillfx.py` + overlay rewrite) — the old dot-and-level-bar overlay is now a breathing glass capsule running an iridescent fluid animation (undulating chromatic-fringed ribbons, lower caustic arc, fresnel rim, glassy sheen — translated from the `ref/anim` orbs). The live mic level drives ribbon amplitude, fringe width and breathing. Dark theme = additive indigo glow; light theme = pigment on frosted pearl. Pure numpy → PPM → `tk.PhotoImage`, ~12 ms/frame at 25 fps, no new dependencies. On Windows the pill window is color-keyed transparent, so the capsule floats free of any plate.
+- **The live panel** — partial transcription now lands in a separate rounded panel stacked toward screen center from the pill (above it for bottom anchors), **filling upward** line by line as you speak, Gemini-style. Appears with the first real words, tails long dictations (latest words win), follows theme + `overlay_font_size` + `overlay_opacity`.
+
+### Changed
+- `TranscriptionOverlay` public API unchanged (`start/show/update_text/set_level/hide/shutdown`) — `main.py` needed no changes. `overlay_position` still honored (the pill anchors; the panel stacks toward center). `overlay_show_level=False` now pins the pill's voice reactivity instead of hiding a bar (the idle animation remains).
+- Mirror rule: the pill math lives in both `src/pillfx.py` (desktop) and the mobile AGSL shader (`eqho-mobile` RecordingPill) — tune them together.
+
 ## [0.8.2] - 2026-07-12
 
 Completes and hardware-verifies the dual-engine arc — whisper.cpp/Vulkan (cross-vendor GPU, incl. AMD) now runs and is verified alongside faster-whisper, with a UI engine picker and seamless runtime switching. First release since 0.6.9, so it also carries the v0.7.x–0.8.x work (auto-format, per-app paste rules, mic sensitivity, subprocess model host). (0.9.0 is reserved for a larger milestone.)
