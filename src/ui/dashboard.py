@@ -29,10 +29,6 @@ log = logging.getLogger(__name__)
 # Window dimensions (wider default since the top bar now hosts nav + status)
 WIN_W, WIN_H = 940, 560
 TOPBAR_H = 64
-# Below this top-bar width (unscaled units) the status text would slide under
-# the centered pill — hide it instead of colliding.
-STATUS_MIN_W = 910
-
 # Responsive breakpoints (content area width — full window now, no sidebar)
 BP_2COL = 560   # 2 columns when content >= 560px
 BP_3COL = 900   # 3 columns when content >= 900px
@@ -118,7 +114,7 @@ class Dashboard(ctk.CTkToplevel):
         ctk.set_widget_scaling(self._ui_scale)
         ctk.set_window_scaling(self._ui_scale)
 
-        self.title("Eqho Dashboard")
+        self._refresh_topbar_status()  # title = "Eqho Dashboard — <global settings>"
         self.geometry(f"{WIN_W}x{WIN_H}")
         self.minsize(600, 420)
         self.resizable(True, True)
@@ -225,18 +221,10 @@ class Dashboard(ctk.CTkToplevel):
                 text_color=self._colors.fg_primary,
             ).pack(anchor="w")
 
-        # Right cluster: status line + theme toggle + gear — icons hug each
-        # other and the window edge (Daniel).
+        # Right cluster: theme toggle + gear — icons hug each other and the
+        # window edge (Daniel). The status line lives in the WINDOW TITLE.
         actions = ctk.CTkFrame(self._topbar, fg_color="transparent")
         actions.pack(side="right", padx=(0, SPACING["sm"]))
-
-        from .layout import status_summary
-        self._status_lbl = ctk.CTkLabel(
-            actions, text=status_summary(self._settings),
-            font=font("xs"), text_color=self._colors.fg_muted,
-            fg_color="transparent", anchor="e",
-        )
-        self._status_lbl.pack(side="left", padx=(0, SPACING["sm"]))
 
         # Small CIRCLE buttons, tight together (Daniel: not pill-shaped).
         # CTkButton pads text width, so pin width == height and zero padding.
@@ -269,12 +257,13 @@ class Dashboard(ctk.CTkToplevel):
         # regardless of the logo/actions widths (like the reference).
         #
         # Geometry: fully-round capsules (corner_radius=999 — CTk clamps to
-        # height/2) with a UNIFORM gap between segments and the pill border.
-        # The gap must keep the segments' rectangular canvases inside the
-        # outer curve: corner (g,g) is inside radius R iff (R-g)·√2 ≤ R →
-        # g ≥ 0.293·R.  seg 34 + gap 8 → pill 50, R 25: need g ≥ 7.33. ✓
+        # height/2) with a TIGHT 4px stroke gap (Daniel). Only the END
+        # segments face the outer curve, so they carry a 10px lead-in that
+        # hides inside the capsule's arc: corner (gx,gy) is inside radius R
+        # iff (R-gx)² + (R-gy)² ≤ R². seg 34, gy 4 → pill 42, R 21:
+        # (21-10)² + (21-4)² = 410 ≤ 441. ✓
         self._nav_pill = ctk.CTkFrame(
-            self._topbar, corner_radius=999, height=50,
+            self._topbar, corner_radius=999, height=42,
             fg_color=self._colors.bg_secondary,
             border_width=1, border_color=self._colors.border_subtle,
         )
@@ -283,8 +272,8 @@ class Dashboard(ctk.CTkToplevel):
         self._nav_segments: dict[str, tuple] = {}
         nav_items = (("general", "General"), ("models", "Models"), ("history", "History"))
         for i, (key, label) in enumerate(nav_items):
-            pad_l = 8 if i == 0 else 4
-            pad_r = 8 if i == len(nav_items) - 1 else 4
+            pad_l = 10 if i == 0 else 4
+            pad_r = 10 if i == len(nav_items) - 1 else 4
             self._nav_segments[key] = self._build_nav_segment(
                 self._nav_pill, key, label, padx=(pad_l, pad_r),
             )
@@ -295,34 +284,16 @@ class Dashboard(ctk.CTkToplevel):
         )
         self._topbar_rule.pack(side="top", fill="x")
 
-        # Auto-hide the status line when the bar is too narrow for it to
-        # coexist with the centered pill.
-        self._topbar.bind("<Configure>", self._on_topbar_resize)
-
-    def _on_topbar_resize(self, event=None) -> None:
-        lbl = getattr(self, "_status_lbl", None)
-        if lbl is None:
-            return
-        try:
-            width_units = self._topbar.winfo_width() / max(self._ui_scale, 0.01)
-            visible = bool(lbl.winfo_manager())
-            if width_units < STATUS_MIN_W and visible:
-                lbl.pack_forget()
-            elif width_units >= STATUS_MIN_W and not visible:
-                lbl.pack(side="left", padx=(0, SPACING["sm"]), before=self._theme_btn)
-        except Exception:
-            pass
-
     def _build_nav_segment(self, parent, key: str, label: str, padx=(4, 4)) -> tuple:
         # Fully-round capsule (999 → clamped to height/2); inner padding
         # doubled per Daniel — content gets real breathing room.
         seg = ctk.CTkFrame(parent, corner_radius=999, fg_color=self._colors.bg_secondary, height=34)
-        seg.pack(side="left", padx=padx, pady=8)
+        seg.pack(side="left", padx=padx, pady=4)
         icon_lbl = ctk.CTkLabel(
             seg, text=icon(key), font=icon_font("sm", 4),
             text_color=self._colors.fg_secondary, fg_color=self._colors.bg_secondary,
         )
-        icon_lbl.pack(side="left", padx=(24, 10), pady=4)
+        icon_lbl.pack(side="left", padx=(24, 5), pady=4)
         text_lbl = ctk.CTkLabel(
             seg, text=label, font=font("sm", "bold"),
             text_color=self._colors.fg_secondary, fg_color=self._colors.bg_secondary,
@@ -344,11 +315,12 @@ class Dashboard(ctk.CTkToplevel):
         return (seg, icon_lbl, text_lbl)
 
     def _refresh_topbar_status(self) -> None:
-        """Update the top bar's model·hotkey·language line (tabs call this via
-        ctx after settings changes)."""
+        """The model·hotkey·language line lives in the WINDOW TITLE — the
+        global settings, stamped on the window itself. Tabs call this via
+        ctx.refresh_status after settings changes."""
         try:
             from .layout import status_summary
-            self._status_lbl.configure(text=status_summary(self._settings))
+            self.title(f"Eqho Dashboard — {status_summary(self._settings)}")
         except Exception:
             pass
 
