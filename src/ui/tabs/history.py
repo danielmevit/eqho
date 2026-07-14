@@ -13,7 +13,7 @@ from ..widgets import ghost_button, secondary_button
 
 log = logging.getLogger(__name__)
 
-_PAGE_SIZE = 40
+_PAGE_SIZE = 20
 
 _PERIODS = ("All time", "Today", "Yesterday", "Last 7 days", "Last 30 days")
 
@@ -24,7 +24,7 @@ class HistoryTab(TabBase):
     def __init__(self, ctx):
         super().__init__(ctx)
         self._history = TranscriptHistory()
-        self._search_var = None
+        self._search_entry = None
         self._period_var = None
         self._list_frame = None
         self._search_job = None
@@ -38,10 +38,11 @@ class HistoryTab(TabBase):
         # at pady lg) so all three pages start at an identical height.
         bar.pack(fill="x", padx=SPACING["md"], pady=(SPACING["lg"], SPACING["xs"]))
 
-        self._search_var = self._string_var()
+        # No textvariable: CTkEntry silently DISABLES its placeholder when
+        # one is attached — that's why the grey hint text never showed.
         search = ctk.CTkEntry(
-            bar, textvariable=self._search_var,
-            placeholder_text="Search text or date (2026-07-14)…",
+            bar,
+            placeholder_text="Search transcripts — keywords or a date like 2026-07-14…",
             height=30, corner_radius=RADIUS_SM,
             font=font("sm"),
             fg_color=self._colors.bg_tertiary,
@@ -51,6 +52,7 @@ class HistoryTab(TabBase):
         )
         search.pack(side="left", fill="x", expand=True, padx=(0, SPACING["sm"]))
         search.bind("<KeyRelease>", self._on_search_changed)
+        self._search_entry = search
 
         self._period_var = self._string_var(value=_PERIODS[0])
         self._dropdown(
@@ -91,7 +93,8 @@ class HistoryTab(TabBase):
         for child in self._list_frame.winfo_children():
             child.destroy()
 
-        query = (self._search_var.get() if self._search_var else "").strip().lower()
+        entry = getattr(self, "_search_entry", None)
+        query = (entry.get() if entry else "").strip().lower()
         period = self._period_var.get() if self._period_var else _PERIODS[0]
         entries = self._history.read_all()
         if query:

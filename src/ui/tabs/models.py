@@ -7,7 +7,7 @@ card widgets IN PLACE — never a tab rebuild, which flashed the whole view.
 import customtkinter as ctk
 
 from ...modelstore import is_downloading, start_download, status as download_status
-from ...theme import MODEL_INFO, SPACING, RADIUS_LG, font
+from ...theme import MODEL_INFO, SPACING, RADIUS_LG, RADIUS_SM, font
 from ..layout import TabBase
 from ..widgets import secondary_button
 
@@ -52,10 +52,90 @@ class ModelsTab(TabBase):
             for key in _ML_MODELS:
                 self._build_model_card(tab, key)
 
+        # Engine + storage belong with the models (moved out of General —
+        # they're model infrastructure, not daily-driver settings).
+        if cols >= 2:
+            col0, col1 = self._columns(tab, 2)
+        else:
+            col0 = col1 = tab
+        self._section_label(col0, "INFERENCE ENGINE")
+        card = self._card(col0)
+        self._build_engine_setting(card)
+        self._section_label(col1, "STORAGE")
+        card = self._card(col1)
+        self._build_storage_setting(card)
+
         self._add_bottom_padding(tab)
 
         if self._progress_widgets:
             self._schedule_poll()
+
+    def _build_engine_setting(self, card) -> None:
+        import importlib.util
+
+        control = self._setting_row(
+            card, "Inference Engine", "Auto picks the fastest for your hardware")
+
+        cpp_available = importlib.util.find_spec("pywhispercpp") is not None
+        self._engine_keys = ["auto", "faster-whisper", "whisper.cpp"]
+        self._engine_display_names = [
+            "Auto (recommended)",
+            "faster-whisper (NVIDIA / CPU)",
+            "whisper.cpp (AMD / Intel / CPU)" if cpp_available
+            else "whisper.cpp (not installed)",
+        ]
+        current = self._settings.engine_backend
+        idx = self._engine_keys.index(current) if current in self._engine_keys else 0
+        self._engine_var = self._string_var(value=self._engine_display_names[idx])
+
+        self._dropdown(
+            control,
+            variable=self._engine_var,
+            values=self._engine_display_names,
+            width=200, height=30,
+            corner_radius=RADIUS_SM,
+            font=font("sm"),
+            dropdown_font=font("sm"),
+            command=self._on_engine_changed,
+        ).pack()
+
+    def _on_engine_changed(self, display_name) -> None:
+        idx = self._engine_display_names.index(display_name)
+        key = self._engine_keys[idx]
+        if key != self._settings.engine_backend:
+            self._settings.engine_backend = key
+            self._settings.save()
+            # Respawns the model host on the new backend (seamless, like a mic
+            # change) — see App._on_settings_changed and transcriber.set_engine.
+            self._apply_settings(reload_model=True)
+
+    def _build_storage_setting(self, card) -> None:
+        control = self._setting_row(card, "Model Storage", "Where downloaded models live")
+        path = str(self._settings.resolve_model_dir())
+        ctk.CTkLabel(
+            control, text=path,
+            font=font("xs"), text_color=self._colors.fg_muted,
+            anchor="w", justify="left", wraplength=260,
+        ).pack(anchor="w")
+        secondary_button(
+            control, self._colors, text="Open Folder", width=100,
+            command=lambda: self._open_folder(path),
+        ).pack(anchor="w", pady=(SPACING["xs"], 0))
+
+    @staticmethod
+    def _open_folder(path: str) -> None:
+        import os
+        import subprocess
+        import sys
+        try:
+            if sys.platform == "win32":
+                os.startfile(path)  # noqa: S606 — local folder open
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", path])
+            else:
+                subprocess.Popen(["xdg-open", path])
+        except Exception:
+            pass
 
     # -- Card construction -----------------------------------------------------
 

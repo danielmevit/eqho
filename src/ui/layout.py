@@ -211,3 +211,29 @@ class TabBase:
         for c in range(cols):
             grid.columnconfigure(c, weight=1, uniform="col")
         return grid
+
+    def _columns(self, tab, count: int | None = None) -> list:
+        """THE shared responsive grid: every tab that lays out columns goes
+        through here, so column widths, gutters and label offsets align
+        pixel-identically across all sections."""
+        cols = count if count is not None else self._get_col_count()
+        grid = ctk.CTkFrame(tab, fg_color="transparent")
+        grid.pack(fill="both", expand=True, padx=0, pady=SPACING["xs"])
+        frames = []
+        for c in range(cols):
+            grid.columnconfigure(c, weight=1, uniform="col")
+            frame = ctk.CTkFrame(grid, fg_color="transparent")
+            frame.grid(row=0, column=c, sticky="nsew", padx=0)
+            frames.append(frame)
+        return frames
+
+    def _build_switch_row(self, card, label: str, desc: str, value: bool, on_change):
+        """Label + description + themed switch — shared by General/Settings."""
+        from .widgets import themed_switch
+        right = self._setting_row(card, label, desc)
+        var = self._bool_var(value=value)
+        themed_switch(
+            right, self._colors, variable=var,
+            command=lambda: on_change(var.get()),
+        ).pack()
+        return var

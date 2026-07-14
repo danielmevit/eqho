@@ -6,6 +6,17 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+## [0.8.8] - 2026-07-14 (continued — content restructure)
+
+The three sections now answer three different questions (Daniel's plan review): General = *how do I dictate*, Models = *what does the transcribing*, Settings = *the nit-picky rest*.
+
+### Changed
+- **General rebuilt around four sections** — AUDIO INPUT (microphone + sensitivity, moved next to the mic), HOTKEY, SPEECH (language + custom vocabulary — vocabulary stays in General per Daniel), BEHAVIOR (auto-format, sound feedback, save history, paste mode). **All model/engine UI removed from General** — the Models section owns it, and the active model already shows in the window title.
+- **Models gained** the Inference Engine picker (moved from General) and a Model Storage row (cache path + Open Folder).
+- **Settings gained** DICTATION EXTRAS (remove fillers, voice commands, text replacements, per-app paste rules — editors included) and SYSTEM (volume while speaking, start with Windows), all moved out of General.
+- **One shared responsive grid** (`TabBase._columns`) now lays out every multi-column section — identical column widths, gutters and label offsets across all pages, 1/2/3 columns by breakpoint.
+- History: page size 20 (40 still felt chunky); the search field's grey placeholder actually shows now (CTkEntry silently disables placeholders when a textvariable is attached — removed it, reads the widget directly).
+
 ## [0.8.8] - 2026-07-14
 
 The dashboard, restructured: top pill navigation + Phosphor icons (structure from Daniel's ref/ui — Eqho's own palettes, warmth from the accent blue).
