@@ -36,21 +36,132 @@ WHISPER_MODELS = {
     "large-v3": "Large v3 (~3.1 GB, highest accuracy)",
 }
 
-SUPPORTED_LANGUAGES = {
-    "en": "English",
-    "es": "Spanish",
-    "zh": "Mandarin",
-    "ja": "Japanese",
-    "ko": "Korean",
-    "vi": "Vietnamese",
-    "ar": "Arabic",
-    "uk": "Ukrainian",
-    "fr": "French",
-    "de": "German",
-    "pt": "Portuguese",
-    "ru": "Russian",
-    "it": "Italian",
+# Whisper understands ~99 languages, but its accuracy is wildly uneven across
+# them — so Eqho exposes ALL of them in three honesty tiers instead of either
+# hiding them or overselling them:
+#   tuned        — tested in Eqho; dictation-grade accuracy
+#   strong       — excellent published Whisper accuracy; lightly tested here
+#   experimental — Whisper knows them, but word-error rates vary a lot
+#                  (some exceed 40%); expect rough output
+# Tier placement reflects measured accuracy, nothing else.
+LANGUAGE_TIERS: dict[str, dict[str, str]] = {
+    "tuned": {
+        "en": "English",
+        "es": "Spanish",
+        "zh": "Mandarin",
+        "ja": "Japanese",
+        "ko": "Korean",
+        "vi": "Vietnamese",
+        "ar": "Arabic",
+        "uk": "Ukrainian",
+        "fr": "French",
+        "de": "German",
+        "pt": "Portuguese",
+        "ru": "Russian",
+        "it": "Italian",
+    },
+    "strong": {
+        "nl": "Dutch",
+        "pl": "Polish",
+        "tr": "Turkish",
+        "sv": "Swedish",
+        "da": "Danish",
+        "no": "Norwegian",
+        "fi": "Finnish",
+        "cs": "Czech",
+        "ro": "Romanian",
+        "hu": "Hungarian",
+        "el": "Greek",
+        "bg": "Bulgarian",
+        "hr": "Croatian",
+        "sk": "Slovak",
+        "ca": "Catalan",
+        "hi": "Hindi",
+        "id": "Indonesian",
+        "ms": "Malay",
+        "th": "Thai",
+        "he": "Hebrew",
+    },
+    "experimental": {
+        "af": "Afrikaans",
+        "sq": "Albanian",
+        "am": "Amharic",
+        "hy": "Armenian",
+        "as": "Assamese",
+        "az": "Azerbaijani",
+        "ba": "Bashkir",
+        "eu": "Basque",
+        "be": "Belarusian",
+        "bn": "Bengali",
+        "bs": "Bosnian",
+        "br": "Breton",
+        "my": "Burmese",
+        "et": "Estonian",
+        "fo": "Faroese",
+        "gl": "Galician",
+        "ka": "Georgian",
+        "gu": "Gujarati",
+        "ht": "Haitian Creole",
+        "ha": "Hausa",
+        "haw": "Hawaiian",
+        "is": "Icelandic",
+        "jw": "Javanese",
+        "kn": "Kannada",
+        "kk": "Kazakh",
+        "km": "Khmer",
+        "lo": "Lao",
+        "la": "Latin",
+        "lv": "Latvian",
+        "ln": "Lingala",
+        "lt": "Lithuanian",
+        "lb": "Luxembourgish",
+        "mk": "Macedonian",
+        "mg": "Malagasy",
+        "ml": "Malayalam",
+        "mt": "Maltese",
+        "mi": "Māori",
+        "mr": "Marathi",
+        "mn": "Mongolian",
+        "ne": "Nepali",
+        "nn": "Norwegian Nynorsk",
+        "oc": "Occitan",
+        "ps": "Pashto",
+        "fa": "Persian",
+        "pa": "Punjabi",
+        "sa": "Sanskrit",
+        "sr": "Serbian",
+        "sn": "Shona",
+        "sd": "Sindhi",
+        "si": "Sinhala",
+        "sl": "Slovenian",
+        "so": "Somali",
+        "su": "Sundanese",
+        "sw": "Swahili",
+        "tl": "Tagalog",
+        "tg": "Tajik",
+        "ta": "Tamil",
+        "tt": "Tatar",
+        "te": "Telugu",
+        "bo": "Tibetan",
+        "tk": "Turkmen",
+        "ur": "Urdu",
+        "uz": "Uzbek",
+        "cy": "Welsh",
+        "yi": "Yiddish",
+        "yo": "Yoruba",
+    },
 }
+
+# Flat superset (code → label): validation, lookups, and backward compat.
+SUPPORTED_LANGUAGES = {
+    code: name for tier in LANGUAGE_TIERS.values() for code, name in tier.items()
+}
+
+
+def is_english_only_model(model_key: str) -> bool:
+    """Distil and .en models transcribe English only — anything else in,
+    garbage out. Used to warn when the language and model disagree."""
+    return model_key.startswith("distil") or model_key.endswith(".en")
 
 HOTKEY_MODES = ("toggle", "hold")
 

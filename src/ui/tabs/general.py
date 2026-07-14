@@ -5,7 +5,7 @@ import logging
 import customtkinter as ctk
 
 from ...audio import list_input_devices
-from ...settings import SUPPORTED_LANGUAGES, WHISPER_MODELS
+from ...settings import LANGUAGE_TIERS, SUPPORTED_LANGUAGES, WHISPER_MODELS, is_english_only_model
 from ...theme import MODEL_INFO, SPACING, RADIUS_SM, font
 from ..layout import TabBase
 from ..widgets import ghost_button, primary_button, secondary_button, segmented, themed_switch
@@ -516,23 +516,46 @@ class GeneralTab(TabBase):
 
     def _build_language_setting(self, card) -> None:
         right = self._setting_row(card, "Language", "Transcription language")
-        lang_names = list(SUPPORTED_LANGUAGES.values())
-        lang_codes = list(SUPPORTED_LANGUAGES.keys())
+        # All 99 Whisper languages, grouped by honesty tier (see settings.py).
+        # Headers ("— … —") render as non-clickable rows in ThemedDropdown.
+        self._lang_by_name: dict[str, str] = {}
+        values: list[str] = []
+        for header, tier in (
+            ("— hand-tuned —", LANGUAGE_TIERS["tuned"]),
+            ("— strong accuracy —", LANGUAGE_TIERS["strong"]),
+            ("— experimental · quality varies —", LANGUAGE_TIERS["experimental"]),
+        ):
+            values.append(header)
+            for code, name in tier.items():
+                values.append(name)
+                self._lang_by_name[name] = code
         current_lang = SUPPORTED_LANGUAGES.get(self._settings.language, "English")
         self._lang_var = self._string_var(value=current_lang)
-        self._lang_codes = lang_codes
-        self._lang_names = lang_names
 
         self._dropdown(
             right,
             variable=self._lang_var,
-            values=lang_names,
-            width=140, height=30,
+            values=values,
+            width=170, height=30,
             corner_radius=RADIUS_SM,
             font=font("sm"),
             dropdown_font=font("sm"),
             command=self._on_lang_changed,
         ).pack()
+
+        # Honesty guard: a non-English language on an English-only model would
+        # transcribe garbage — say so right where the choice happens.
+        self._lang_warn = ctk.CTkLabel(
+            right,
+            text="",
+            font=font("xs"),
+            text_color=self._colors.accent,
+            fg_color="transparent",
+            anchor="e",
+            justify="right",
+            wraplength=230,
+        )
+        self._update_lang_warning()
 
     def _build_startup_setting(self, card) -> None:
         right = self._setting_row(card, "Start with Windows", "Launch Eqho on login")
@@ -560,6 +583,7 @@ class GeneralTab(TabBase):
         name = MODEL_INFO.get(model_key, {}).get("name", model_key)
         self._model_var.set(name)
         self._model_info_label.configure(text=self._get_model_info_text(model_key))
+        self._update_lang_warning()
         self.refresh_header_status()
 
     def _on_mic_changed(self, val, names, indices) -> None:
@@ -601,12 +625,29 @@ class GeneralTab(TabBase):
         self._settings.save()
 
     def _on_lang_changed(self, val) -> None:
-        idx = self._lang_names.index(val)
-        code = self._lang_codes[idx]
+        code = self._lang_by_name.get(val)
+        if code is None:  # a tier header slipped through — ignore
+            return
         self._settings.language = code
         self._settings.save()
+        self._update_lang_warning()
         # Language is passed per-transcribe — no model reload/restart needed.
         self._apply_settings(reload_model=False)
+
+    def _update_lang_warning(self) -> None:
+        """Show/hide the English-only-model warning under the language picker."""
+        mismatch = (
+            self._settings.language != "en"
+            and is_english_only_model(self._settings.model_size)
+        )
+        if mismatch:
+            self._lang_warn.configure(
+                text="This model is English-only — pick a multilingual model\n"
+                     "(e.g. Large v3 Turbo) in the Models tab.",
+            )
+            self._lang_warn.pack(pady=(4, 0))
+        else:
+            self._lang_warn.pack_forget()
 
     def _on_startup_changed(self) -> None:
         enabled = self._startup_var.get()

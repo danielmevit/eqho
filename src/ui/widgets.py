@@ -245,6 +245,21 @@ class ThemedDropdown(ctk.CTkFrame):
 
         self._item_buttons = []
         for val in self._values:
+            # Section headers ("— label —") render as muted, non-clickable rows.
+            # They join _item_buttons so highlight indices stay aligned.
+            if val.startswith("— "):
+                header = ctk.CTkLabel(
+                    items_parent,
+                    text=val,
+                    font=self._dropdown_font,
+                    height=item_h - 6,
+                    text_color=self._border_color or self._dd_text,
+                    fg_color="transparent",
+                    anchor="w",
+                )
+                header.pack(fill="x", padx=10, pady=(5, 0))
+                self._item_buttons.append(header)
+                continue
             btn = ctk.CTkButton(
                 items_parent,
                 text=val,

@@ -6,6 +6,19 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+## [0.8.7] - 2026-07-14
+
+All 99 Whisper languages, honestly tiered.
+
+### Added
+- **Three-tier language picker** (`LANGUAGE_TIERS` in settings.py): **hand-tuned** (the original 13 — tested in Eqho, dictation-grade), **strong accuracy** (20 more — excellent published Whisper accuracy, lightly tested here: Dutch, Polish, Turkish, Hindi, Indonesian, Thai, Hebrew…), **experimental** (the remaining 66 — quality varies a lot, clearly labeled, never oversold). The dashboard dropdown shows all 99 grouped under muted section headers (the themed dropdown gained non-clickable header rows; it already scrolled).
+- **English-only guard**: picking a non-English language while a distil/`.en` model is active shows a warning under the picker ("This model is English-only — pick a multilingual model in Models"), updating live when either side changes. New `is_english_only_model()` helper.
+- Tray keeps the tuned 13 (99 radio items would be unusable) plus the currently active language when it's from a lower tier, and an "All 99 languages… (Dashboard)" entry.
+
+### Changed
+- README **Languages** section and the website now state the tiers explicitly — 13 tuned, 20 strong, 66 experimental — instead of "13 languages".
+- **Windows release artifacts now say what they are**: `Eqho-Setup-<version>-win-x64.exe` and `Eqho-portable-<version>-win-x64.zip` (was no platform in the name — confusing next to the Linux/macOS files). Release workflow globs and the website's download matching already accept both patterns; remember the winget manifest references the installer URL on the next winget bump.
+
 ## [0.8.6] - 2026-07-14
 
 Light-pill polish + a brand-new product website. Released together with the 0.8.3–0.8.5 overlay work (the pill era begins).

@@ -263,14 +263,33 @@ class TrayApp:
         return _set
 
     def _language_submenu(self) -> pystray.Menu:
+        # The tray lists the hand-tuned tier (13) — 99 entries would be
+        # unusable as a submenu. The full tiered list lives in the dashboard.
+        from .settings import LANGUAGE_TIERS
+        tuned = LANGUAGE_TIERS["tuned"]
         items = []
-        for code, name in SUPPORTED_LANGUAGES.items():
+        for code, name in tuned.items():
             items.append(pystray.MenuItem(
                 f"{name} ({code})",
                 self._make_lang_setter(code),
                 checked=lambda _, c=code: self._settings.language == c,
                 radio=True,
             ))
+        current = self._settings.language
+        if current not in tuned:
+            # Keep the active language visible/checked even when it's from a
+            # lower tier picked in the dashboard.
+            name = SUPPORTED_LANGUAGES.get(current, current)
+            items.append(pystray.MenuItem(
+                f"{name} ({current})",
+                self._make_lang_setter(current),
+                checked=lambda _, c=current: self._settings.language == c,
+                radio=True,
+            ))
+        items.append(pystray.Menu.SEPARATOR)
+        items.append(pystray.MenuItem(
+            "All 99 languages… (Dashboard)", self._open_dashboard_click,
+        ))
         return pystray.Menu(*items)
 
     def _make_lang_setter(self, code: str):

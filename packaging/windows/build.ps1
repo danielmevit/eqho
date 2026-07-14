@@ -14,7 +14,9 @@ Write-Host "=== Building Eqho v$Version ===" -ForegroundColor Cyan
 & $Python -m PyInstaller (Join-Path $PSScriptRoot "eqho-win.spec") --noconfirm `
     --distpath (Join-Path $Root "dist") --workpath (Join-Path $Root "build")
 
-$Zip = Join-Path $Root "dist\Eqho-portable-$Version.zip"
+# "win-x64" in every Windows artifact name: release pages list five platforms,
+# so each file must say what it is at a glance (Daniel, 2026-07-14).
+$Zip = Join-Path $Root "dist\Eqho-portable-$Version-win-x64.zip"
 if (Test-Path $Zip) { Remove-Item $Zip }
 Compress-Archive -Path (Join-Path $Root "dist\Eqho\*") -DestinationPath $Zip
 Write-Host "Portable zip: $Zip" -ForegroundColor Green
@@ -29,7 +31,7 @@ if (-not $Iscc) {
 }
 if ($Iscc) {
     & $Iscc "/DAppVersion=$Version" "/DDistDir=$(Join-Path $Root 'dist\Eqho')" (Join-Path $PSScriptRoot "installer.iss") | Select-Object -Last 3
-    Write-Host "Installer: dist\Eqho-Setup-$Version.exe" -ForegroundColor Green
+    Write-Host "Installer: dist\Eqho-Setup-$Version-win-x64.exe" -ForegroundColor Green
 } else {
     Write-Host "Inno Setup not found - installer skipped. Install with: winget install JRSoftware.InnoSetup" -ForegroundColor Yellow
 }

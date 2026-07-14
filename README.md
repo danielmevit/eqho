@@ -60,9 +60,13 @@ Toggle or hold-to-talk, your choice. The hotkey is customizable.
 
 ## Languages
 
-English · Spanish · Mandarin · Japanese · Korean · Vietnamese · Arabic · Ukrainian · French · German · Portuguese · Russian · Italian
+Whisper understands ~99 languages, but its accuracy varies a lot between them — so Eqho exposes **all 99, honestly tiered** instead of overselling:
 
-Distil models are English-optimized; for other languages pick `large-v3-turbo` or `medium` in the Models tab.
+- **Hand-tuned (13)** — tested in Eqho, dictation-grade: English · Spanish · Mandarin · Japanese · Korean · Vietnamese · Arabic · Ukrainian · French · German · Portuguese · Russian · Italian
+- **Strong (20)** — excellent published Whisper accuracy, lightly tested in Eqho: Dutch · Polish · Turkish · Swedish · Danish · Norwegian · Finnish · Czech · Romanian · Hungarian · Greek · Bulgarian · Croatian · Slovak · Catalan · Hindi · Indonesian · Malay · Thai · Hebrew
+- **Experimental (66)** — everything else Whisper knows, from Afrikaans to Yoruba. Word-error rates vary widely (some exceed 40%) — expect rough output, and tell us how it goes.
+
+Anything beyond English needs a **multilingual** model (`large-v3-turbo` or `medium` in the Models tab) — the distil/`.en` models are English-only, and the app warns you if the two disagree.
 
 ## Requirements
 
