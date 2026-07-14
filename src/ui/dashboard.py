@@ -37,6 +37,149 @@ BP_3COL = 900   # 3 columns when content >= 900px
 TAB_ALIASES = {"overlay": "settings", "about": "settings"}
 
 
+class _NavPill(tk.Label):
+    """The centered pill nav, rendered as a supersampled PIL image.
+
+    Plain tk/CTk widget nesting can't do tight capsule-in-capsule layouts
+    (children are rectangles that poke through curves), and raw tk.Canvas
+    shapes have no anti-aliasing and mangle font styles. Rendering the whole
+    bar with PIL at 3x and downsampling gives smooth curves, true
+    Inter-SemiBold + Phosphor glyphs, and pixel-exact spacing: a uniform 4px
+    stroke gap on ALL sides and near-zero gaps between the buttons.
+    """
+
+    SEG_H = 34     # button capsule height (unscaled units)
+    GAP = 4        # stroke gap: identical top/bottom/left/right
+    GAP_MID = 2    # between buttons — "almost 0"
+    PAD_X = 24     # inner horizontal padding inside a button
+    ICON_GAP = 6   # icon → label
+    SS = 3         # supersample factor
+
+    def __init__(self, parent, *, colors, scale: float, items, glyphs,
+                 on_select, assets_dir, tk_master):
+        from PIL import ImageFont
+
+        self._colors = colors
+        self._scale = scale
+        self._items = list(items)
+        self._glyphs = glyphs
+        self._on_select = on_select
+        self._tk_master = tk_master
+        self._active_key = None
+        self._hover_key = None
+        self._cache: dict[tuple, object] = {}
+
+        ss = self.SS
+        px = lambda units: int(round(units * scale * ss))
+        self._px = px
+        self._font_text = ImageFont.truetype(
+            str(assets_dir / "fonts" / "Inter-SemiBold.otf"), px(12.5))
+        self._font_icon = ImageFont.truetype(
+            str(assets_dir / "fonts" / "Phosphor.ttf"), px(15))
+
+        self._seg_w = []
+        for key, label in self._items:
+            w = (2 * px(self.PAD_X)
+                 + self._font_icon.getlength(glyphs[key]) + px(self.ICON_GAP)
+                 + self._font_text.getlength(label))
+            self._seg_w.append(int(round(w)))
+        self._bar_w = 2 * px(self.GAP) + sum(self._seg_w) + px(self.GAP_MID) * (len(items) - 1) + 2 * ss
+        self._bar_h = px(self.SEG_H) + 2 * px(self.GAP) + 2 * ss
+
+        # Hit ranges in FINAL (downsampled) pixels
+        self._ranges = []
+        x = px(self.GAP) + ss
+        for (key, _), w in zip(self._items, self._seg_w):
+            self._ranges.append((x // ss, (x + w) // ss, key))
+            x += w + px(self.GAP_MID)
+
+        super().__init__(parent, bd=0, highlightthickness=0,
+                         bg=colors.bg_primary)
+        self._show()
+
+        self.bind("<Motion>", self._on_motion)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<Button-1>", self._on_click)
+
+    # -- rendering ---------------------------------------------------------------
+
+    def _render(self, active, hover):
+        from PIL import Image, ImageDraw, ImageTk
+        key_pair = (active, hover)
+        if key_pair in self._cache:
+            return self._cache[key_pair]
+        c = self._colors
+        ss = self.SS
+        px = self._px
+        img = Image.new("RGB", (self._bar_w, self._bar_h), c.bg_primary)
+        d = ImageDraw.Draw(img)
+
+        # Container: border ring + interior
+        d.rounded_rectangle([0, 0, self._bar_w - 1, self._bar_h - 1],
+                            radius=self._bar_h // 2, fill=c.border_subtle)
+        d.rounded_rectangle([ss, ss, self._bar_w - 1 - ss, self._bar_h - 1 - ss],
+                            radius=(self._bar_h - 2 * ss) // 2, fill=c.bg_secondary)
+
+        x = px(self.GAP) + ss
+        y0 = px(self.GAP) + ss
+        y1 = y0 + px(self.SEG_H)
+        for (key, label), w in zip(self._items, self._seg_w):
+            if key == active:
+                bg, fg = c.accent, c.on_accent
+            elif key == hover:
+                bg, fg = c.bg_hover, c.fg_primary
+            else:
+                bg, fg = c.bg_secondary, c.fg_secondary
+            if bg != c.bg_secondary:
+                d.rounded_rectangle([x, y0, x + w, y1],
+                                    radius=(y1 - y0) // 2, fill=bg)
+            cx = x + px(self.PAD_X)
+            cy = (y0 + y1) // 2
+            d.text((cx, cy), self._glyphs[key], font=self._font_icon,
+                   fill=fg, anchor="lm")
+            d.text((cx + self._font_icon.getlength(self._glyphs[key]) + px(self.ICON_GAP), cy),
+                   label, font=self._font_text, fill=fg, anchor="lm")
+            x += w + px(self.GAP_MID)
+
+        img = img.resize((self._bar_w // ss, self._bar_h // ss), Image.LANCZOS)
+        photo = ImageTk.PhotoImage(img, master=self._tk_master)
+        self._cache[key_pair] = photo
+        return photo
+
+    def _show(self) -> None:
+        self.configure(image=self._render(self._active_key, self._hover_key))
+
+    # -- interaction --------------------------------------------------------------
+
+    def _key_at(self, x: int):
+        for x0, x1, key in self._ranges:
+            if x0 <= x <= x1:
+                return key
+        return None
+
+    def _on_motion(self, event) -> None:
+        key = self._key_at(event.x)
+        self.configure(cursor="hand2" if key else "")
+        if key != self._hover_key:
+            self._hover_key = key
+            self._show()
+
+    def _on_leave(self, _event=None) -> None:
+        if self._hover_key is not None:
+            self._hover_key = None
+            self._show()
+        self.configure(cursor="")
+
+    def _on_click(self, event) -> None:
+        key = self._key_at(event.x)
+        if key:
+            self._on_select(key)
+
+    def set_active(self, key: str) -> None:
+        self._active_key = key
+        self._show()
+
+
 class Dashboard(ctk.CTkToplevel):
     """Main Eqho settings dashboard window."""
 
@@ -253,66 +396,25 @@ class Dashboard(ctk.CTkToplevel):
             actions, icon("settings"), lambda: self._show_tab("settings"),
         )
 
-        # Centered pill nav — placed, not packed, so it stays truly centered
-        # regardless of the logo/actions widths (like the reference).
-        #
-        # Geometry: fully-round capsules (corner_radius=999 — CTk clamps to
-        # height/2) with a TIGHT 4px stroke gap (Daniel). Only the END
-        # segments face the outer curve, so they carry a 10px lead-in that
-        # hides inside the capsule's arc: corner (gx,gy) is inside radius R
-        # iff (R-gx)² + (R-gy)² ≤ R². seg 34, gy 4 → pill 42, R 21:
-        # (21-10)² + (21-4)² = 410 ≤ 441. ✓
-        self._nav_pill = ctk.CTkFrame(
-            self._topbar, corner_radius=999, height=42,
-            fg_color=self._colors.bg_secondary,
-            border_width=1, border_color=self._colors.border_subtle,
-        )
-        self._nav_pill.place(relx=0.5, rely=0.5, anchor="center")
-
-        self._nav_segments: dict[str, tuple] = {}
+        # Centered pill nav — one canvas, pixel-exact spacing (see _NavPill).
         nav_items = (("general", "General"), ("models", "Models"), ("history", "History"))
-        for i, (key, label) in enumerate(nav_items):
-            pad_l = 10 if i == 0 else 4
-            pad_r = 10 if i == len(nav_items) - 1 else 4
-            self._nav_segments[key] = self._build_nav_segment(
-                self._nav_pill, key, label, padx=(pad_l, pad_r),
-            )
+        self._nav = _NavPill(
+            self._topbar,
+            colors=self._colors,
+            scale=self._ui_scale,
+            items=nav_items,
+            glyphs={key: icon(key) for key, _ in nav_items},
+            on_select=self._show_tab,
+            assets_dir=self._assets,
+            tk_master=self._own_root if self._own_root else self,
+        )
+        self._nav.place(relx=0.5, rely=0.5, anchor="center")
 
         # Hairline under the bar
         self._topbar_rule = ctk.CTkFrame(
             self, height=1, corner_radius=0, fg_color=self._colors.border_subtle,
         )
         self._topbar_rule.pack(side="top", fill="x")
-
-    def _build_nav_segment(self, parent, key: str, label: str, padx=(4, 4)) -> tuple:
-        # Fully-round capsule (999 → clamped to height/2); inner padding
-        # doubled per Daniel — content gets real breathing room.
-        seg = ctk.CTkFrame(parent, corner_radius=999, fg_color=self._colors.bg_secondary, height=34)
-        seg.pack(side="left", padx=padx, pady=4)
-        icon_lbl = ctk.CTkLabel(
-            seg, text=icon(key), font=icon_font("sm", 4),
-            text_color=self._colors.fg_secondary, fg_color=self._colors.bg_secondary,
-        )
-        icon_lbl.pack(side="left", padx=(24, 5), pady=4)
-        text_lbl = ctk.CTkLabel(
-            seg, text=label, font=font("sm", "bold"),
-            text_color=self._colors.fg_secondary, fg_color=self._colors.bg_secondary,
-        )
-        text_lbl.pack(side="left", padx=(0, 24), pady=4)
-
-        def _hover(on: bool) -> None:
-            if self._current_tab != key:
-                self._paint_segment(key, active=False, hover=on)
-
-        for w in (seg, icon_lbl, text_lbl):
-            w.bind("<Button-1>", lambda e, k=key: self._show_tab(k))
-            w.bind("<Enter>", lambda e: _hover(True))
-            w.bind("<Leave>", lambda e: _hover(False))
-            try:
-                w.configure(cursor="hand2")
-            except Exception:
-                pass
-        return (seg, icon_lbl, text_lbl)
 
     def _refresh_topbar_status(self) -> None:
         """The model·hotkey·language line lives in the WINDOW TITLE — the
@@ -323,24 +425,6 @@ class Dashboard(ctk.CTkToplevel):
             self.title(f"Eqho Dashboard — {status_summary(self._settings)}")
         except Exception:
             pass
-
-    def _paint_segment(self, key: str, active: bool, hover: bool = False) -> None:
-        """Paint a nav segment consistently. Labels get EXPLICIT backgrounds —
-        CTk 'transparent' labels don't repaint when the parent's fill changes,
-        which left square patches breaking the pill's rounded corners."""
-        seg, icon_lbl, text_lbl = self._nav_segments[key]
-        if active:
-            bg = self._colors.accent
-            fg = self._colors.on_accent
-        elif hover:
-            bg = self._colors.bg_hover
-            fg = self._colors.fg_primary
-        else:
-            bg = self._colors.bg_secondary
-            fg = self._colors.fg_secondary
-        seg.configure(fg_color=bg)
-        for lbl in (icon_lbl, text_lbl):
-            lbl.configure(fg_color=bg, text_color=fg)
 
     def _set_theme(self, mode: str) -> None:
         self._settings.theme = mode
@@ -369,7 +453,6 @@ class Dashboard(ctk.CTkToplevel):
         # Clear tab frame references
         self._tab_frames.clear()
         self._tabs.clear()
-        self._nav_segments = {}
         self._last_col_count = 0
         self._tab_built_cols.clear()
 
@@ -403,8 +486,8 @@ class Dashboard(ctk.CTkToplevel):
             self.rebuild_tab(key)
         # Update nav highlight: accent-filled pill for the active segment,
         # accent-tinted gear when the Settings view is open.
-        for k in getattr(self, "_nav_segments", {}):
-            self._paint_segment(k, active=(k == key))
+        if hasattr(self, "_nav"):
+            self._nav.set_active(key)
         if hasattr(self, "_gear_btn"):
             gear_active = key == "settings"
             self._gear_btn.configure(

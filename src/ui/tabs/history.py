@@ -13,7 +13,7 @@ from ..widgets import ghost_button, secondary_button
 
 log = logging.getLogger(__name__)
 
-_MAX_SHOWN = 200
+_PAGE_SIZE = 40
 
 _PERIODS = ("All time", "Today", "Yesterday", "Last 7 days", "Last 30 days")
 
@@ -28,12 +28,15 @@ class HistoryTab(TabBase):
         self._period_var = None
         self._list_frame = None
         self._search_job = None
+        self._shown = _PAGE_SIZE
 
     def build(self, tab) -> None:
 
         # Toolbar: search (text or date) + period filter + export + clear
         bar = ctk.CTkFrame(tab, fg_color="transparent")
-        bar.pack(fill="x", padx=SPACING["md"], pady=(0, SPACING["xs"]))
+        # Same top inset as the other sections (their section labels sit
+        # at pady lg) so all three pages start at an identical height.
+        bar.pack(fill="x", padx=SPACING["md"], pady=(SPACING["lg"], SPACING["xs"]))
 
         self._search_var = self._string_var()
         search = ctk.CTkEntry(
@@ -81,8 +84,10 @@ class HistoryTab(TabBase):
                 pass
         self._search_job = self._list_frame.after(250, self._render_entries)
 
-    def _render_entries(self) -> None:
+    def _render_entries(self, reset: bool = True) -> None:
         self._search_job = None
+        if reset:
+            self._shown = _PAGE_SIZE
         for child in self._list_frame.winfo_children():
             child.destroy()
 
@@ -109,15 +114,21 @@ class HistoryTab(TabBase):
             ).pack(padx=SPACING["md"], pady=SPACING["xl"])
             return
 
-        for entry in entries[:_MAX_SHOWN]:
+        for entry in entries[:self._shown]:
             self._render_entry(entry)
 
-        if len(entries) > _MAX_SHOWN:
-            ctk.CTkLabel(
-                self._list_frame,
-                text=f"…{len(entries) - _MAX_SHOWN} older entries not shown (search or export to reach them)",
-                font=font("xs"), text_color=self._colors.fg_muted,
+        remaining = len(entries) - self._shown
+        if remaining > 0:
+            secondary_button(
+                self._list_frame, self._colors,
+                text=f"Show {min(remaining, _PAGE_SIZE)} more ({remaining} older)",
+                width=220,
+                command=self._show_more,
             ).pack(pady=SPACING["sm"])
+
+    def _show_more(self) -> None:
+        self._shown += _PAGE_SIZE
+        self._render_entries(reset=False)
 
     @staticmethod
     def _in_period(ts: float, period: str) -> bool:
