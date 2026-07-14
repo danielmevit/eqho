@@ -23,6 +23,7 @@ class DashboardContext:
         set_ui_scale: Callable[[float], None] = lambda scale: None,
         master_getter: Callable[[], object] = lambda: None,
         change_model: Callable[[str], None] = lambda m: None,
+        set_theme: Callable[[str], None] = lambda mode: None,
     ):
         self.settings = settings
         self._colors_getter = colors_getter
@@ -32,6 +33,7 @@ class DashboardContext:
         self.set_ui_scale = set_ui_scale
         self.master = master_getter  # the dashboard window — tk Variables MUST bind to it
         self.change_model = change_model  # change_model(new_model) — confirms + restarts
+        self.set_theme = set_theme  # set_theme("light"|"dark"|"system") — retheme + rebuild
         # _subs[event][key] = handler — keyed so a rebuilt tab REPLACES its old
         # subscription instead of stacking dead handlers on destroyed widgets.
         self._subs: dict[str, dict[str, Callable]] = {}

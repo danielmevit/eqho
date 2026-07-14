@@ -10,8 +10,11 @@ from ..layout import TabBase
 class AboutTab(TabBase):
     KEY = "about"
 
-    def build(self, tab) -> None:
-        self._tab_header(tab, "About Eqho", "Your voice, everywhere.")
+    def build(self, tab, embedded: bool = False) -> None:
+        # `embedded` = rendered as a section inside the Settings view (no own
+        # header; the caller provides the section label).
+        if not embedded:
+            self._tab_header(tab, "About Eqho", "Your voice, everywhere.", icon="about")
 
         cols = self._get_col_count()
 
@@ -31,7 +34,8 @@ class AboutTab(TabBase):
             self._build_about_details(tab)
             self._build_about_credits(tab)
 
-        self._add_bottom_padding(tab)
+        if not embedded:
+            self._add_bottom_padding(tab)
 
     def _build_about_details(self, parent) -> None:
         """About tab: version info and author."""
@@ -109,6 +113,7 @@ class AboutTab(TabBase):
         techs = [
             "faster-whisper — Fast Whisper inference (MIT)",
             "customtkinter — Modern tkinter widgets",
+            "Phosphor Icons — UI iconography (MIT)",
             "pystray — System tray integration",
             "keyboard — Global hotkey capture",
             "pycaw — Windows audio control",

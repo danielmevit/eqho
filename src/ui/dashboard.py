@@ -19,6 +19,7 @@ from ..theme import (
     RADIUS_SM, RADIUS_MD, SPACING, font,
 )
 from .context import DashboardContext
+from .icons import icon, icon_font
 from .tabs import TAB_CLASSES
 from .widgets import ghost_button, primary_button
 from .win32 import apply_dark_title_bar
@@ -27,20 +28,14 @@ log = logging.getLogger(__name__)
 
 # Window dimensions
 WIN_W, WIN_H = 720, 520
-SIDEBAR_W = 170
+TOPBAR_H = 56
 
-# Responsive breakpoints (content area width, excluding sidebar)
+# Responsive breakpoints (content area width — full window now, no sidebar)
 BP_2COL = 560   # 2 columns when content >= 560px
 BP_3COL = 900   # 3 columns when content >= 900px
 
-# -- Icons (clean Unicode symbols) ---------------------------------------------
-TAB_ICONS = {
-    "general":  "☰",   # ☰ (hamburger/settings)
-    "overlay":  "□",   # □
-    "models":   "◎",   # ◎
-    "history":  "◷",   # ◷
-    "about":    "ℹ",   # ℹ
-}
+# Old tab keys that folded into the Settings view (gear icon, top right).
+TAB_ALIASES = {"overlay": "settings", "about": "settings"}
 
 
 class Dashboard(ctk.CTkToplevel):
@@ -55,6 +50,7 @@ class Dashboard(ctk.CTkToplevel):
         initial_tab: Optional[str] = None,
     ):
         self._on_restart = on_restart
+        initial_tab = TAB_ALIASES.get(initial_tab, initial_tab)
         self._initial_tab = initial_tab if initial_tab in TAB_CLASSES else "general"
         # Create a hidden root if needed
         self._own_root = None
@@ -84,13 +80,14 @@ class Dashboard(ctk.CTkToplevel):
             set_ui_scale=self.set_ui_scale,
             master_getter=lambda: self,
             change_model=self._change_model,
+            set_theme=self._set_theme,
         )
         # Non-visible tabs rebuild on next show after a model change, so
         # their headers/cards never show a stale active model
         self._ctx.subscribe("model_changed", "dashboard", lambda *_: self._mark_hidden_tabs_stale())
 
         self._setup_window()
-        self._build_sidebar()
+        self._build_topbar()
         self._build_content_area()
         # Tabs build lazily on first show — keeps window open and theme
         # switching fast (only the visible tab is rebuilt synchronously)
@@ -178,20 +175,19 @@ class Dashboard(ctk.CTkToplevel):
 
         self.after(260, _apply)
 
-    # -- Sidebar ---------------------------------------------------------------
+    # -- Top bar (ref/ui: centered pill nav, icon actions right) -----------------
 
-    def _build_sidebar(self) -> None:
-        self._sidebar = ctk.CTkFrame(
-            self, width=SIDEBAR_W, corner_radius=0,
-            fg_color=self._colors.bg_secondary,
-            border_width=0,
+    def _build_topbar(self) -> None:
+        self._topbar = ctk.CTkFrame(
+            self, height=TOPBAR_H, corner_radius=0,
+            fg_color=self._colors.bg_primary,
         )
-        self._sidebar.pack(side="left", fill="y")
-        self._sidebar.pack_propagate(False)
+        self._topbar.pack(side="top", fill="x")
+        self._topbar.pack_propagate(False)
 
-        # Logo
-        title_frame = ctk.CTkFrame(self._sidebar, fg_color="transparent")
-        title_frame.pack(fill="x", padx=SPACING["lg"], pady=(SPACING["xl"], SPACING["lg"]))
+        # Logo (left)
+        title_frame = ctk.CTkFrame(self._topbar, fg_color="transparent")
+        title_frame.pack(side="left", padx=(SPACING["lg"], 0))
 
         # Asset names indicate the THEME they serve (Daniel's convention):
         # *_dark.png is shown in dark mode, *_light.png in light mode.
@@ -201,13 +197,11 @@ class Dashboard(ctk.CTkToplevel):
             from PIL import Image, ImageTk
             pil_for_light = Image.open(wordmark_for_light_theme)
             pil_for_dark = Image.open(wordmark_for_dark_theme)
-            # Scale to fit sidebar width with padding
-            max_w = SIDEBAR_W - 2 * SPACING["lg"]
+            max_w = 110
             ratio = max_w / pil_for_light.width
             new_h = int(pil_for_light.height * ratio)
             pil_for_light = pil_for_light.resize((max_w, new_h), Image.LANCZOS)
             pil_for_dark = pil_for_dark.resize((max_w, new_h), Image.LANCZOS)
-            # Pick the right variant for current theme
             resolved = self._settings.theme
             if resolved == "system":
                 resolved = get_system_theme()
@@ -217,7 +211,7 @@ class Dashboard(ctk.CTkToplevel):
             self._logo_tk = ImageTk.PhotoImage(pil_img, master=tk_root)
             logo_label = tk.Label(
                 title_frame, image=self._logo_tk,
-                bg=self._colors.bg_secondary, borderwidth=0,
+                bg=self._colors.bg_primary, borderwidth=0,
             )
             logo_label.pack(anchor="w")
         else:
@@ -227,75 +221,79 @@ class Dashboard(ctk.CTkToplevel):
                 text_color=self._colors.fg_primary,
             ).pack(anchor="w")
 
-        # Nav items with icons
-        self._nav_buttons: dict[str, ctk.CTkButton] = {}
-        tabs = [
-            ("general", "General"),
-            ("overlay", "Overlay"),
-            ("models", "Models"),
-            ("history", "History"),
-            ("about", "About"),
-        ]
+        # Icon actions (right): theme toggle + settings gear
+        actions = ctk.CTkFrame(self._topbar, fg_color="transparent")
+        actions.pack(side="right", padx=(0, SPACING["lg"]))
 
-        for key, label in tabs:
-            icon = TAB_ICONS.get(key, "")
-            btn = ctk.CTkButton(
-                self._sidebar,
-                text=f"  {icon}  {label}",
-                font=font("base"),
-                height=36,
-                corner_radius=RADIUS_SM,
-                fg_color="transparent",
-                text_color=self._colors.fg_secondary,
-                hover_color=self._colors.bg_hover,
-                anchor="w",
-                command=lambda k=key: self._show_tab(k),
-            )
-            btn.pack(fill="x", padx=SPACING["sm"], pady=2)
-            self._nav_buttons[key] = btn
-
-        # Spacer
-        ctk.CTkFrame(self._sidebar, fg_color="transparent", height=1).pack(expand=True)
-
-        # Theme switcher at bottom
-        self._build_theme_switcher()
-
-    def _build_theme_switcher(self) -> None:
-        frame = ctk.CTkFrame(self._sidebar, fg_color="transparent")
-        frame.pack(fill="x", padx=SPACING["sm"], pady=(0, SPACING["lg"]))
-
-        ctk.CTkLabel(
-            frame, text="Theme",
-            font=font("xs"),
-            text_color=self._colors.fg_muted,
-        ).pack(anchor="w", padx=SPACING["sm"], pady=(0, 4))
-
-        pill = ctk.CTkFrame(
-            frame, corner_radius=RADIUS_MD,
-            fg_color=self._colors.bg_tertiary,
-            height=32,
+        resolved = self._settings.theme
+        if resolved == "system":
+            resolved = get_system_theme()
+        toggle_glyph = icon("moon") if resolved == "light" else icon("sun")
+        toggle_target = "dark" if resolved == "light" else "light"
+        self._theme_btn = ctk.CTkButton(
+            actions, text=toggle_glyph, width=36, height=36, corner_radius=18,
+            font=icon_font("base", 5), fg_color="transparent",
+            text_color=self._colors.fg_secondary,
+            hover_color=self._colors.bg_hover,
+            command=lambda t=toggle_target: self._set_theme(t),
         )
-        pill.pack(fill="x", padx=4)
-        pill.pack_propagate(False)
+        self._theme_btn.pack(side="left", padx=(0, 2))
 
-        # Three segments: Light, Dark, Auto — clean text labels
-        self._theme_buttons: dict[str, ctk.CTkButton] = {}
-        for mode, label in [("light", "Light"), ("dark", "Dark"), ("system", "System")]:
-            is_active = self._settings.theme == mode
-            btn = ctk.CTkButton(
-                pill,
-                text=label,
-                width=40,
-                height=26,
-                corner_radius=RADIUS_SM,
-                font=font("xs"),
-                fg_color=self._colors.accent if is_active else "transparent",
-                text_color=self._colors.on_accent if is_active else self._colors.fg_secondary,
-                hover_color=self._colors.bg_hover,
-                command=lambda m=mode: self._set_theme(m),
-            )
-            btn.pack(side="left", expand=True, fill="both", padx=2, pady=2)
-            self._theme_buttons[mode] = btn
+        self._gear_btn = ctk.CTkButton(
+            actions, text=icon("settings"), width=36, height=36, corner_radius=18,
+            font=icon_font("base", 5), fg_color="transparent",
+            text_color=self._colors.fg_secondary,
+            hover_color=self._colors.bg_hover,
+            command=lambda: self._show_tab("settings"),
+        )
+        self._gear_btn.pack(side="left")
+
+        # Centered pill nav — placed, not packed, so it stays truly centered
+        # regardless of the logo/actions widths (like the reference).
+        self._nav_pill = ctk.CTkFrame(
+            self._topbar, corner_radius=19, height=38,
+            fg_color=self._colors.bg_secondary,
+            border_width=1, border_color=self._colors.border_subtle,
+        )
+        self._nav_pill.place(relx=0.5, rely=0.5, anchor="center")
+
+        self._nav_segments: dict[str, tuple] = {}
+        for key, label in (("general", "General"), ("models", "Models"), ("history", "History")):
+            self._nav_segments[key] = self._build_nav_segment(self._nav_pill, key, label)
+
+        # Hairline under the bar
+        self._topbar_rule = ctk.CTkFrame(
+            self, height=1, corner_radius=0, fg_color=self._colors.border_subtle,
+        )
+        self._topbar_rule.pack(side="top", fill="x")
+
+    def _build_nav_segment(self, parent, key: str, label: str) -> tuple:
+        seg = ctk.CTkFrame(parent, corner_radius=15, fg_color="transparent", height=30)
+        seg.pack(side="left", padx=3, pady=4)
+        icon_lbl = ctk.CTkLabel(
+            seg, text=icon(key), font=icon_font("sm", 4),
+            text_color=self._colors.fg_secondary, fg_color="transparent",
+        )
+        icon_lbl.pack(side="left", padx=(12, 5), pady=2)
+        text_lbl = ctk.CTkLabel(
+            seg, text=label, font=font("sm", "bold"),
+            text_color=self._colors.fg_secondary, fg_color="transparent",
+        )
+        text_lbl.pack(side="left", padx=(0, 12), pady=2)
+
+        def _hover(on: bool) -> None:
+            if self._current_tab != key:
+                seg.configure(fg_color=self._colors.bg_hover if on else "transparent")
+
+        for w in (seg, icon_lbl, text_lbl):
+            w.bind("<Button-1>", lambda e, k=key: self._show_tab(k))
+            w.bind("<Enter>", lambda e: _hover(True))
+            w.bind("<Leave>", lambda e: _hover(False))
+            try:
+                w.configure(cursor="hand2")
+            except Exception:
+                pass
+        return (seg, icon_lbl, text_lbl)
 
     def _set_theme(self, mode: str) -> None:
         self._settings.theme = mode
@@ -313,19 +311,18 @@ class Dashboard(ctk.CTkToplevel):
         self._apply_settings(reload_model=False)
 
     def _rebuild_ui(self) -> None:
-        """Destroy and rebuild sidebar + content to apply new theme colors."""
+        """Destroy and rebuild top bar + content to apply new theme colors."""
         current_tab = self._current_tab
 
         # Destroy existing UI
-        if hasattr(self, "_sidebar"):
-            self._sidebar.destroy()
-        if hasattr(self, "_content"):
-            self._content.destroy()
+        for attr in ("_topbar", "_topbar_rule", "_content"):
+            if hasattr(self, attr):
+                getattr(self, attr).destroy()
 
         # Clear tab frame references
         self._tab_frames.clear()
         self._tabs.clear()
-        self._nav_buttons.clear()
+        self._nav_segments = {}
         self._last_col_count = 0
         self._tab_built_cols.clear()
 
@@ -333,7 +330,7 @@ class Dashboard(ctk.CTkToplevel):
         self.configure(fg_color=self._colors.bg_primary)
 
         # Rebuild — only the current tab; others rebuild lazily when shown
-        self._build_sidebar()
+        self._build_topbar()
         self._build_content_area()
         self._show_tab(current_tab)
 
@@ -347,7 +344,7 @@ class Dashboard(ctk.CTkToplevel):
             self, fg_color=self._colors.bg_primary,
             corner_radius=0, border_width=0,
         )
-        self._content.pack(side="right", fill="both", expand=True)
+        self._content.pack(side="top", fill="both", expand=True)
 
     def _show_tab(self, key: str) -> None:
         self._current_tab = key
@@ -357,18 +354,20 @@ class Dashboard(ctk.CTkToplevel):
             self._build_tab(key)
         elif self._tab_built_cols.get(key) != self._get_col_count():
             self.rebuild_tab(key)
-        # Update nav highlight
-        for k, btn in self._nav_buttons.items():
-            if k == key:
-                btn.configure(
-                    fg_color=self._colors.accent_muted,
-                    text_color=self._colors.accent,
-                )
-            else:
-                btn.configure(
-                    fg_color="transparent",
-                    text_color=self._colors.fg_secondary,
-                )
+        # Update nav highlight: accent-filled pill for the active segment,
+        # accent-tinted gear when the Settings view is open.
+        for k, (seg, icon_lbl, text_lbl) in getattr(self, "_nav_segments", {}).items():
+            active = k == key
+            seg.configure(fg_color=self._colors.accent if active else "transparent")
+            color = self._colors.on_accent if active else self._colors.fg_secondary
+            icon_lbl.configure(text_color=color)
+            text_lbl.configure(text_color=color)
+        if hasattr(self, "_gear_btn"):
+            gear_active = key == "settings"
+            self._gear_btn.configure(
+                fg_color=self._colors.accent_muted if gear_active else "transparent",
+                text_color=self._colors.accent if gear_active else self._colors.fg_secondary,
+            )
         # Show the right frame
         for k, frame in self._tab_frames.items():
             if k == key:
@@ -417,7 +416,7 @@ class Dashboard(ctk.CTkToplevel):
         try:
             w = self._content.winfo_width()
         except Exception:
-            w = WIN_W - SIDEBAR_W
+            w = WIN_W
         scale = getattr(self, "_ui_scale", 1.0)
         if w >= BP_3COL * scale:
             return 3

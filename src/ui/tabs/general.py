@@ -25,7 +25,7 @@ class GeneralTab(TabBase):
         ctx.subscribe("model_changed", self.KEY, self._on_external_model_change)
 
     def build(self, tab) -> None:
-        self._tab_header(tab, "General", "Core settings for dictation")
+        self._tab_header(tab, "General", "Core settings for dictation", icon="general")
 
         cols = self._get_col_count()
 

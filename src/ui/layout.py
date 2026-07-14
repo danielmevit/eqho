@@ -85,16 +85,26 @@ class TabBase:
         except Exception:
             pass
 
-    def _tab_header(self, parent, title: str, subtitle: str) -> None:
-        """Standard tab header with title and status info."""
+    def _tab_header(self, parent, title: str, subtitle: str, icon: str | None = None) -> None:
+        """Standard tab header with title and status info; `icon` is a Phosphor
+        glyph name rendered in the accent color left of the title."""
         header = ctk.CTkFrame(parent, fg_color="transparent")
         header.pack(fill="x", padx=SPACING["md"], pady=(SPACING["md"], 2))
 
+        title_row = ctk.CTkFrame(header, fg_color="transparent")
+        title_row.pack(anchor="w")
+        if icon:
+            from .icons import icon as _glyph, icon_font
+            ctk.CTkLabel(
+                title_row, text=_glyph(icon),
+                font=icon_font("2xl"),
+                text_color=self._colors.accent, fg_color="transparent",
+            ).pack(side="left", padx=(0, 8))
         ctk.CTkLabel(
-            header, text=title,
+            title_row, text=title,
             font=font("2xl", "bold"),
             text_color=self._colors.fg_primary, anchor="w",
-        ).pack(anchor="w")
+        ).pack(side="left")
 
         self._header_status = ctk.CTkLabel(
             header, text=self._header_status_text(),

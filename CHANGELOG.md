@@ -6,6 +6,16 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+## [0.8.8] - 2026-07-14
+
+The dashboard, restructured: top pill navigation + Phosphor icons (structure from Daniel's ref/ui — Eqho's own palettes, warmth from the accent blue).
+
+### Changed
+- **Sidebar → top bar.** Logo left; a **centered pill nav** with the three main sections — General, Models, History — each with a Phosphor icon, the active segment an accent-filled pill; top-right: a **sun/moon theme toggle** (one click flips light↔dark) and a **gear** opening the Settings view. No search — deliberately.
+- **Settings view (gear)** hosts everything that isn't a main section: Theme (Light/Dark/System — System still lives here after the quick toggle), the full **Overlay** controls, and **About**, embedded as icon-labeled sections. Old deep-links (`--tab=overlay/about`, tray) transparently alias to it.
+- **Phosphor Icons** (phosphoricons.com, MIT) vendored as a TTF in `assets/fonts` — auto-registered by the existing font loader, rendered as text glyphs: crisp at any UI zoom, theme-colorable. Tab headers now carry accent-colored icons; credits updated.
+- Content area is full-width (no sidebar), so the responsive grid gets more room at every window size.
+
 ## [0.8.7] - 2026-07-14
 
 All 99 Whisper languages, honestly tiered.

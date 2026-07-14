@@ -10,8 +10,11 @@ from ..widgets import themed_switch
 class OverlayTab(TabBase):
     KEY = "overlay"
 
-    def build(self, tab) -> None:
-        self._tab_header(tab, "Overlay", "Floating transcription preview bar")
+    def build(self, tab, embedded: bool = False) -> None:
+        # `embedded` = rendered as a section inside the Settings view (no own
+        # header; the caller provides the section label).
+        if not embedded:
+            self._tab_header(tab, "Overlay", "Floating transcription preview bar", icon="overlay")
 
         cols = self._get_col_count()
 
@@ -51,7 +54,8 @@ class OverlayTab(TabBase):
             self._build_opacity_setting(card)
             self._build_fontsize_setting(card)
 
-        self._add_bottom_padding(tab)
+        if not embedded:
+            self._add_bottom_padding(tab)
 
     def _build_overlay_switch(self, card) -> None:
         right = self._setting_row(card, "Show Overlay", "Display transcription text while dictating")

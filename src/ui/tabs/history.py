@@ -27,7 +27,7 @@ class HistoryTab(TabBase):
         self._search_job = None
 
     def build(self, tab) -> None:
-        self._tab_header(tab, "History", "Your past dictations — stored locally, searchable")
+        self._tab_header(tab, "History", "Your past dictations — stored locally, searchable", icon="history")
 
         # Toolbar: search + export + clear
         bar = ctk.CTkFrame(tab, fg_color="transparent")
