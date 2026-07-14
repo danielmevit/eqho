@@ -1,7 +1,7 @@
 """History tab: browse, search, copy, delete, and export past dictations."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import customtkinter as ctk
@@ -15,6 +15,8 @@ log = logging.getLogger(__name__)
 
 _MAX_SHOWN = 200
 
+_PERIODS = ("All time", "Today", "Yesterday", "Last 7 days", "Last 30 days")
+
 
 class HistoryTab(TabBase):
     KEY = "history"
@@ -23,20 +25,21 @@ class HistoryTab(TabBase):
         super().__init__(ctx)
         self._history = TranscriptHistory()
         self._search_var = None
+        self._period_var = None
         self._list_frame = None
         self._search_job = None
 
     def build(self, tab) -> None:
-        self._tab_header(tab, "History", "Your past dictations — stored locally, searchable", icon="history")
+        self._tab_status_line(tab)
 
-        # Toolbar: search + export + clear
+        # Toolbar: search (text or date) + period filter + export + clear
         bar = ctk.CTkFrame(tab, fg_color="transparent")
         bar.pack(fill="x", padx=SPACING["md"], pady=(0, SPACING["xs"]))
 
         self._search_var = self._string_var()
         search = ctk.CTkEntry(
             bar, textvariable=self._search_var,
-            placeholder_text="Search transcripts…",
+            placeholder_text="Search text or date (2026-07-14)…",
             height=30, corner_radius=RADIUS_SM,
             font=font("sm"),
             fg_color=self._colors.bg_tertiary,
@@ -46,6 +49,17 @@ class HistoryTab(TabBase):
         )
         search.pack(side="left", fill="x", expand=True, padx=(0, SPACING["sm"]))
         search.bind("<KeyRelease>", self._on_search_changed)
+
+        self._period_var = self._string_var(value=_PERIODS[0])
+        self._dropdown(
+            bar, variable=self._period_var,
+            values=list(_PERIODS),
+            width=118, height=30,
+            corner_radius=RADIUS_SM,
+            font=font("sm"),
+            dropdown_font=font("sm"),
+            command=lambda _v: self._render_entries(),
+        ).pack(side="left", padx=(0, SPACING["sm"]))
 
         secondary_button(bar, self._colors, text="Export .txt", width=90,
                          command=self._export).pack(side="left", padx=(0, SPACING["xs"]))
@@ -73,12 +87,23 @@ class HistoryTab(TabBase):
         for child in self._list_frame.winfo_children():
             child.destroy()
 
-        query = self._search_var.get() if self._search_var else ""
-        entries = self._history.search(query)
+        query = (self._search_var.get() if self._search_var else "").strip().lower()
+        period = self._period_var.get() if self._period_var else _PERIODS[0]
+        entries = self._history.read_all()
+        if query:
+            # The query matches the transcript text OR the entry's date stamp,
+            # so "2026-07-14" (or just "07-14") finds a day directly.
+            def _stamp(e: dict) -> str:
+                return datetime.fromtimestamp(e.get("ts", 0)).strftime("%Y-%m-%d %H:%M")
+            entries = [e for e in entries
+                       if query in e.get("text", "").lower() or query in _stamp(e)]
+        if period != _PERIODS[0]:
+            entries = [e for e in entries if self._in_period(e.get("ts", 0), period)]
 
         if not entries:
             card = self._card(self._list_frame)
-            message = "No matches." if query.strip() else "No dictations yet — press the hotkey and speak."
+            filtered = bool(query) or period != _PERIODS[0]
+            message = "No matches." if filtered else "No dictations yet — press the hotkey and speak."
             ctk.CTkLabel(
                 card, text=message,
                 font=font("sm"), text_color=self._colors.fg_muted,
@@ -94,6 +119,20 @@ class HistoryTab(TabBase):
                 text=f"…{len(entries) - _MAX_SHOWN} older entries not shown (search or export to reach them)",
                 font=font("xs"), text_color=self._colors.fg_muted,
             ).pack(pady=SPACING["sm"])
+
+    @staticmethod
+    def _in_period(ts: float, period: str) -> bool:
+        stamp = datetime.fromtimestamp(ts or 0)
+        day_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        if period == "Today":
+            return stamp >= day_start
+        if period == "Yesterday":
+            return day_start - timedelta(days=1) <= stamp < day_start
+        if period == "Last 7 days":
+            return stamp >= day_start - timedelta(days=6)
+        if period == "Last 30 days":
+            return stamp >= day_start - timedelta(days=29)
+        return True
 
     def _render_entry(self, entry: dict) -> None:
         card = self._card(self._list_frame)

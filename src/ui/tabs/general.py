@@ -25,7 +25,7 @@ class GeneralTab(TabBase):
         ctx.subscribe("model_changed", self.KEY, self._on_external_model_change)
 
     def build(self, tab) -> None:
-        self._tab_header(tab, "General", "Core settings for dictation", icon="general")
+        self._tab_status_line(tab)
 
         cols = self._get_col_count()
 
@@ -64,11 +64,6 @@ class GeneralTab(TabBase):
         card = self._card(tab)
         self._build_vocab_setting(card)
         self._build_dictation_settings(card)
-
-        # Interface
-        self._section_label(tab, "INTERFACE")
-        card = self._card(tab)
-        self._build_interface_settings(card)
 
     def _build_general_multi(self, tab, cols: int) -> None:
         """Multi-column grid layout."""
@@ -115,20 +110,12 @@ class GeneralTab(TabBase):
             card = self._card(col2)
             self._build_vocab_setting(card)
             self._build_dictation_settings(card)
-
-            self._section_label(col2, "INTERFACE")
-            card = self._card(col2)
-            self._build_interface_settings(card)
         else:
-            # 2-col: dictation + interface balance under Audio + Hotkey
+            # 2-col: dictation balances under Audio + Hotkey
             self._section_label(col0, "DICTATION")
             card = self._card(col0)
             self._build_vocab_setting(card)
             self._build_dictation_settings(card)
-
-            self._section_label(col0, "INTERFACE")
-            card = self._card(col0)
-            self._build_interface_settings(card)
 
     # -- Dictation section (local features, v0.5.0) ------------------------------
 
@@ -212,23 +199,6 @@ class GeneralTab(TabBase):
             text=f"Edit…  ({len(self._settings.paste_rules)})", width=100,
             command=self._open_paste_rules_editor,
         ).pack()
-
-    def _build_interface_settings(self, card) -> None:
-        control = self._setting_row(card, "UI Zoom", "Scale the whole dashboard")
-        levels = ["100%", "125%", "150%", "175%", "200%"]
-        current = f"{int(round(self._settings.ui_scale * 100))}%"
-        self._zoom_var = self._string_var(value=current if current in levels else "150%")
-        segmented(
-            control, self._colors,
-            values=levels,
-            variable=self._zoom_var,
-            command=self._on_zoom_changed,
-        ).pack(anchor="w")
-
-    def _on_zoom_changed(self, value: str) -> None:
-        scale = int(value.rstrip("%")) / 100.0
-        if abs(scale - self._settings.ui_scale) > 0.01:
-            self.ctx.set_ui_scale(scale)
 
     def _sens_text(self, value: float) -> str:
         if value <= 0.8:

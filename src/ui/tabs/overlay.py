@@ -24,32 +24,38 @@ class OverlayTab(TabBase):
             col0 = ctk.CTkFrame(grid, fg_color="transparent")
             col0.grid(row=0, column=0, sticky="nsew", padx=0)
 
-            self._section_label(col0, "VISIBILITY")
+            if not embedded:
+                self._section_label(col0, "VISIBILITY")
             card = self._card(col0)
             self._build_overlay_switch(card)
 
-            self._section_label(col0, "POSITION")
+            if not embedded:
+                self._section_label(col0, "POSITION")
             card = self._card(col0)
             self._build_position_setting(card)
 
             col1 = ctk.CTkFrame(grid, fg_color="transparent")
             col1.grid(row=0, column=1, sticky="nsew", padx=0)
 
-            self._section_label(col1, "APPEARANCE")
+            if not embedded:
+                self._section_label(col1, "APPEARANCE")
             card = self._card(col1)
             self._build_opacity_setting(card)
             self._build_fontsize_setting(card)
         else:
             # Single column
-            self._section_label(tab, "VISIBILITY")
+            if not embedded:
+                self._section_label(tab, "VISIBILITY")
             card = self._card(tab)
             self._build_overlay_switch(card)
 
-            self._section_label(tab, "POSITION")
+            if not embedded:
+                self._section_label(tab, "POSITION")
             card = self._card(tab)
             self._build_position_setting(card)
 
-            self._section_label(tab, "APPEARANCE")
+            if not embedded:
+                self._section_label(tab, "APPEARANCE")
             card = self._card(tab)
             self._build_opacity_setting(card)
             self._build_fontsize_setting(card)

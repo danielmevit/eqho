@@ -85,6 +85,16 @@ class TabBase:
         except Exception:
             pass
 
+    def _tab_status_line(self, parent) -> None:
+        """Slim page top: just the model·hotkey·language status line. The pill
+        nav already names the section — no repeated titles inside the page."""
+        self._header_status = ctk.CTkLabel(
+            parent, text=self._header_status_text(),
+            font=font("xs"),
+            text_color=self._colors.fg_muted, anchor="w",
+        )
+        self._header_status.pack(fill="x", padx=SPACING["md"], pady=(SPACING["md"], SPACING["xs"]))
+
     def _tab_header(self, parent, title: str, subtitle: str, icon: str | None = None) -> None:
         """Standard tab header with title and status info; `icon` is a Phosphor
         glyph name rendered in the accent color left of the title."""

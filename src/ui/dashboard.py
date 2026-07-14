@@ -225,28 +225,32 @@ class Dashboard(ctk.CTkToplevel):
         actions = ctk.CTkFrame(self._topbar, fg_color="transparent")
         actions.pack(side="right", padx=(0, SPACING["lg"]))
 
+        # Small CIRCLE buttons, tight together (Daniel: not pill-shaped).
+        # CTkButton pads text width, so pin width == height and zero padding.
         resolved = self._settings.theme
         if resolved == "system":
             resolved = get_system_theme()
         toggle_glyph = icon("moon") if resolved == "light" else icon("sun")
         toggle_target = "dark" if resolved == "light" else "light"
-        self._theme_btn = ctk.CTkButton(
-            actions, text=toggle_glyph, width=36, height=36, corner_radius=18,
-            font=icon_font("base", 5), fg_color="transparent",
-            text_color=self._colors.fg_secondary,
-            hover_color=self._colors.bg_hover,
-            command=lambda t=toggle_target: self._set_theme(t),
-        )
-        self._theme_btn.pack(side="left", padx=(0, 2))
 
-        self._gear_btn = ctk.CTkButton(
-            actions, text=icon("settings"), width=36, height=36, corner_radius=18,
-            font=icon_font("base", 5), fg_color="transparent",
-            text_color=self._colors.fg_secondary,
-            hover_color=self._colors.bg_hover,
-            command=lambda: self._show_tab("settings"),
+        def _circle_button(parent, glyph: str, command) -> ctk.CTkButton:
+            btn = ctk.CTkButton(
+                parent, text=glyph, width=28, height=28, corner_radius=14,
+                font=icon_font("sm", 3), fg_color="transparent",
+                text_color=self._colors.fg_secondary,
+                hover_color=self._colors.bg_hover,
+                border_spacing=0,
+                command=command,
+            )
+            btn.pack(side="left", padx=1)
+            return btn
+
+        self._theme_btn = _circle_button(
+            actions, toggle_glyph, lambda t=toggle_target: self._set_theme(t),
         )
-        self._gear_btn.pack(side="left")
+        self._gear_btn = _circle_button(
+            actions, icon("settings"), lambda: self._show_tab("settings"),
+        )
 
         # Centered pill nav — placed, not packed, so it stays truly centered
         # regardless of the logo/actions widths (like the reference).
@@ -268,22 +272,22 @@ class Dashboard(ctk.CTkToplevel):
         self._topbar_rule.pack(side="top", fill="x")
 
     def _build_nav_segment(self, parent, key: str, label: str) -> tuple:
-        seg = ctk.CTkFrame(parent, corner_radius=15, fg_color="transparent", height=30)
+        seg = ctk.CTkFrame(parent, corner_radius=15, fg_color=self._colors.bg_secondary, height=30)
         seg.pack(side="left", padx=3, pady=4)
         icon_lbl = ctk.CTkLabel(
             seg, text=icon(key), font=icon_font("sm", 4),
-            text_color=self._colors.fg_secondary, fg_color="transparent",
+            text_color=self._colors.fg_secondary, fg_color=self._colors.bg_secondary,
         )
         icon_lbl.pack(side="left", padx=(12, 5), pady=2)
         text_lbl = ctk.CTkLabel(
             seg, text=label, font=font("sm", "bold"),
-            text_color=self._colors.fg_secondary, fg_color="transparent",
+            text_color=self._colors.fg_secondary, fg_color=self._colors.bg_secondary,
         )
         text_lbl.pack(side="left", padx=(0, 12), pady=2)
 
         def _hover(on: bool) -> None:
             if self._current_tab != key:
-                seg.configure(fg_color=self._colors.bg_hover if on else "transparent")
+                self._paint_segment(key, active=False, hover=on)
 
         for w in (seg, icon_lbl, text_lbl):
             w.bind("<Button-1>", lambda e, k=key: self._show_tab(k))
@@ -294,6 +298,24 @@ class Dashboard(ctk.CTkToplevel):
             except Exception:
                 pass
         return (seg, icon_lbl, text_lbl)
+
+    def _paint_segment(self, key: str, active: bool, hover: bool = False) -> None:
+        """Paint a nav segment consistently. Labels get EXPLICIT backgrounds —
+        CTk 'transparent' labels don't repaint when the parent's fill changes,
+        which left square patches breaking the pill's rounded corners."""
+        seg, icon_lbl, text_lbl = self._nav_segments[key]
+        if active:
+            bg = self._colors.accent
+            fg = self._colors.on_accent
+        elif hover:
+            bg = self._colors.bg_hover
+            fg = self._colors.fg_primary
+        else:
+            bg = self._colors.bg_secondary
+            fg = self._colors.fg_secondary
+        seg.configure(fg_color=bg)
+        for lbl in (icon_lbl, text_lbl):
+            lbl.configure(fg_color=bg, text_color=fg)
 
     def _set_theme(self, mode: str) -> None:
         self._settings.theme = mode
@@ -356,12 +378,8 @@ class Dashboard(ctk.CTkToplevel):
             self.rebuild_tab(key)
         # Update nav highlight: accent-filled pill for the active segment,
         # accent-tinted gear when the Settings view is open.
-        for k, (seg, icon_lbl, text_lbl) in getattr(self, "_nav_segments", {}).items():
-            active = k == key
-            seg.configure(fg_color=self._colors.accent if active else "transparent")
-            color = self._colors.on_accent if active else self._colors.fg_secondary
-            icon_lbl.configure(text_color=color)
-            text_lbl.configure(text_color=color)
+        for k in getattr(self, "_nav_segments", {}):
+            self._paint_segment(k, active=(k == key))
         if hasattr(self, "_gear_btn"):
             gear_active = key == "settings"
             self._gear_btn.configure(

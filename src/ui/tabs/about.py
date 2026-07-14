@@ -13,6 +13,7 @@ class AboutTab(TabBase):
     def build(self, tab, embedded: bool = False) -> None:
         # `embedded` = rendered as a section inside the Settings view (no own
         # header; the caller provides the section label).
+        self._embedded = embedded
         if not embedded:
             self._tab_header(tab, "About Eqho", "Your voice, everywhere.", icon="about")
 
@@ -39,7 +40,8 @@ class AboutTab(TabBase):
 
     def _build_about_details(self, parent) -> None:
         """About tab: version info and author."""
-        self._section_label(parent, "DETAILS")
+        if not getattr(self, "_embedded", False):
+            self._section_label(parent, "DETAILS")
         card = self._card(parent)
         inner = ctk.CTkFrame(card, fg_color="transparent")
         inner.pack(fill="x", padx=SPACING["lg"], pady=SPACING["lg"])
@@ -105,7 +107,8 @@ class AboutTab(TabBase):
 
     def _build_about_credits(self, parent) -> None:
         """About tab: powered by section."""
-        self._section_label(parent, "POWERED BY")
+        if not getattr(self, "_embedded", False):
+            self._section_label(parent, "POWERED BY")
         card = self._card(parent)
         inner = ctk.CTkFrame(card, fg_color="transparent")
         inner.pack(fill="x", padx=SPACING["lg"], pady=SPACING["sm"])

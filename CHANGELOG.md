@@ -15,6 +15,7 @@ The dashboard, restructured: top pill navigation + Phosphor icons (structure fro
 - **Settings view (gear)** hosts everything that isn't a main section: Theme (Light/Dark/System — System still lives here after the quick toggle), the full **Overlay** controls, and **About**, embedded as icon-labeled sections. Old deep-links (`--tab=overlay/about`, tray) transparently alias to it.
 - **Phosphor Icons** (phosphoricons.com, MIT) vendored as a TTF in `assets/fonts` — auto-registered by the existing font loader, rendered as text glyphs: crisp at any UI zoom, theme-colorable. Tab headers now carry accent-colored icons; credits updated.
 - Content area is full-width (no sidebar), so the responsive grid gets more room at every window size.
+- **Polish round (Daniel's review):** nav segments paint their rounded pill correctly in every state (CTk "transparent" labels don't repaint when the parent fill changes — labels now get explicit backgrounds); the top-right theme/gear buttons are small tight circles (28 px) instead of pills; pages no longer repeat their own section title — just a slim model·hotkey·language status line, then the options (embedded Overlay/About sections drop their inner labels too); **UI Zoom moved from General into Settings**, sitting beside Theme in a two-column Appearance row; **History gained a date filter** — a period dropdown (Today / Yesterday / Last 7 / Last 30 days) plus the search box now also matches date stamps, so typing `2026-07-14` finds a day directly.
 
 ## [0.8.7] - 2026-07-14
 
