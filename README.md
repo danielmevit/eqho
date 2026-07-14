@@ -34,7 +34,7 @@ pip install -r requirements.txt
 python run.py
 ```
 
-First run downloads the default speech model (distil-large-v3, ~1.5 GB) — after that, everything is offline.
+First run downloads the default speech model (distil-large-v3, ~1.5 GB) — after that, everything is offline. Day-to-day dev-run cheatsheet: [docs/RUN-DEV.md](docs/RUN-DEV.md).
 
 ## How it works
 

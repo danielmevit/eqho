@@ -254,21 +254,24 @@ class Dashboard(ctk.CTkToplevel):
 
         # Centered pill nav — placed, not packed, so it stays truly centered
         # regardless of the logo/actions widths (like the reference).
+        #
+        # Geometry: the gap between segments and the pill border is a UNIFORM
+        # 6px (Daniel: equal vertical and horizontal). That gap must also keep
+        # the segments' rectangular canvases inside the outer curve:
+        # corner (g,g) lies inside radius R iff (R-g)·√2 ≤ R → g ≥ 0.293·R.
+        # seg 28 + gap 6 → pill 40, R 20: (20-6)·1.414 = 19.8 ≤ 20. ✓
         self._nav_pill = ctk.CTkFrame(
-            self._topbar, corner_radius=19, height=38,
+            self._topbar, corner_radius=20, height=40,
             fg_color=self._colors.bg_secondary,
             border_width=1, border_color=self._colors.border_subtle,
         )
         self._nav_pill.place(relx=0.5, rely=0.5, anchor="center")
 
-        # End segments need extra inset: the outer pill's corner curve (r=19)
-        # eats ~7px — a segment 3px from the edge pokes its rectangular canvas
-        # through the curve (the "sharp corners sticking out" Daniel saw).
         self._nav_segments: dict[str, tuple] = {}
         nav_items = (("general", "General"), ("models", "Models"), ("history", "History"))
         for i, (key, label) in enumerate(nav_items):
-            pad_l = 10 if i == 0 else 3
-            pad_r = 10 if i == len(nav_items) - 1 else 3
+            pad_l = 6 if i == 0 else 3
+            pad_r = 6 if i == len(nav_items) - 1 else 3
             self._nav_segments[key] = self._build_nav_segment(
                 self._nav_pill, key, label, padx=(pad_l, pad_r),
             )
@@ -280,8 +283,8 @@ class Dashboard(ctk.CTkToplevel):
         self._topbar_rule.pack(side="top", fill="x")
 
     def _build_nav_segment(self, parent, key: str, label: str, padx=(3, 3)) -> tuple:
-        seg = ctk.CTkFrame(parent, corner_radius=15, fg_color=self._colors.bg_secondary, height=30)
-        seg.pack(side="left", padx=padx, pady=4)
+        seg = ctk.CTkFrame(parent, corner_radius=14, fg_color=self._colors.bg_secondary, height=28)
+        seg.pack(side="left", padx=padx, pady=6)
         icon_lbl = ctk.CTkLabel(
             seg, text=icon(key), font=icon_font("sm", 4),
             text_color=self._colors.fg_secondary, fg_color=self._colors.bg_secondary,
