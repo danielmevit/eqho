@@ -261,9 +261,17 @@ class Dashboard(ctk.CTkToplevel):
         )
         self._nav_pill.place(relx=0.5, rely=0.5, anchor="center")
 
+        # End segments need extra inset: the outer pill's corner curve (r=19)
+        # eats ~7px — a segment 3px from the edge pokes its rectangular canvas
+        # through the curve (the "sharp corners sticking out" Daniel saw).
         self._nav_segments: dict[str, tuple] = {}
-        for key, label in (("general", "General"), ("models", "Models"), ("history", "History")):
-            self._nav_segments[key] = self._build_nav_segment(self._nav_pill, key, label)
+        nav_items = (("general", "General"), ("models", "Models"), ("history", "History"))
+        for i, (key, label) in enumerate(nav_items):
+            pad_l = 10 if i == 0 else 3
+            pad_r = 10 if i == len(nav_items) - 1 else 3
+            self._nav_segments[key] = self._build_nav_segment(
+                self._nav_pill, key, label, padx=(pad_l, pad_r),
+            )
 
         # Hairline under the bar
         self._topbar_rule = ctk.CTkFrame(
@@ -271,9 +279,9 @@ class Dashboard(ctk.CTkToplevel):
         )
         self._topbar_rule.pack(side="top", fill="x")
 
-    def _build_nav_segment(self, parent, key: str, label: str) -> tuple:
+    def _build_nav_segment(self, parent, key: str, label: str, padx=(3, 3)) -> tuple:
         seg = ctk.CTkFrame(parent, corner_radius=15, fg_color=self._colors.bg_secondary, height=30)
-        seg.pack(side="left", padx=3, pady=4)
+        seg.pack(side="left", padx=padx, pady=4)
         icon_lbl = ctk.CTkLabel(
             seg, text=icon(key), font=icon_font("sm", 4),
             text_color=self._colors.fg_secondary, fg_color=self._colors.bg_secondary,
