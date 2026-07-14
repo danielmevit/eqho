@@ -30,7 +30,6 @@ class HistoryTab(TabBase):
         self._search_job = None
 
     def build(self, tab) -> None:
-        self._tab_status_line(tab)
 
         # Toolbar: search (text or date) + period filter + export + clear
         bar = ctk.CTkFrame(tab, fg_color="transparent")

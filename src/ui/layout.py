@@ -21,6 +21,15 @@ from .widgets import ThemedDropdown
 
 
 
+def status_summary(settings) -> str:
+    """The model · hotkey · language · mode one-liner (top bar, right side).
+    Compact on purpose — it shares the bar with the centered pill nav."""
+    model_name = MODEL_INFO.get(settings.model_size, {}).get("name", settings.model_size)
+    hotkey = "+".join(p.strip().title() for p in settings.hotkey.split("+"))
+    lang = settings.language.upper()
+    return f"{model_name} · {hotkey} · {lang} · {settings.hotkey_mode}"
+
+
 class TabBase:
     """Base class for dashboard tabs: context access + shared builders."""
 
@@ -71,29 +80,15 @@ class TabBase:
         return " + ".join(p.strip().title() for p in combo.split("+"))
 
     def _header_status_text(self) -> str:
-        from ..settings import SUPPORTED_LANGUAGES
-        model_name = MODEL_INFO.get(self._settings.model_size, {}).get("name", self._settings.model_size)
-        lang = SUPPORTED_LANGUAGES.get(self._settings.language, self._settings.language)
-        hotkey = self._format_hotkey(self._settings.hotkey)
-        return f"{model_name}  ·  {hotkey}  ·  {lang}  ·  {self._settings.hotkey_mode}"
+        return status_summary(self._settings)
 
     def refresh_header_status(self) -> None:
-        """Update the header's model·hotkey·language line in place (settings
-        changes no longer rebuild tabs, so headers must refresh themselves)."""
+        """The model·hotkey·language line lives in the dashboard's TOP BAR now
+        — tabs keep calling this after settings changes and it routes there."""
         try:
-            self._header_status.configure(text=self._header_status_text())
+            self.ctx.refresh_status()
         except Exception:
             pass
-
-    def _tab_status_line(self, parent) -> None:
-        """Slim page top: just the model·hotkey·language status line. The pill
-        nav already names the section — no repeated titles inside the page."""
-        self._header_status = ctk.CTkLabel(
-            parent, text=self._header_status_text(),
-            font=font("xs"),
-            text_color=self._colors.fg_muted, anchor="w",
-        )
-        self._header_status.pack(fill="x", padx=SPACING["md"], pady=(SPACING["md"], SPACING["xs"]))
 
     def _tab_header(self, parent, title: str, subtitle: str, icon: str | None = None) -> None:
         """Standard tab header with title and status info; `icon` is a Phosphor

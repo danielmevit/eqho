@@ -17,7 +17,6 @@ class SettingsTab(TabBase):
     KEY = "settings"
 
     def build(self, tab) -> None:
-        self._tab_status_line(tab)
 
         # -- Appearance: Theme | UI Zoom side by side ----------------------------
         self._icon_section_label(tab, "theme", "APPEARANCE")

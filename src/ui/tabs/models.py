@@ -26,7 +26,6 @@ class ModelsTab(TabBase):
         self._selected_key = ""
 
     def build(self, tab) -> None:
-        self._tab_status_line(tab)
         self._card_refs = {}
         self._progress_widgets = {}
         self._poll_widget = tab

@@ -26,9 +26,12 @@ from .win32 import apply_dark_title_bar
 
 log = logging.getLogger(__name__)
 
-# Window dimensions
-WIN_W, WIN_H = 720, 520
-TOPBAR_H = 56
+# Window dimensions (wider default since the top bar now hosts nav + status)
+WIN_W, WIN_H = 940, 560
+TOPBAR_H = 64
+# Below this top-bar width (unscaled units) the status text would slide under
+# the centered pill — hide it instead of colliding.
+STATUS_MIN_W = 910
 
 # Responsive breakpoints (content area width — full window now, no sidebar)
 BP_2COL = 560   # 2 columns when content >= 560px
@@ -81,6 +84,7 @@ class Dashboard(ctk.CTkToplevel):
             master_getter=lambda: self,
             change_model=self._change_model,
             set_theme=self._set_theme,
+            refresh_status=self._refresh_topbar_status,
         )
         # Non-visible tabs rebuild on next show after a model change, so
         # their headers/cards never show a stale active model
@@ -221,9 +225,18 @@ class Dashboard(ctk.CTkToplevel):
                 text_color=self._colors.fg_primary,
             ).pack(anchor="w")
 
-        # Icon actions (right): theme toggle + settings gear
+        # Right cluster: status line + theme toggle + gear — icons hug each
+        # other and the window edge (Daniel).
         actions = ctk.CTkFrame(self._topbar, fg_color="transparent")
-        actions.pack(side="right", padx=(0, SPACING["lg"]))
+        actions.pack(side="right", padx=(0, SPACING["sm"]))
+
+        from .layout import status_summary
+        self._status_lbl = ctk.CTkLabel(
+            actions, text=status_summary(self._settings),
+            font=font("xs"), text_color=self._colors.fg_muted,
+            fg_color="transparent", anchor="e",
+        )
+        self._status_lbl.pack(side="left", padx=(0, SPACING["sm"]))
 
         # Small CIRCLE buttons, tight together (Daniel: not pill-shaped).
         # CTkButton pads text width, so pin width == height and zero padding.
@@ -242,7 +255,7 @@ class Dashboard(ctk.CTkToplevel):
                 border_spacing=0,
                 command=command,
             )
-            btn.pack(side="left", padx=1)
+            btn.pack(side="left", padx=0)
             return btn
 
         self._theme_btn = _circle_button(
@@ -255,13 +268,13 @@ class Dashboard(ctk.CTkToplevel):
         # Centered pill nav — placed, not packed, so it stays truly centered
         # regardless of the logo/actions widths (like the reference).
         #
-        # Geometry: the gap between segments and the pill border is a UNIFORM
-        # 6px (Daniel: equal vertical and horizontal). That gap must also keep
-        # the segments' rectangular canvases inside the outer curve:
-        # corner (g,g) lies inside radius R iff (R-g)·√2 ≤ R → g ≥ 0.293·R.
-        # seg 28 + gap 6 → pill 40, R 20: (20-6)·1.414 = 19.8 ≤ 20. ✓
+        # Geometry: fully-round capsules (corner_radius=999 — CTk clamps to
+        # height/2) with a UNIFORM gap between segments and the pill border.
+        # The gap must keep the segments' rectangular canvases inside the
+        # outer curve: corner (g,g) is inside radius R iff (R-g)·√2 ≤ R →
+        # g ≥ 0.293·R.  seg 34 + gap 8 → pill 50, R 25: need g ≥ 7.33. ✓
         self._nav_pill = ctk.CTkFrame(
-            self._topbar, corner_radius=20, height=40,
+            self._topbar, corner_radius=999, height=50,
             fg_color=self._colors.bg_secondary,
             border_width=1, border_color=self._colors.border_subtle,
         )
@@ -270,8 +283,8 @@ class Dashboard(ctk.CTkToplevel):
         self._nav_segments: dict[str, tuple] = {}
         nav_items = (("general", "General"), ("models", "Models"), ("history", "History"))
         for i, (key, label) in enumerate(nav_items):
-            pad_l = 6 if i == 0 else 3
-            pad_r = 6 if i == len(nav_items) - 1 else 3
+            pad_l = 8 if i == 0 else 4
+            pad_r = 8 if i == len(nav_items) - 1 else 4
             self._nav_segments[key] = self._build_nav_segment(
                 self._nav_pill, key, label, padx=(pad_l, pad_r),
             )
@@ -282,19 +295,39 @@ class Dashboard(ctk.CTkToplevel):
         )
         self._topbar_rule.pack(side="top", fill="x")
 
-    def _build_nav_segment(self, parent, key: str, label: str, padx=(3, 3)) -> tuple:
-        seg = ctk.CTkFrame(parent, corner_radius=14, fg_color=self._colors.bg_secondary, height=28)
-        seg.pack(side="left", padx=padx, pady=6)
+        # Auto-hide the status line when the bar is too narrow for it to
+        # coexist with the centered pill.
+        self._topbar.bind("<Configure>", self._on_topbar_resize)
+
+    def _on_topbar_resize(self, event=None) -> None:
+        lbl = getattr(self, "_status_lbl", None)
+        if lbl is None:
+            return
+        try:
+            width_units = self._topbar.winfo_width() / max(self._ui_scale, 0.01)
+            visible = bool(lbl.winfo_manager())
+            if width_units < STATUS_MIN_W and visible:
+                lbl.pack_forget()
+            elif width_units >= STATUS_MIN_W and not visible:
+                lbl.pack(side="left", padx=(0, SPACING["sm"]), before=self._theme_btn)
+        except Exception:
+            pass
+
+    def _build_nav_segment(self, parent, key: str, label: str, padx=(4, 4)) -> tuple:
+        # Fully-round capsule (999 → clamped to height/2); inner padding
+        # doubled per Daniel — content gets real breathing room.
+        seg = ctk.CTkFrame(parent, corner_radius=999, fg_color=self._colors.bg_secondary, height=34)
+        seg.pack(side="left", padx=padx, pady=8)
         icon_lbl = ctk.CTkLabel(
             seg, text=icon(key), font=icon_font("sm", 4),
             text_color=self._colors.fg_secondary, fg_color=self._colors.bg_secondary,
         )
-        icon_lbl.pack(side="left", padx=(12, 5), pady=2)
+        icon_lbl.pack(side="left", padx=(24, 10), pady=4)
         text_lbl = ctk.CTkLabel(
             seg, text=label, font=font("sm", "bold"),
             text_color=self._colors.fg_secondary, fg_color=self._colors.bg_secondary,
         )
-        text_lbl.pack(side="left", padx=(0, 12), pady=2)
+        text_lbl.pack(side="left", padx=(0, 24), pady=4)
 
         def _hover(on: bool) -> None:
             if self._current_tab != key:
@@ -309,6 +342,15 @@ class Dashboard(ctk.CTkToplevel):
             except Exception:
                 pass
         return (seg, icon_lbl, text_lbl)
+
+    def _refresh_topbar_status(self) -> None:
+        """Update the top bar's model·hotkey·language line (tabs call this via
+        ctx after settings changes)."""
+        try:
+            from .layout import status_summary
+            self._status_lbl.configure(text=status_summary(self._settings))
+        except Exception:
+            pass
 
     def _paint_segment(self, key: str, active: bool, hover: bool = False) -> None:
         """Paint a nav segment consistently. Labels get EXPLICIT backgrounds —
