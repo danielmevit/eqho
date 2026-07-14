@@ -1,0 +1,35 @@
+# Canonicalize line endings so a Windows editor on the D: mount can't flip the
+# whole tree to CRLF (which disguised itself as ~30 "modified" files). The repo
+# stores LF; text files are checked out LF everywhere.
+* text=auto eol=lf
+
+# Windows-native scripts keep CRLF — their interpreters expect it.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Text formats that should always diff as text (never guessed binary).
+*.svg text
+*.astro text
+*.spec text
+*.iss text
+
+# Binary assets — never normalize, diff, or merge as text.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.icns binary
+*.ttf  binary
+*.otf  binary
+*.ai   binary
+*.pdf  binary
+*.wav  binary
+*.mp3  binary
+*.zip  binary
+*.exe  binary
+*.dll  binary
+*.dmg  binary
+*.AppImage binary
