@@ -6,7 +6,19 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
-## [0.8.5] - 2026-07-14
+## [0.8.6] - 2026-07-14
+
+Light-pill polish + a brand-new product website. Released together with the 0.8.3–0.8.5 overlay work (the pill era begins).
+
+### Fixed
+- **Light pill top-edge flicker** — the pill window's color-key was near-black, so anti-aliased edge pixels blended toward black; on the white pill that painted a pulsing dark fringe as the capsule breathed. The key now matches the theme (near-white in light, near-black in dark).
+- **Light pill shine parity** — full-strength specular sheen in both themes (light was reduced 40%).
+
+### Added
+- **White border** on the light pill (3 px, applied post tone-map so it stays crisp).
+- **Light pill translucency** — translucent but not transparent: 90% visible (window alpha; the panel stays at the user's overlay opacity). Mirrored in Eqho Mobile v0.5.3.
+- **Website rebuilt as a product page** (`site/`): plain-language copy that sells the app instead of describing the repo; big responsive type; a recreated overlay (live panel + the animated listening pill) as the hero; the pill woven in for both themes (seamless-loop WebP renders from `pillfx`, 121/139 KB); a Downloads section with OS icons whose links resolve to the newest GitHub release assets via a tiny progressive-enhancement script (static fallback: the releases page); FAQ; footer. Mobile/tablet responsive throughout.
+- **README "Under the hood"** — the tech specifics (engines, model host, VAD, textproc, packaging) now live in the README; the website stays non-technical on purpose.
 
 The pill goes on-brand: blue, vibrant, and smaller.
 

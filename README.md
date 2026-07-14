@@ -94,6 +94,21 @@ Distil models are English-optimized; for other languages pick `large-v3-turbo` o
 
 Settings persist to `settings.json` in your config folder — everything is also adjustable from the tray menu and dashboard. For development docs, see `AGENTS.md`, `docs/ai/`, `ROADMAP.md`, and `CHANGELOG.md`. The repo is CodeGraph-indexed (`codegraph init` after cloning).
 
+## Under the hood
+
+For the technically curious (the [website](https://danielmevit.github.io/eqho/) stays non-technical on purpose):
+
+- **Two interchangeable inference engines**, selected automatically or in Settings → General:
+  - [faster-whisper](https://github.com/SYSTRAN/faster-whisper) on **CTranslate2** — CUDA on NVIDIA, optimized INT8/FP16 on CPU
+  - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) via `pywhispercpp` — **Vulkan** acceleration on AMD Radeon, Intel Arc/Iris *and* NVIDIA, from one wheel (built by `tools/mkwheel.py`)
+- **Subprocess model host** — the model runs in a separate process (`src/model_host.py`), so engine/model switches never freeze or crash the UI, and VRAM is released cleanly
+- **Adaptive VAD** with a self-calibrating noise floor and user sensitivity; audio is captured with `sounddevice`/PortAudio at 16 kHz mono
+- **Deterministic text pipeline** (`src/textproc.py`) — casing/spacing cleanup, voice commands, user replacements; never rephrases what you said (no LLM touches your words)
+- **UI**: tkinter + CustomTkinter dashboard, a frameless always-on-top overlay with a numpy-rendered animated "listening pill" (`src/pillfx.py`), tray via `pystray`
+- **Injection**: clipboard-paste or simulated typing per app, with per-app rules
+- **Packaging**: PyInstaller bundles + Inno Setup installer (Windows), tar.gz/AppImage (Linux), dmg (macOS) — all built by CI on every version tag (`.github/workflows/release.yml`)
+- **Python 3.10+**, ~zero telemetry: the app never phones home; the only network call is the model download you ask for
+
 ## License
 
 Eqho is licensed under the [GNU AGPL-3.0](LICENSE): free to use, study, and modify — if you redistribute it or a derivative (including as a network service), you must keep the copyright and attribution notices and release your version under the same license. © [Daniel Mevit](https://github.com/danielmevit).

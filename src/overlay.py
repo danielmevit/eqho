@@ -44,7 +44,14 @@ _FADE_INTERVAL = 25     # ms between fade steps
 _FRAME_MS = 40          # pill animation cadence (~25 fps)
 _MAX_TEXT_CHARS = 220   # show only the TAIL of long dictations (latest words win)
 _PLACEHOLDER = "Listening..."
-_TRANSPARENT_KEY = "#010203"  # color-key for the pill window (Windows only)
+# Color-keys for the pill window (Windows only). The key must match the pill's
+# theme: anti-aliased edge pixels blend toward the key, so a dark key under the
+# WHITE pill produced a pulsing dark fringe as the capsule breathed — the
+# "top-edge flicker". Near-white key for light, near-black for dark.
+_KEY_DARK = "#010203"
+_KEY_LIGHT = "#fefefd"
+# The light pill is translucent-but-not-transparent: 90% visible.
+_LIGHT_PILL_ALPHA = 0.90
 
 
 def _tail_text(text: str) -> str:
@@ -102,6 +109,8 @@ class TranscriptionOverlay:
         self._transparent_ok = False
         self._light = 0.0
         self._pill_bg = (0.0, 0.0, 0.0)
+        self._pill_alpha_scale = 1.0  # 0.90 in light theme (translucent pill)
+        self._alpha_logical = 0.0     # current overlay opacity before pill scaling
         self._pill_x = 0
         self._pill_y = 0
 
@@ -132,8 +141,8 @@ class TranscriptionOverlay:
         # theme-colored rounded plate).
         if sys.platform == "win32":
             try:
-                self._root.configure(bg=_TRANSPARENT_KEY)
-                self._root.attributes("-transparentcolor", _TRANSPARENT_KEY)
+                self._root.configure(bg=_KEY_DARK)
+                self._root.attributes("-transparentcolor", _KEY_DARK)
                 self._transparent_ok = True
             except Exception:
                 self._transparent_ok = False
@@ -179,9 +188,16 @@ class TranscriptionOverlay:
         bg, fg = colors.overlay_bg, colors.overlay_fg
         r, g, b = pillfx.hex_rgb01(bg)
         self._light = 1.0 if (0.2126 * r + 0.7152 * g + 0.0722 * b) > 0.5 else 0.0
+        self._pill_alpha_scale = _LIGHT_PILL_ALPHA if self._light > 0.5 else 1.0
         if self._transparent_ok:
-            self._pill_bg = pillfx.hex_rgb01(_TRANSPARENT_KEY)
-            self._pill_canvas.configure(bg=_TRANSPARENT_KEY)
+            key = _KEY_LIGHT if self._light > 0.5 else _KEY_DARK
+            try:
+                self._root.attributes("-transparentcolor", key)
+            except Exception:
+                pass
+            self._root.configure(bg=key)
+            self._pill_bg = pillfx.hex_rgb01(key)
+            self._pill_canvas.configure(bg=key)
         else:
             self._pill_bg = (r, g, b)
             self._root.configure(bg=bg)
@@ -215,8 +231,7 @@ class TranscriptionOverlay:
         self._root.geometry(f"{_PILL_W}x{_PILL_H}+{self._pill_x}+{self._pill_y}")
 
         if not self._visible:
-            self._root.attributes("-alpha", 0.0)
-            self._panel.attributes("-alpha", 0.0)
+            self._apply_alpha(0.0)
             self._root.deiconify()
             self._visible = True
             self._phase = 0.0
@@ -227,7 +242,7 @@ class TranscriptionOverlay:
             self._start_render()
             self._fade_to(self._settings.overlay_opacity)
         else:
-            self._root.attributes("-alpha", self._settings.overlay_opacity)
+            self._apply_alpha(self._settings.overlay_opacity)
 
         self._set_panel_text(text)
 
@@ -296,12 +311,10 @@ class TranscriptionOverlay:
             else:
                 y = self._pill_y - _GAP - h
             self._panel.geometry(f"{w}x{h}+{x}+{y}")
+            self._panel.attributes("-alpha", self._alpha_logical)
             if not self._panel_shown:
-                self._panel.attributes("-alpha", float(self._root.attributes("-alpha")))
                 self._panel.deiconify()
                 self._panel_shown = True
-            else:
-                self._panel.attributes("-alpha", float(self._root.attributes("-alpha")))
         except Exception:
             pass
 
@@ -386,6 +399,14 @@ class TranscriptionOverlay:
 
     # -- Fade ---------------------------------------------------------------------
 
+    def _apply_alpha(self, alpha: float) -> None:
+        """Set overlay opacity; the pill is additionally scaled in light theme
+        (translucent-but-not-transparent, 90% visible)."""
+        self._alpha_logical = alpha
+        self._root.attributes("-alpha", alpha * self._pill_alpha_scale)
+        if self._panel_shown:
+            self._panel.attributes("-alpha", alpha)
+
     def _fade_to(self, target: float, on_done=None) -> None:
         if self._fade_job is not None:
             try:
@@ -393,26 +414,18 @@ class TranscriptionOverlay:
             except Exception:
                 pass
             self._fade_job = None
-        try:
-            current = float(self._root.attributes("-alpha"))
-        except Exception:
-            current = target
+        current = self._alpha_logical
         delta = (target - current) / _FADE_STEPS
-
-        def _apply(alpha: float) -> None:
-            self._root.attributes("-alpha", alpha)
-            if self._panel_shown:
-                self._panel.attributes("-alpha", alpha)
 
         def _step(i: int = 1) -> None:
             self._fade_job = None
             try:
                 if i >= _FADE_STEPS:
-                    _apply(target)
+                    self._apply_alpha(target)
                     if on_done:
                         on_done()
                     return
-                _apply(current + delta * i)
+                self._apply_alpha(current + delta * i)
             except Exception:
                 return
             self._fade_job = self._root.after(_FADE_INTERVAL, _step, i + 1)

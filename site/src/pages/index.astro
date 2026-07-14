@@ -1,8 +1,10 @@
 ---
-const title = "Eqho | Free Offline Voice-to-Text Dictation";
-const description = "Free, offline voice-to-text dictation. Powered by OpenAI's Whisper, running 100% locally and GPU-accelerated on NVIDIA, AMD, or Intel. Press a hotkey and dictate into any app.";
+const title = "Eqho — Free Offline Dictation. Speak, It Types.";
+const description = "Free, open-source dictation for Windows, Linux and macOS. Press a hotkey, speak, and your words appear in any app. 100% offline — your voice never leaves your computer.";
 const author = "Daniel Mevit";
-const year = 2026; 
+const year = 2026;
+const releasesUrl = "https://github.com/danielmevit/eqho/releases";
+const latestUrl = "https://github.com/danielmevit/eqho/releases/latest";
 ---
 <!DOCTYPE html>
 <html lang="en">
@@ -10,7 +12,7 @@ const year = 2026;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
-    
+
     <!-- Tab Icons for Light Mode Tabs -->
     <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/DanielMevit/eqho/main/assets/logo_32_dark.png" media="(prefers-color-scheme: light)" />
     <link rel="icon" type="image/png" sizes="64x64" href="https://raw.githubusercontent.com/DanielMevit/eqho/main/assets/logo_64_dark.png" media="(prefers-color-scheme: light)" />
@@ -26,7 +28,7 @@ const year = 2026;
     <!-- Inter Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <!-- Open Graph for Link Sharing -->
     <meta property="og:title" content={title} />
@@ -46,520 +48,480 @@ const year = 2026;
         "operatingSystem": "Windows 10 (64-bit), Windows 11 (64-bit), macOS, Linux",
         "description": "Free, offline voice-to-text dictation powered by OpenAI's Whisper. Press a hotkey, speak, and your words appear in any app — 100% local, GPU-accelerated on NVIDIA, AMD, and Intel.",
         "url": "https://danielmevit.github.io/eqho/",
-        "downloadUrl": "https://github.com/DanielMevit/eqho/releases",
-        "softwareVersion": "0.8.2",
+        "downloadUrl": "https://github.com/danielmevit/eqho/releases",
+        "softwareVersion": "0.8.6",
         "author": { "@type": "Person", "name": "Daniel Mevit", "url": "https://github.com/danielmevit" },
         "license": "https://www.gnu.org/licenses/agpl-3.0.html",
         "isAccessibleForFree": true,
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-        "keywords": "speech to text, voice typing, offline dictation, OpenAI Whisper, whisper.cpp, faster-whisper, Vulkan speech to text, AMD GPU dictation, AMD Radeon voice to text, Intel Arc dictation, cross-vendor GPU transcription, runs on any GPU, private speech to text, local voice recognition, no-cloud transcription"
+        "keywords": "speech to text, voice typing, offline dictation, OpenAI Whisper, whisper.cpp, faster-whisper, Vulkan speech to text, AMD GPU dictation, cross-vendor GPU transcription, private speech to text, local voice recognition"
       }
     </script>
 
     <style>
       :root {
-        /* GitHub Dark Theme Palette */
-        --color-bg: #0d1117;
-        --color-card-bg: #161b22;
-        --color-text: #c9d1d9;
-        --color-heading: #ffffff;
-        --color-blue: #58a6ff;
-        --color-muted: #8b949e;
-        --color-border: #30363d;
-        --color-shadow: rgba(0, 0, 0, 0.4);
-        --color-hover: #1f242c;
+        --bg: #0d1117;
+        --bg-soft: #10161f;
+        --card: #161b22;
+        --card-hover: #1b222c;
+        --text: #c9d1d9;
+        --heading: #ffffff;
+        --blue: #58a6ff;
+        --blue-deep: #1f6feb;
+        --muted: #8b949e;
+        --border: #30363d;
+        --light-card: #f6f8fa;
+        --light-text: #1a1c1f;
+        --light-muted: #57606a;
+        --radius: 16px;
       }
+
+      * { box-sizing: border-box; }
+
+      html { scroll-behavior: smooth; }
 
       body {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        background-color: var(--color-bg);
-        color: var(--color-text);
+        background: var(--bg);
+        color: var(--text);
         line-height: 1.6;
         margin: 0;
-        padding: 0;
         -webkit-font-smoothing: antialiased;
       }
 
-      main {
-        max-width: 960px;
-        margin: 8rem auto;
-        padding: 0 2rem;
-      }
+      img { max-width: 100%; height: auto; }
 
-      h1, h2, h3 {
-        color: var(--color-heading);
-      }
+      .wrap { max-width: 1080px; margin: 0 auto; padding: 0 1.5rem; }
 
+      /* ---------- Nav ---------- */
+      nav {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 1.1rem 0;
+      }
+      nav .brand img { height: 30px; display: block; }
+      nav .links { display: flex; align-items: center; gap: 1.4rem; }
+      nav a { color: var(--muted); text-decoration: none; font-weight: 500; font-size: 0.95rem; }
+      nav a:hover { color: var(--heading); }
+      .btn {
+        display: inline-flex; align-items: center; gap: 0.55rem;
+        background: var(--blue-deep); color: #fff !important;
+        padding: 0.7rem 1.3rem; border-radius: 999px;
+        font-weight: 600; text-decoration: none; border: 1px solid transparent;
+        transition: transform .12s ease, background .12s ease;
+      }
+      .btn:hover { background: #388bfd; transform: translateY(-1px); }
+      .btn.ghost {
+        background: transparent; color: var(--text) !important;
+        border-color: var(--border);
+      }
+      .btn.ghost:hover { border-color: var(--muted); }
+      .btn.big { padding: 0.95rem 1.7rem; font-size: 1.05rem; }
+
+      /* ---------- Hero ---------- */
+      header.hero { padding: 5rem 0 3.5rem; text-align: center; }
+      .eyebrow {
+        display: inline-block; font-size: 0.85rem; font-weight: 600;
+        letter-spacing: 0.08em; text-transform: uppercase; color: var(--blue);
+        border: 1px solid var(--border); border-radius: 999px;
+        padding: 0.35rem 0.9rem; margin-bottom: 1.6rem; background: var(--bg-soft);
+      }
       h1 {
-        font-size: 3.5rem;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-        margin: 0;
+        font-size: clamp(2.8rem, 7.5vw, 5rem);
+        font-weight: 800; letter-spacing: -0.03em; line-height: 1.05;
+        color: var(--heading); margin: 0 0 1.2rem;
       }
+      h1 .accent { color: var(--blue); }
+      .sub {
+        font-size: clamp(1.05rem, 2.2vw, 1.35rem);
+        color: var(--muted); max-width: 620px; margin: 0 auto 2.2rem;
+      }
+      .cta-row { display: flex; gap: 0.9rem; justify-content: center; flex-wrap: wrap; margin-bottom: 0.9rem; }
+      .cta-note { font-size: 0.85rem; color: var(--muted); }
 
+      /* The overlay, recreated: preview panel + the listening pill */
+      .overlay-demo { max-width: 640px; margin: 3.2rem auto 0; }
+      .overlay-demo .panel {
+        background: var(--card); border: 1px solid var(--border);
+        border-radius: 18px; padding: 1rem 1.3rem; text-align: left;
+        color: var(--text); font-size: 1.02rem; box-shadow: 0 18px 50px rgba(0,0,0,.45);
+      }
+      .overlay-demo .panel .caret {
+        display: inline-block; width: 2px; height: 1.05em; background: var(--blue);
+        vertical-align: text-bottom; margin-left: 2px; animation: blink 1.1s steps(1) infinite;
+      }
+      @keyframes blink { 50% { opacity: 0; } }
+      .overlay-demo .pill { margin-top: 0.8rem; }
+      .overlay-demo .pill img { width: min(380px, 72%); display: block; margin: 0 auto; }
+
+      /* ---------- Sections ---------- */
+      section { padding: 4.5rem 0 0; }
       h2 {
-        font-size: 2rem;
-        font-weight: 500;
-        margin-top: 5rem;
-        margin-bottom: 2rem;
-        border-bottom: 1px solid var(--color-border);
-        padding-bottom: 0.5rem;
+        font-size: clamp(1.9rem, 4.5vw, 2.8rem); font-weight: 700;
+        letter-spacing: -0.02em; color: var(--heading);
+        margin: 0 0 0.7rem; text-align: center;
+      }
+      .lede { text-align: center; color: var(--muted); max-width: 640px; margin: 0 auto 2.6rem; font-size: 1.08rem; }
+
+      .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.1rem; }
+      .step {
+        background: var(--card); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 1.6rem;
+      }
+      .step .num {
+        font-size: 2.4rem; font-weight: 800; color: var(--blue); line-height: 1;
+        margin-bottom: 0.7rem;
+      }
+      .step h3 { color: var(--heading); font-size: 1.15rem; margin: 0 0 0.4rem; }
+      .step p { margin: 0; color: var(--muted); font-size: 0.98rem; }
+      .step kbd {
+        background: var(--bg); border: 1px solid var(--border); border-bottom-width: 2px;
+        border-radius: 6px; padding: 0.1rem 0.45rem; font-size: 0.9em; color: var(--heading);
       }
 
-      h3 {
-        font-size: 1.25rem;
-        font-weight: 500;
-        margin-top: 3rem;
-        margin-bottom: 1rem;
-        color: var(--color-blue);
+      .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1.1rem; }
+      .card {
+        background: var(--card); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 1.6rem;
+        transition: background .12s ease;
+      }
+      .card:hover { background: var(--card-hover); }
+      .card .icon { font-size: 1.6rem; margin-bottom: 0.7rem; }
+      .card h3 { color: var(--heading); font-size: 1.12rem; margin: 0 0 0.45rem; }
+      .card p { margin: 0; color: var(--muted); font-size: 0.97rem; }
+
+      /* ---------- Theme duo (the pill in both worlds) ---------- */
+      .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
+      .duo .world {
+        border-radius: var(--radius); border: 1px solid var(--border);
+        padding: 2.2rem 1.6rem; text-align: center;
+      }
+      .duo .world img { width: min(340px, 86%); }
+      .duo .world.dark { background: var(--bg-soft); }
+      .duo .world.light { background: var(--light-card); border-color: #d0d7de; }
+      .duo .world p { margin: 1.1rem 0 0; font-size: 0.95rem; }
+      .duo .world.dark p { color: var(--muted); }
+      .duo .world.light p { color: var(--light-muted); }
+
+      /* ---------- Screenshot ---------- */
+      .shot {
+        border-radius: var(--radius); border: 1px solid var(--border);
+        box-shadow: 0 24px 70px rgba(0,0,0,.5); display: block; margin: 0 auto;
       }
 
-      p { margin-bottom: 1.5rem; }
+      .langs { text-align: center; color: var(--muted); max-width: 720px; margin: 1.8rem auto 0; line-height: 2; }
+      .langs span { white-space: nowrap; }
+      .langs span + span::before { content: "·"; color: var(--border); margin: 0 0.55rem; }
 
-      ul { margin-bottom: 2rem; padding-left: 1.5rem; }
-      li { margin-bottom: 0.75rem; }
-
-      a {
-        color: var(--color-blue);
-        text-decoration: none;
+      /* ---------- Downloads ---------- */
+      .dl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.1rem; }
+      .dl-card {
+        background: var(--card); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 1.7rem;
       }
-
-      a:hover {
-        text-decoration: underline;
+      .dl-card .os {
+        display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1.1rem;
       }
-
-      /* Logo and Header Styling */
-      header {
-        text-align: center;
-        margin-bottom: 6rem;
+      .dl-card .os svg { width: 30px; height: 30px; fill: var(--heading); flex: none; }
+      .dl-card .os h3 { color: var(--heading); margin: 0; font-size: 1.25rem; }
+      .dl-card .os small { display: block; color: var(--muted); font-weight: 400; }
+      .dl-links { display: flex; flex-direction: column; gap: 0.6rem; }
+      .dl-links a {
+        display: flex; justify-content: space-between; align-items: center; gap: 0.8rem;
+        background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+        padding: 0.75rem 1rem; color: var(--text); text-decoration: none; font-weight: 500;
+        font-size: 0.97rem; transition: border-color .12s ease, color .12s ease;
       }
+      .dl-links a:hover { border-color: var(--blue); color: var(--heading); }
+      .dl-links a .tag { color: var(--muted); font-size: 0.82rem; font-weight: 400; }
+      .dl-links a.primary { background: var(--blue-deep); border-color: transparent; color: #fff; }
+      .dl-links a.primary .tag { color: rgba(255,255,255,.75); }
+      .dl-links a.primary:hover { background: #388bfd; color: #fff; }
+      .dl-fine { text-align: center; color: var(--muted); font-size: 0.88rem; margin-top: 1.6rem; }
+      .dl-fine a { color: var(--blue); text-decoration: none; }
+      .dl-fine a:hover { text-decoration: underline; }
 
-      .header-title-container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 1.5rem;
-        margin-bottom: 1.5rem;
+      /* ---------- FAQ ---------- */
+      .faq { max-width: 760px; margin: 0 auto; }
+      .faq details {
+        background: var(--card); border: 1px solid var(--border);
+        border-radius: 12px; padding: 1rem 1.3rem; margin-bottom: 0.8rem;
       }
+      .faq summary { cursor: pointer; font-weight: 600; color: var(--heading); }
+      .faq p { color: var(--muted); margin: 0.8rem 0 0.2rem; }
 
-      .logo-link {
-        display: flex;
-      }
-
-      .logo-img {
-        width: 160px; 
-        height: auto;
-      }
-
-      .header-desc {
-        font-size: 1.25rem;
-        color: var(--color-muted);
-        max-width: 680px;
-        margin: 0 auto 1.5rem auto;
-      }
-
-      /* Platform Icons Row */
-      .platform-icons {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        gap: 2rem;
-        margin-bottom: 2rem;
-      }
-
-      .platform-icons svg {
-        width: 28px;
-        height: 28px;
-        fill: var(--color-muted);
-        transition: fill 0.2s ease;
-      }
-
-      .platform-icons svg:hover {
-        fill: var(--color-text);
-      }
-
-      section { margin-bottom: 6rem; }
-
-      /* Visual Showcase */
-      .visual-comparison {
-        margin: 4rem 0;
-        text-align: center;
-      }
-
-      .visual-comparison img {
-        max-width: 100%;
-        border-radius: 8px;
-        border: 1px solid var(--color-border);
-        box-shadow: 0 12px 24px var(--color-shadow);
-      }
-
-      .visual-caption {
-        margin-top: 1.5rem;
-        font-style: italic;
-        color: var(--color-muted);
-      }
-
-      /* Grid for Features */
-      .grid-3 {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 2rem;
-        margin-top: 3rem;
-      }
-
-      .grid-card {
-        background-color: var(--color-card-bg);
-        border: 1px solid var(--color-border);
-        border-radius: 8px;
-        padding: 2rem;
-        box-shadow: 0 4px 12px var(--color-shadow);
-      }
-
-      .grid-card h3 { 
-        margin-top: 0; 
-        color: var(--color-heading); 
-        font-weight: 600;
-      }
-
-      /* Accordion / Dropdown Styling for FAQ & Install */
-      .accordion-container {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-        margin-top: 2rem;
-      }
-
-      .accordion-item {
-        background-color: var(--color-card-bg);
-        border: 1px solid var(--color-border);
-        border-radius: 8px;
-        overflow: hidden;
-        transition: background-color 0.2s ease;
-      }
-      
-      .accordion-item:hover {
-        background-color: var(--color-hover);
-      }
-
-      .accordion-item summary {
-        padding: 1.5rem 2rem;
-        font-size: 1.1rem;
-        font-weight: 500;
-        color: var(--color-heading);
-        cursor: pointer;
-        list-style: none;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        user-select: none;
-      }
-
-      .accordion-item summary::-webkit-details-marker { display: none; }
-
-      .accordion-item summary::after {
-        content: '+';
-        color: var(--color-blue);
-        font-size: 1.5rem;
-        line-height: 1;
-        font-weight: 400;
-      }
-
-      .accordion-item[open] summary {
-        border-bottom: 1px solid var(--color-border);
-        background-color: var(--color-card-bg);
-      }
-
-      .accordion-item[open] summary::after { content: '−'; }
-
-      .accordion-content {
-        padding: 1.5rem 2rem;
-        color: var(--color-text);
-        background-color: var(--color-bg);
-        border-top: 1px solid var(--color-border);
-      }
-
-      .accordion-content p:last-child { margin-bottom: 0; }
-
-      /* Code Block & Copy Button Styling */
-      .code-wrapper {
-        position: relative;
-        margin-bottom: 2rem;
-      }
-
-      pre {
-        background-color: var(--color-card-bg);
-        border: 1px solid var(--color-border);
-        color: var(--color-text);
-        padding: 1.5rem;
-        padding-top: 2.5rem;
-        border-radius: 8px;
-        overflow-x: auto;
-        font-size: 0.9rem;
-        margin: 0;
-      }
-
-      .copy-button {
-        position: absolute;
-        top: 0.5rem;
-        right: 0.5rem;
-        background-color: transparent;
-        border: 1px solid var(--color-border);
-        color: var(--color-muted);
-        border-radius: 6px;
-        padding: 0.4rem;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s ease;
-      }
-
-      .copy-button:hover {
-        background-color: var(--color-hover);
-        color: var(--color-text);
-        border-color: var(--color-muted);
-      }
-
-      .copy-button svg {
-        width: 16px;
-        height: 16px;
-        fill: currentColor;
-      }
-
-      code { 
-        font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace; 
-      }
-      
-      p code, li code {
-        background-color: rgba(110, 118, 129, 0.4);
-        padding: 0.2em 0.4em;
-        border-radius: 6px;
-        font-size: 0.85em;
-      }
-
+      /* ---------- Footer ---------- */
       footer {
-        text-align: center;
-        margin-top: 8rem;
-        padding: 4rem 0;
-        border-top: 1px solid var(--color-border);
-        color: var(--color-muted);
-        font-size: 0.9rem;
+        margin-top: 5rem; border-top: 1px solid var(--border);
+        padding: 2.2rem 0 3rem; color: var(--muted); font-size: 0.9rem;
       }
+      footer .wrap { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+      footer a { color: var(--muted); text-decoration: none; }
+      footer a:hover { color: var(--heading); }
+      footer .foot-links { display: flex; gap: 1.3rem; flex-wrap: wrap; }
 
+      /* ---------- Responsive ---------- */
+      @media (max-width: 860px) {
+        .steps { grid-template-columns: 1fr; }
+        .duo { grid-template-columns: 1fr; }
+        nav .links a.hide-sm { display: none; }
+        header.hero { padding-top: 3.2rem; }
+        section { padding-top: 3.4rem; }
+      }
+      @media (max-width: 480px) {
+        .wrap { padding: 0 1.1rem; }
+        .btn.big { width: 100%; justify-content: center; }
+        .cta-row { flex-direction: column; align-items: stretch; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .overlay-demo .panel .caret { animation: none; }
+        .btn { transition: none; }
+      }
     </style>
   </head>
+
   <body>
+    <div class="wrap">
+      <nav>
+        <a class="brand" href="#" aria-label="Eqho home">
+          <img src="https://raw.githubusercontent.com/DanielMevit/eqho/main/logo/logo_horizontal_dark.png" alt="Eqho" height="30" />
+        </a>
+        <div class="links">
+          <a class="hide-sm" href="#how">How it works</a>
+          <a class="hide-sm" href="#why">Why Eqho</a>
+          <a class="hide-sm" href="changelog">Changelog</a>
+          <a class="hide-sm" href="https://github.com/danielmevit/eqho">GitHub</a>
+          <a class="btn" href="#downloads">Download</a>
+        </div>
+      </nav>
+    </div>
+
+    <header class="hero">
+      <div class="wrap">
+        <span class="eyebrow">Free · Open source · 100% offline</span>
+        <h1>Speak.<br /><span class="accent">It types.</span></h1>
+        <p class="sub">
+          Eqho turns your voice into text in any app on your computer —
+          email, documents, chat, code. No subscription, no account,
+          and your voice never leaves your machine.
+        </p>
+        <div class="cta-row">
+          <a class="btn big" id="dl-hero" href={latestUrl}>⬇&nbsp; Download for Windows</a>
+          <a class="btn big ghost" href="#downloads">All downloads</a>
+        </div>
+        <p class="cta-note">Also available for Linux and macOS · <span class="rel-version">latest release</span></p>
+
+        <!-- The actual overlay, recreated: your words fill the panel while the pill listens -->
+        <div class="overlay-demo" aria-hidden="true">
+          <div class="panel">This is what dictating with Eqho looks like — your words appear live while you speak<span class="caret"></span></div>
+          <div class="pill"><img src="assets/pill_dark.webp" alt="" loading="eager" /></div>
+        </div>
+      </div>
+    </header>
+
     <main>
-      <header>
-        <div class="header-title-container">
-          <a href="https://github.com/DanielMevit/eqho" class="logo-link">
-            <img src="https://raw.githubusercontent.com/DanielMevit/eqho/main/logo/logo_horizontal_dark.png" alt="Eqho logo" class="logo-img" />
-          </a>
-        </div>
-        
-        <p class="header-desc">
-          Speak anywhere your computer lets you type. Powered by OpenAI's Whisper, running 100% locally — GPU-accelerated on NVIDIA, AMD, and Intel — with zero cloud dependency.
-        </p>
-
-        <!-- Platform Icons -->
-        <div class="platform-icons" aria-label="Available for Windows, macOS, and Linux">
-          <!-- Windows Icon -->
-          <svg viewBox="0 0 448 512" title="Windows"><path d="M0 93.7l183.6-25.3v177.4H0V93.7zm0 324.6l183.6 25.3V268.4H0v149.9zm203.8 28L448 480V268.4H203.8v177.9zm0-380.6v180.1H448V32L203.8 65.7z"/></svg>
-          
-          <!-- Apple/macOS Icon -->
-          <svg viewBox="0 0 384 512" title="macOS"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.3 48.6-.7 90.4-82.5 102.7-119.3-65.2-30.7-61.7-90-62-91.3zM85.3 7.1c26.5 0 41.6 15 52.8 29.8 11.2 14.7 22.4 39.2 18.2 64.6-26.2-1.9-51.4-15.6-67.6-33.8-16.1-18.2-28.7-45.7-22.1-60.6z"/></svg>
-          
-          <!-- Linux (Tux) Icon -->
-          <svg viewBox="0 0 448 512" title="Linux"><path d="M220.8 123.3c1 .5 1.8 1.7 3 1.7 1.1 0 2.8-.4 2.9-1.5.2-1.4-1.9-2.3-3.2-2.9-1.7-.7-3.9-1-5.5-.1-.4.2-.8.7-.6 1.1.3 1.3 2.3 1.1 3.4 1.7zm-21.9 1.7c1.2 0 2-1.2 3-1.7 1.1-.6 3.1-.4 3.5-1.7.2-.4-.2-.9-.6-1.1-1.6-.9-3.8-.6-5.5.1-1.3.6-3.4 1.5-3.2 2.9.1 1 1.8 1.5 2.8 1.5zM420 432c-1.5-94-68-158.4-98.8-193.3-7.8-8.8-14-16.3-18.7-23.7-2.6-4.1-4.7-7.9-6.3-11.5-1.2-2.6-2-5-2.7-7.2-2.3-7.2-2.9-11.8-3.3-15-5.7-44.5 13.9-88.7 17.7-97 10.9-23.4 17.9-55.9 16.5-84.5-1.3-26.6-13.8-51.9-38.3-62.5C266.3 28.5 251.4 32 237.9 32c-9.1 0-18.1-.6-27-2.1-5.1-.9-21.1-4.1-39.7-4.1-26.4 0-45.6 14.8-53.9 41.5-7.3 23.3-5 52.4 6 78 4.2 9.7 25 56 18.2 103-1.3 9.4-4.2 16.3-6.6 21-1.3 2.6-2.6 5.1-4 7.6-1.5 2.7-3 5.3-4.7 8.1-4.8 7.6-11 15.3-18.9 24.3-30.8 35-97.3 99.3-98.8 193.3-1.1 69 42.1 79.5 87 79.9l13.1.1h1.1c29 0 55.4-8.7 75.9-21.5 17.1-10.7 34.5-10.6 52.4 0 20.6 12.8 47.1 21.5 76 21.5h1.1l13.1-.1c44.8-.4 88.1-10.9 87-79.9zm-297-74.8c11.7-20 28.6-40.4 46.2-56 31-27.2 60.1-39.3 84.7-39.3 17.1 0 32.3 6.6 44 19 12 12.6 18.3 29.5 18.2 48.7-.1 18.9-8.4 34.4-18.7 44.5-10 9.8-21.5 16-33.1 21.4-16.7 7.7-33 13.9-35 25.1-3.6 20.1 20 29.2 46.3 43.1 16 8.5 33 17.4 45.4 29.4 13.9 13.5 16.6 27.2 16.7 27.9-.9 8.2-12 14.8-22.1 16-16.9 2-33.3-3-46.7-11-20.9-12.4-42.6-16.8-62.5-16.8-20.7 0-43.1 4.7-65.1 17.4-15.5 8.9-33.4 14.6-51.6 13.2-11.2-1-23.7-8-24.8-16.2.2-.6 4-15 20.3-30 14.5-13.4 33.7-23 51-32.2 24.3-12.8 46-24.3 43-41.9-2-11.8-19.1-18.3-36.6-26.4-11.9-5.5-24-11.1-34.6-18.5-12.5-8.7-25-21-25.2-46-.1-17.5 5.8-31 16-41.7l1.3-1.3zM250.7 151c-6.1-3.3-15-2.2-22.6-2.2-5 0-9.6.7-12.2 1.9-3 1.4-4.8 3.5-5.3 6-.4 2 .4 4.3 2 6.5 1.7 2.3 4.2 3.8 6.5 4.6 2.4.7 4.9 1 6.9 1.1 5.4.3 11.2-.5 16.6-2 3.8-1 7.1-2.6 9-4.8 2.2-2.5 2.7-5.4 1.7-7.9-1.1-1.9-2.2-2.9-2.6-3.2z"/></svg>
-        </div>
-
-        <div class="visual-comparison">
-          <img src="https://raw.githubusercontent.com/DanielMevit/eqho/main/assets/eqho_app_screenshot.webp" alt="Eqho dashboard dark theme screenshot, showing the live transcription overlay and local settings dashboard" />
-          <p class="visual-caption">Eqho features a clean dark theme, adjustable live transcription overlay, and completely local settings dashboard.</p>
-        </div>
-
-        <p>
-          <a href="https://github.com/DanielMevit/eqho">View Repository on GitHub</a>
-        </p>
-      </header>
-
-      <section aria-labelledby="features">
-        <h2 id="features">Core Features</h2>
-        
-        <div class="grid-3">
-          <article class="grid-card">
-            <h3>Private by Design 🔒</h3>
-            <p>No cloud, no accounts, no API keys required. Your voice data never leaves your computer. Settings and history remain strictly local.</p>
-          </article>
-          <article class="grid-card">
-            <h3>Lightning Fast ⚡</h3>
-            <p>A real-time transcription preview as you speak, powered by an optimized local engine. Eqho automatically uses the fastest option your hardware supports—GPU or CPU.</p>
-          </article>
-          <article class="grid-card">
-            <h3>Runs on Any GPU 🎮</h3>
-            <p>A dual-engine design accelerates dictation on <strong>NVIDIA, AMD, and Intel</strong> graphics—CUDA via faster-whisper and Vulkan via whisper.cpp—with a CPU fallback. No NVIDIA required, and nothing to configure.</p>
-          </article>
-          <article class="grid-card">
-            <h3>Universal Support 🌍</h3>
-            <p>Inject text into any focused application—Word, Slack, or IDEs. Features 13 supported languages with one-click model swapping.</p>
-          </article>
-          <article class="grid-card">
-            <h3>Custom Vocabulary</h3>
-            <p>Teach the model your specific names, industry jargon, and acronyms to ensure perfect transcription for technical work.</p>
-          </article>
-          <article class="grid-card">
-            <h3>Smart Voice Commands</h3>
-            <p>Opt-in formatting commands allow you to say things like "new line", "period", or "delete that" for completely hands-free control.</p>
-          </article>
+      <section id="how">
+        <div class="wrap">
+          <h2>Three steps. That's the whole app.</h2>
+          <p class="lede">No setup rituals, no cloud accounts. Install it, pick a voice model once, and dictate.</p>
+          <div class="steps">
+            <div class="step">
+              <div class="num">1</div>
+              <h3>Click where you want text</h3>
+              <p>Any app works — your browser, Word, Slack, a code editor. If you can type there, you can speak there.</p>
+            </div>
+            <div class="step">
+              <div class="num">2</div>
+              <h3>Press <kbd>Alt</kbd> + <kbd>Q</kbd> and talk</h3>
+              <p>A small pill appears and listens. Watch your words show up live as you speak. The hotkey is yours to change.</p>
+            </div>
+            <div class="step">
+              <div class="num">3</div>
+              <h3>Press it again — done</h3>
+              <p>Your words are typed into the app, cleaned up and capitalized. Say "period" or "new line" if you like dictating punctuation.</p>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section aria-labelledby="how-it-works">
-        <h2 id="how-it-works">How It Works</h2>
-        <ol>
-          <li>Click into any application where you want to type.</li>
-          <li>Press <strong>Alt+Q</strong> (or your custom hotkey). A floating bar will show "Listening…".</li>
-          <li>Speak naturally and watch the live transcription preview.</li>
-          <li>Press <strong>Alt+Q</strong> again—your words are instantly typed into the active app.</li>
-        </ol>
+      <section id="why">
+        <div class="wrap">
+          <h2>Private. Free. Actually yours.</h2>
+          <p class="lede">Most dictation tools send your voice to someone's server and charge you monthly for it. Eqho does neither.</p>
+          <div class="cards">
+            <div class="card">
+              <div class="icon">🔒</div>
+              <h3>Nothing leaves your computer</h3>
+              <p>Speech recognition runs entirely on your machine. No cloud, no account, no audio uploads — ever. The only download is the voice model itself, once.</p>
+            </div>
+            <div class="card">
+              <div class="icon">💸</div>
+              <h3>Free, with no catch</h3>
+              <p>No trial, no word limits, no premium tier. Eqho is open source — anyone can read the code and verify every promise on this page.</p>
+            </div>
+            <div class="card">
+              <div class="icon">⚡</div>
+              <h3>Fast on any machine</h3>
+              <p>Eqho auto-detects your hardware and uses your graphics card — NVIDIA, AMD, or Intel — for near-instant transcription. No GPU? It runs on CPU too.</p>
+            </div>
+            <div class="card">
+              <div class="icon">🌍</div>
+              <h3>13 languages</h3>
+              <p>Tuned for English out of the box, with one-click models for Spanish, German, French, Japanese and more.</p>
+            </div>
+          </div>
+        </div>
       </section>
 
-      <section aria-labelledby="install">
-        <h2 id="install">Installation</h2>
-        <p>Choose your operating system below to get started. The first run will automatically download the default speech model (distil-large-v3, ~1.5 GB).</p>
-
-        <div class="accordion-container">
-          <!-- Windows Installation -->
-          <details class="accordion-item" open>
-            <summary>Windows (Recommended)</summary>
-            <div class="accordion-content">
-              <p>Grab the <code>Eqho-Setup-&lt;version&gt;.exe</code> from the <strong><a href="https://github.com/DanielMevit/eqho/releases">Releases page</a></strong>, double-click, and you are done. Prefer no installer? Use the portable <code>.zip</code>.</p>
-              <p><strong>Requirements:</strong> 64-bit Windows 10 or 11. There is no 32-bit build — the on-device AI models require a 64-bit system.</p>
-              <p><em>Note: Unsigned binaries will show a SmartScreen prompt on first run — click "More info" → "Run anyway".</em></p>
+      <section>
+        <div class="wrap">
+          <h2>The listening pill</h2>
+          <p class="lede">
+            When Eqho hears you, you'll know — the pill breathes and ripples with your voice,
+            and settles when you pause. It follows your theme, light or dark.
+          </p>
+          <div class="duo">
+            <div class="world dark">
+              <img src="assets/pill_dark.webp" alt="Eqho's listening pill in dark theme — flowing blue waves" loading="lazy" />
+              <p>Dark theme — deep blues that ride every word.</p>
             </div>
-          </details>
-
-          <!-- macOS Installation -->
-          <details class="accordion-item">
-            <summary>macOS</summary>
-            <div class="accordion-content">
-              <p>Download the <code>.dmg</code> from the <strong><a href="https://github.com/DanielMevit/eqho/releases">Releases page</a></strong>.</p>
-              <p><strong>Important:</strong> You must grant Eqho <strong>Accessibility</strong> and <strong>Input Monitoring</strong> permissions in <em>System Settings → Privacy & Security</em>. On first launch, right-click the application and select "Open" to bypass the unsigned app warning.</p>
+            <div class="world light">
+              <img src="assets/pill_light.webp" alt="Eqho's listening pill in light theme — soft blue waves on pearl" loading="lazy" />
+              <p>Light theme — frosted glass with the same living wave.</p>
             </div>
-          </details>
+          </div>
+        </div>
+      </section>
 
-          <!-- Linux Installation -->
-          <details class="accordion-item">
-            <summary>Linux</summary>
-            <div class="accordion-content">
-              <p>Download the <code>.tar.gz</code> from the <strong><a href="https://github.com/DanielMevit/eqho/releases">Releases page</a></strong>.</p>
-              <p><strong>Requirements:</strong> Eqho needs <code>libportaudio2</code>, <code>xclip</code>, and an AppIndicator library for the system tray to run properly. Please note that global hotkeys and text injection currently target X11 (Wayland support is on the roadmap).</p>
-            </div>
-          </details>
+      <section>
+        <div class="wrap">
+          <h2>Settings you'll actually understand</h2>
+          <p class="lede">
+            One clean dashboard: pick a voice model by size and accuracy, set your hotkey,
+            browse your dictation history, teach it your jargon. That's it.
+          </p>
+          <img class="shot" src="assets/eqho_app_screenshot.webp" alt="The Eqho dashboard — model picker, hotkey, history and settings" loading="lazy" width="960" />
+          <p class="langs">
+            <span>English</span><span>Spanish</span><span>Mandarin</span><span>Japanese</span><span>Korean</span><span>Vietnamese</span><span>Arabic</span><span>Ukrainian</span><span>French</span><span>German</span><span>Portuguese</span><span>Russian</span><span>Italian</span>
+          </p>
+        </div>
+      </section>
 
-          <!-- Build from Source -->
-          <details class="accordion-item">
-            <summary>Build From Source (Python)</summary>
-            <div class="accordion-content">
-              <p>Requires Python 3.10+.</p>
-              <div class="code-wrapper" style="margin-bottom: 0;">
-                <button class="copy-button" aria-label="Copy code">
-                  <svg class="copy-icon" viewBox="0 0 16 16" version="1.1" aria-hidden="true"><path fill-rule="evenodd" d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"></path><path fill-rule="evenodd" d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"></path></svg>
-                  <svg class="check-icon" viewBox="0 0 16 16" version="1.1" aria-hidden="true" style="display: none; color: #3fb950;"><path fill-rule="evenodd" d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"></path></svg>
-                </button>
-<pre><code>git clone https://github.com/DanielMevit/eqho.git
-cd eqho
-python -m venv venv && venv\Scripts\activate # Windows
-# Or for Linux/macOS: source venv/bin/activate
-pip install -r requirements.txt
-python run.py</code></pre>
+      <section id="downloads">
+        <div class="wrap">
+          <h2>Download Eqho</h2>
+          <p class="lede">Version <span class="rel-version">latest</span> · free under the AGPL-3.0 open-source license.</p>
+          <div class="dl-grid">
+            <div class="dl-card">
+              <div class="os">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.1 10.6 4v7.5H3V5.1zm0 13.8 7.6 1.1v-7.4H3v6.3zM11.4 3.9 21 2.5v9H11.4V3.9zm0 16.2 9.6 1.4v-9H11.4v7.6z"/></svg>
+                <h3>Windows <small>Windows 10 / 11, 64-bit</small></h3>
+              </div>
+              <div class="dl-links">
+                <a class="primary" id="dl-win-exe" href={latestUrl}><span>Installer (.exe)</span><span class="tag">recommended</span></a>
+                <a id="dl-win-zip" href={latestUrl}><span>Portable (.zip)</span><span class="tag">no install</span></a>
               </div>
             </div>
-          </details>
+            <div class="dl-card">
+              <div class="os">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c-1.9 0-3.2 1.1-3.4 3-.1 1.2 0 2.3-.3 3.3-.4 1.1-1.4 2-2.1 3.2-.9 1.4-1.5 3.2-1 5 .1.3.3.4.4.1.2-.5.6-.9 1.2-1 .1.9.6 1.7 1.2 2.3.4.5.6 1.1 1.2 1.5.8.6 2.1.7 2.8.6.7-.1 1.3-.1 2 0 .7.1 2-.1 2.8-.6.6-.4.8-1 1.2-1.5.6-.6 1.1-1.4 1.2-2.3.6.1 1 .5 1.2 1 .1.3.3.2.4-.1.5-1.8-.1-3.6-1-5-.7-1.2-1.7-2.1-2.1-3.2-.3-1-.2-2.1-.3-3.3C15.2 3.1 13.9 2 12 2zm-1.6 5.6c.4 0 .8.4.8.9s-.4.9-.8.9-.8-.4-.8-.9.4-.9.8-.9zm3.2 0c.4 0 .8.4.8.9s-.4.9-.8.9-.8-.4-.8-.9.4-.9.8-.9zm-1.6 2.6 1.9 1c.3.2.3.5 0 .7l-1.6.9c-.2.1-.4.1-.6 0l-1.6-.9c-.3-.2-.3-.5 0-.7l1.9-1z"/></svg>
+                <h3>Linux <small>X11 · 64-bit</small></h3>
+              </div>
+              <div class="dl-links">
+                <a class="primary" id="dl-linux-appimage" href={latestUrl}><span>AppImage</span><span class="tag">run anywhere</span></a>
+                <a id="dl-linux-tar" href={latestUrl}><span>Archive (.tar.gz)</span><span class="tag">manual</span></a>
+              </div>
+            </div>
+            <div class="dl-card">
+              <div class="os">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.6 12.9c0-2 1.6-3 1.7-3.1-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.3 2-1.4 2.4-.4 6 1 8 .7 1 1.5 2 2.5 2 1 0 1.4-.6 2.6-.6 1.2 0 1.6.6 2.6.6 1.1 0 1.8-1 2.5-2 .8-1.1 1.1-2.2 1.1-2.3-.1 0-2.2-.8-2.2-3zM14.6 6c.5-.7.9-1.6.8-2.5-.8 0-1.7.5-2.3 1.2-.5.6-.9 1.5-.8 2.4.9.1 1.8-.4 2.3-1.1z"/></svg>
+                <h3>macOS <small>Apple Silicon &amp; Intel</small></h3>
+              </div>
+              <div class="dl-links">
+                <a class="primary" id="dl-mac-dmg" href={latestUrl}><span>Disk image (.dmg)</span><span class="tag">drag to install</span></a>
+                <a href="https://github.com/danielmevit/eqho#platform-notes"><span>First-launch notes</span><span class="tag">unsigned app</span></a>
+              </div>
+            </div>
+          </div>
+          <p class="dl-fine">
+            Unsigned builds show a security prompt on first run — that's normal for
+            independent open-source apps (<a href="https://github.com/danielmevit/eqho#platform-notes">how to get past it</a>).
+            Prefer a package manager? <code>winget install eqho</code> ·
+            All versions on the <a href={releasesUrl}>releases page</a>.
+          </p>
         </div>
       </section>
 
-      <section aria-labelledby="faq">
-        <h2 id="faq">Frequently Asked Questions</h2>
-        
-        <div class="accordion-container">
-          <details class="accordion-item">
-            <summary>Is my audio uploaded anywhere?</summary>
-            <div class="accordion-content">
-              <p>No. Transcription runs locally via CTranslate2. The only network access required is a one-time download for the AI model you choose to use.</p>
-            </div>
-          </details>
-          
-          <details class="accordion-item">
-            <summary>Does it cost anything?</summary>
-            <div class="accordion-content">
-              <p>No. Eqho is free, open-source, and has no premium tiers, subscriptions, or word limits.</p>
-            </div>
-          </details>
-
-          <details class="accordion-item">
-            <summary>Does it work on AMD or Intel GPUs?</summary>
-            <div class="accordion-content">
-              <p>Yes. Alongside the NVIDIA (CUDA) engine, Eqho includes a cross-vendor <strong>Vulkan engine (whisper.cpp)</strong> that accelerates dictation on <strong>AMD Radeon</strong> and <strong>Intel Arc / Iris</strong> graphics—and NVIDIA too. Eqho detects your hardware and selects the fastest engine automatically; you can also choose it under <em>Settings → General → Inference Engine</em>.</p>
-            </div>
-          </details>
-
-          <details class="accordion-item">
-            <summary>What are the system requirements?</summary>
-            <div class="accordion-content">
-              <p><strong>Windows:</strong> 64-bit Windows 10 or 11 — there is no 32-bit build, because the local AI models require a 64-bit system. <strong>macOS</strong> and <strong>Linux</strong> (X11) are also supported. A GPU (NVIDIA, AMD, or Intel) is recommended for speed, but Eqho falls back to CPU. The first run downloads your chosen speech model (~1.5 GB for the default).</p>
-            </div>
-          </details>
-
-          <details class="accordion-item">
-            <summary>How accurate is the transcription?</summary>
-            <div class="accordion-content">
-              <p>It utilizes Whisper-class accuracy, which is the current state of the art for open speech recognition. You can easily pick a larger model from the settings for tougher audio environments.</p>
-            </div>
-          </details>
-          
-          <details class="accordion-item">
-            <summary>Where are my settings and history saved?</summary>
-            <div class="accordion-content">
-              <p>Settings persist in your local user config folder (<code>%APPDATA%\Eqho</code> on Windows). Your data is completely under your control and never touches the cloud.</p>
-            </div>
-          </details>
+      <section id="faq">
+        <div class="wrap">
+          <h2>Fair questions</h2>
+          <p class="lede">&nbsp;</p>
+          <div class="faq">
+            <details>
+              <summary>Is my voice really never uploaded?</summary>
+              <p>Really. Transcription runs on your own processor or graphics card, using state-of-the-art open speech models (OpenAI's Whisper family). Eqho touches the network exactly once: to download the voice model you pick. The code is open — you can check.</p>
+            </details>
+            <details>
+              <summary>What's the catch? Why is it free?</summary>
+              <p>No catch. Eqho is an open-source project licensed under AGPL-3.0. There is no premium tier, no trial clock, and no word counter.</p>
+            </details>
+            <details>
+              <summary>How accurate is it?</summary>
+              <p>Whisper-class accuracy — the same model family used by professional transcription services. You choose the trade-off: smaller models are faster, bigger ones are more accurate. The default is a sweet spot for everyday English.</p>
+            </details>
+            <details>
+              <summary>What do I need to run it?</summary>
+              <p>A 64-bit computer running Windows 10/11, Linux (X11) or macOS, and about 2&nbsp;GB of disk for the app plus your chosen voice model. A graphics card makes it faster but isn't required.</p>
+            </details>
+          </div>
         </div>
       </section>
-      
     </main>
-    
+
     <footer>
-      <p>&copy; {year} <a href="https://github.com/danielmevit">{author}</a>. Eqho is licensed under the <a href="https://github.com/DanielMevit/eqho/blob/main/LICENSE">GNU AGPL-3.0 License</a>.</p>
-      <p><a href="/eqho/changelog/">Changelog</a> · <a href="https://github.com/DanielMevit/eqho">GitHub</a> · <a href="https://github.com/DanielMevit/eqho/releases">Releases</a></p>
+      <div class="wrap">
+        <div>
+          © {year} <a href="https://damt.xyz">Daniel Mevit · damt.xyz</a> ·
+          <span class="rel-version">Eqho</span> · AGPL-3.0
+        </div>
+        <div class="foot-links">
+          <a href="https://github.com/danielmevit/eqho">GitHub</a>
+          <a href="changelog">Changelog</a>
+          <a href="https://github.com/danielmevit/eqho/issues">Report a problem</a>
+          <a href="https://www.gnu.org/licenses/agpl-3.0.html">License</a>
+        </div>
+      </div>
     </footer>
 
-    <!-- Script to handle Copy to Clipboard -->
+    <!-- Progressive enhancement: point download buttons at the newest release
+         assets. Static fallbacks (the releases page) work without JS. -->
     <script is:inline>
-      document.querySelectorAll('.code-wrapper').forEach(wrapper => {
-        const button = wrapper.querySelector('.copy-button');
-        const code = wrapper.querySelector('code');
-        const copyIcon = button.querySelector('.copy-icon');
-        const checkIcon = button.querySelector('.check-icon');
-
-        button.addEventListener('click', async () => {
-          try {
-            await navigator.clipboard.writeText(code.innerText);
-            
-            // Swap icons
-            copyIcon.style.display = 'none';
-            checkIcon.style.display = 'block';
-            
-            // Revert after 2 seconds
-            setTimeout(() => {
-              copyIcon.style.display = 'block';
-              checkIcon.style.display = 'none';
-            }, 2000);
-          } catch (err) {
-            console.error('Failed to copy text: ', err);
-          }
-        });
-      });
+      (function () {
+        var pick = {
+          "dl-win-exe": function (n) { return /^Eqho-Setup-.*\.exe$/.test(n); },
+          "dl-win-zip": function (n) { return /portable.*\.zip$/i.test(n); },
+          "dl-linux-appimage": function (n) { return /\.AppImage$/.test(n); },
+          "dl-linux-tar": function (n) { return /\.tar\.gz$/.test(n); },
+          "dl-mac-dmg": function (n) { return /\.dmg$/.test(n); },
+          "dl-hero": function (n) { return /^Eqho-Setup-.*\.exe$/.test(n); }
+        };
+        fetch("https://api.github.com/repos/danielmevit/eqho/releases/latest")
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (rel) {
+            if (!rel || !rel.assets) return;
+            Object.keys(pick).forEach(function (id) {
+              var el = document.getElementById(id);
+              if (!el) return;
+              var asset = rel.assets.find(function (a) { return pick[id](a.name); });
+              if (asset) el.href = asset.browser_download_url;
+            });
+            if (rel.tag_name) {
+              document.querySelectorAll(".rel-version").forEach(function (el) {
+                el.textContent = "Eqho " + rel.tag_name.replace(/^v/, "");
+              });
+            }
+          })
+          .catch(function () { /* fallbacks already point at the releases page */ });
+      })();
     </script>
   </body>
 </html>

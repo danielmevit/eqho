@@ -108,8 +108,9 @@ def render_rgb(
     ld = np.array([-0.45, -0.60, 0.66], dtype=np.float32)
     ld /= np.linalg.norm(ld)
     ndl = np.maximum(n_x * ld[0] + n_y * ld[1] + n_z * ld[2], 0.0)
+    # Full-strength sheen in BOTH themes — the light pill shines like the dark one.
     sheen = (ndl ** 64.0) * 0.42 + (ndl ** 6.0) * 0.12
-    col = col + sheen[..., None] * v3(1.0, 0.97, 0.98) * _mix(1.0, 0.6, light)
+    col = col + sheen[..., None] * v3(1.0, 0.97, 0.98) * _mix(1.0, 0.95, light)
 
     # Light theme stays vibrant — only a whisper of frost (0.16 washed it out).
     col = paint(col, v3(0.975, 0.975, 0.990), light * 0.06)
@@ -118,6 +119,14 @@ def render_rgb(
     col = _mix(mapped, np.clip(col, 0.0, 1.0), light)
 
     aa = 1.5 / h
+    # White border on the light pill (applied after tone-mapping so it stays crisp).
+    bw = 3.0 / h
+    stroke = np.clip((d + bw) / aa, 0.0, 1.0) * np.clip(-d / aa, 0.0, 1.0)
+    col = paint(col, v3(0.995, 0.995, 1.000), (stroke * light * 0.85)[..., None])
+
+    # NOTE: desktop translucency (the light pill at 90%) is applied as WINDOW
+    # alpha in overlay.py — the pill sits on a color-keyed window, so blending
+    # toward `bg` here would blend toward the key color, not the desktop.
     mask = np.clip(1.0 - np.clip((d + aa) / (2 * aa), 0.0, 1.0), 0.0, 1.0)[..., None]
     bg_arr = np.array(bg, dtype=np.float32)
     out = bg_arr[None, None, :] * (1.0 - mask) + col * mask
