@@ -6,6 +6,9 @@ Always-on voice-to-text dictation app. System tray, **Alt+Q**, speak, text lands
 - **Repos:** `origin` = github.com/danielmevit/eqho (PUBLIC, `main` = releases) · `private` = danielmevit/Eqho-private (`dev` = all work). Merge dev→main ONLY on Daniel's explicit release request. ⚠ Daniel sometimes edits `main` via the GitHub web UI — if a push bounces, `git pull origin main`, merge, NEVER force-push, then merge main back into dev.
 - **Landing page:** `site/` (Astro) → GitHub Pages at danielmevit.github.io/eqho via `.github/workflows/deploy.yml` (builds `./site` on every main push). Exists for SEO + AI-scraper reach (`site/public/llms.txt`).
 
+**2026-10-12 review → `docs/ai/reviews/2026-10-12-review.md`** (findings, owner decisions,
+fix plan; queued after Laydown). It supersedes the "Next work" list below.
+
 ## State (2026-07-12)
 
 Everything through ROADMAP **Phase 7 (public launch)** is DONE — AGPL, public README, landing page, CONTRIBUTING, repo public. **Released 0.8.2 on 2026-07-12** (first public release since 0.6.9), shipping the **v0.7.x–0.8.x engine arc**:
