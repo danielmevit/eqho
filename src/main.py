@@ -59,6 +59,8 @@ class App:
         self._lock = threading.Lock()
         self._target_hwnd: int = 0  # window to paste into
         self._saved_volume: Optional[float] = None  # for volume ducking
+        self._session_lock = threading.RLock()  # serializes session start/teardown
+        self._session = 0  # transcriber session id of the active dictation
         self.history = TranscriptHistory()
         self._dictation_start: float = 0.0
         self._last_injected: str = ""  # for the "delete that" voice command
@@ -69,6 +71,7 @@ class App:
             on_complete=self._on_complete,
             on_status=self._on_status,
             on_level=self._on_level,
+            on_abort=self._on_abort,
         )
 
         self.hotkey = HotkeyManager(
@@ -83,7 +86,6 @@ class App:
             on_toggle=self.toggle,
             on_quit=self.quit,
             on_settings_changed=self._on_settings_changed,
-            on_restart=self.restart,
         )
 
     # -- Transcription callbacks -----------------------------------------------
@@ -129,7 +131,37 @@ class App:
         """Live mic level (0..1) for the overlay's audio indicator."""
         self.overlay.set_level(level)
 
+    def _on_abort(self, reason: str, session: int) -> None:
+        """The transcriber worker died mid-session (model-load failure or
+        crash). Run the single teardown path so volume/overlay/tray never
+        stay stuck (F1); the session id lets the teardown ignore aborts that
+        belong to an already-replaced session."""
+        self._teardown_session(session, error=reason)
+
     # -- Activation control ----------------------------------------------------
+
+    def _teardown_session(self, session: Optional[int],
+                          error: Optional[str] = None) -> None:
+        """The ONE path that ends a dictation session. ALWAYS restores system
+        volume, hides the overlay and resets the tray — on normal stop, mic
+        failure, model-load failure or a worker crash. `session` is the
+        transcriber session this teardown belongs to (None = unconditional);
+        teardowns for an older session are skipped so an abort can never
+        un-duck or hide a NEWER session's UI."""
+        with self._session_lock:
+            with self._lock:
+                if session is not None and session != self._session:
+                    log.info("Skipping stale session teardown (session %s, current %s)",
+                             session, self._session)
+                    return
+                self._session = 0
+            if error:
+                log.error("Dictation session aborted: %s", error)
+            self._restore_volume()
+            self.overlay.hide()
+            self.tray.set_active(False)
+            if error:
+                self.tray.notify(error)
 
     def _duck_volume(self) -> None:
         """Silently lower system volume based on user setting."""
@@ -163,42 +195,42 @@ class App:
             log.info("Volume restored to %.0f%%.", saved * 100)
 
     def activate(self) -> None:
-        hwnd = get_foreground_window()
-        with self._lock:
-            self._target_hwnd = hwnd
-            self._pending_text.clear()
-        log.info("Dictation activated (target window: %s)", hwnd)
-        self._dictation_start = time.monotonic()
-        self.overlay.show(
-            "Listening..." if self.transcriber.is_model_ready() else "Loading model…"
-        )
-        self.tray.set_active(True)
-        # Mic first (recording starts instantly), THEN the chime — blocking,
-        # so it finishes before ducking mutes the output (the old fire-and-
-        # forget blip raced the mute and was sometimes silent). Ducking lands
-        # ~0.3s into dictation, which is inaudible in practice.
-        self.transcriber.start()
-        if self.settings.sound_feedback:
-            chime.play_start(blocking=True)
-        self._duck_volume()
-        mic_error = self.transcriber.consume_mic_error()
-        if mic_error:
-            if not self.transcriber.is_running():
-                self.tray.notify(f"No microphone available: {mic_error}")
-                self.overlay.hide()
-                self.tray.set_active(False)
-                self._restore_volume()
-            else:
-                self.tray.notify("Selected mic unavailable, using default microphone.")
+        with self._session_lock:
+            hwnd = get_foreground_window()
+            with self._lock:
+                self._target_hwnd = hwnd
+                self._pending_text.clear()
+            log.info("Dictation activated (target window: %s)", hwnd)
+            self._dictation_start = time.monotonic()
+            self.overlay.show(
+                "Listening..." if self.transcriber.is_model_ready() else "Loading model…"
+            )
+            self.tray.set_active(True)
+            # Mic first (recording starts instantly), THEN the chime — blocking,
+            # so it finishes before ducking mutes the output (the old fire-and-
+            # forget blip raced the mute and was sometimes silent). Ducking lands
+            # ~0.3s into dictation, which is inaudible in practice.
+            self.transcriber.start()
+            session = self.transcriber.current_session()
+            with self._lock:
+                self._session = session
+            if self.settings.sound_feedback:
+                chime.play_start(blocking=True)
+            self._duck_volume()
+            mic_error = self.transcriber.consume_mic_error()
+            if mic_error:
+                if not self.transcriber.is_running():
+                    self._teardown_session(
+                        None, error=f"No microphone available: {mic_error}")
+                else:
+                    self.tray.notify("Selected mic unavailable, using default microphone.")
 
     def deactivate(self) -> None:
         log.info("Dictation deactivated")
         self.transcriber.stop()
-        self._restore_volume()
+        self._teardown_session(None)
         if self.settings.sound_feedback:
             chime.play_stop()  # after restore, so it's audible
-        self.tray.set_active(False)
-        self.overlay.hide()
 
         with self._lock:
             full_text = textproc.smart_join(self._pending_text)
@@ -227,7 +259,8 @@ class App:
                 set_foreground_window(target_hwnd)
                 time.sleep(0.15)  # let the window come to focus
             type_text(full_text, use_clipboard=use_clipboard)
-            log.info("Injected text: %s", full_text)
+            # Length only — never the transcript itself (F10).
+            log.info("Injected %d chars", len(full_text))
             self._last_injected = full_text
             if self.settings.history_enabled:
                 duration = time.monotonic() - self._dictation_start if self._dictation_start else 0.0
@@ -293,8 +326,8 @@ class App:
 
         threading.Thread(target=self._preload_model, daemon=True).start()
 
-        # After a model-change restart, reopen the dashboard to the tab the
-        # user was on (passed as --open-dashboard --tab=<name>).
+        # When launched with --open-dashboard --tab=<name>, reopen the
+        # dashboard to that tab once the app is up.
         import sys
         if "--open-dashboard" in sys.argv:
             tab = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--tab=")), None)
@@ -306,7 +339,7 @@ class App:
         try:
             from .ui import open_dashboard
             open_dashboard(self.settings, self._on_settings_changed,
-                           self.restart, initial_tab=tab)
+                           initial_tab=tab)
         except Exception as e:
             log.error("Startup dashboard open failed: %s", e)
 
@@ -330,45 +363,6 @@ class App:
         except Exception as e:
             log.error("Failed to pre-load model: %s", e)
             self.tray.notify(f"Failed to load model: {e}")
-
-    def restart(self, open_tab=None) -> None:
-        """Relaunch the app to apply a model change. A fresh process is the ONLY
-        reliable way to load a different Whisper model on this CUDA stack —
-        loading a second model in-process crashes natively (see GOTCHAS).
-        When open_tab is given, the new process reopens the dashboard to it."""
-        import os
-        import subprocess
-        import sys
-        log.info("Restarting to apply model change...")
-        try:
-            self.settings.save()
-        except Exception:
-            pass
-        # Release the single-instance lock so the new process can bind the port
-        global _single_instance_socket
-        try:
-            if _single_instance_socket is not None:
-                _single_instance_socket.close()
-                _single_instance_socket = None
-        except Exception:
-            pass
-        # Rebuild argv without any prior restart flags, then re-add if needed
-        base_argv = [a for a in sys.argv
-                     if a != "--open-dashboard" and not a.startswith("--tab=")]
-        extra = ["--open-dashboard", f"--tab={open_tab}"] if open_tab else []
-        try:
-            if getattr(sys, "frozen", False):
-                subprocess.Popen([sys.executable] + extra)
-            else:
-                subprocess.Popen([sys.executable] + base_argv + extra)
-        except Exception as e:
-            log.error("Failed to spawn new instance: %s", e)
-        try:
-            self._restore_volume()  # never leave the system muted
-        except Exception:
-            pass
-        # Hard-exit so CUDA/VRAM is fully released before the new process loads
-        os._exit(0)
 
     def quit(self) -> None:
         log.info("Shutting down...")

@@ -32,6 +32,9 @@ SILENCE_TIMEOUT = 1.2
 MIN_PHRASE_DURATION = 0.4
 PARTIAL_INTERVAL = 1.0  # send a partial transcription every N seconds of active speech
 PARTIAL_TAIL_SECONDS = 10.0  # partials re-transcribe at most this much recent audio
+STOP_JOIN_TIMEOUT = 5.0  # stop() waits this long for the final flush; anything
+                         # slower is dropped (the session is closed) rather than
+                         # leaking into the next dictation
 
 # Hallucination gating: Whisper invents text on (near-)silence. Buffers whose
 # peak RMS never rose meaningfully above the VAD threshold are skipped, low
@@ -69,7 +72,10 @@ class VoiceTranscriber:
         self._on_complete: Optional[Callable[[str], None]] = None
         self._on_status: Optional[Callable[[str], None]] = None
         self._on_level: Optional[Callable[[float], None]] = None
+        self._on_abort: Optional[Callable[[str, int], None]] = None
         self._running = False
+        self._session_id = 0  # bumped by start()/stop(); results from a
+                               # closed session are never delivered
         self._lock = threading.Lock()
         self._model_lock = threading.Lock()  # serializes load/unload across threads
         self._stream_lock = threading.Lock()
@@ -89,11 +95,18 @@ class VoiceTranscriber:
         on_complete: Callable[[str], None],
         on_status: Optional[Callable[[str], None]] = None,
         on_level: Optional[Callable[[float], None]] = None,
+        on_abort: Optional[Callable[[str, int], None]] = None,
     ) -> None:
         self._on_partial = on_partial
         self._on_complete = on_complete
         self._on_status = on_status
         self._on_level = on_level
+        self._on_abort = on_abort
+
+    def current_session(self) -> int:
+        """Id of the latest session (bumped by start() and stop())."""
+        with self._lock:
+            return self._session_id
 
     def is_model_ready(self) -> bool:
         return self._host.is_ready(self._settings.model_size)
@@ -158,6 +171,8 @@ class VoiceTranscriber:
             assert self._on_partial and self._on_complete, "Set callbacks before starting"
             self._mic_error = None
             self._running = True
+            self._session_id += 1
+            session = self._session_id
 
             while not self._audio_q.empty():
                 try:
@@ -183,144 +198,186 @@ class VoiceTranscriber:
             # Model loading happens on the worker thread (not here) so the
             # hotkey-callback thread never blocks; audio recorded while the
             # model loads queues up and is processed once it is ready.
-            self._worker = threading.Thread(target=self._transcription_loop, daemon=True)
+            self._worker = threading.Thread(
+                target=self._transcription_loop, args=(session,), daemon=True)
             self._worker.start()
-            log.info("Transcription started (mic recording).")
+            log.info("Transcription started (session %d, mic recording).", session)
 
     def _audio_callback(self, indata, frames, time_info, status):
         if status:
             log.warning("Audio callback status: %s", status)
         self._audio_q.put(indata[:, 0].copy())
 
-    def _transcription_loop(self) -> None:
-        """Loads the model if needed, then accumulates audio, detects speech/silence, and transcribes phrases."""
-        if not self.is_model_ready():
-            try:
-                self._ensure_model()
-            except Exception as e:
-                log.error("Model load failed: %s", e)
-                if self._on_status:
-                    self._on_status("Model failed to load — check logs")
-                self._running = False
-                self._close_stream()
-                return
-            if self._running and self._on_status:
-                self._on_status("Listening...")
+    def _transcription_loop(self, session: int) -> None:
+        """Worker thread body: load the model if needed, then accumulate
+        audio, detect speech/silence and transcribe phrases. Results are
+        delivered through _deliver, which drops anything whose session is
+        no longer current. Any abnormal exit (model-load failure or crash)
+        fires on_abort so the app can run its single teardown path."""
+        abort_reason: Optional[str] = None
+        try:
+            if not self.is_model_ready():
+                try:
+                    self._ensure_model()
+                except Exception as e:
+                    # A failed load must not leave the session half-alive
+                    # (audio ducked, overlay up, tray active) — abort and
+                    # let the app's teardown restore everything.
+                    log.error("Model load failed: %s", e)
+                    abort_reason = f"Model failed to load — {e}"
+                    return
+                if self._running and self._on_status:
+                    self._on_status("Listening...")
 
-        chunks: list[np.ndarray] = []
-        total_samples = 0
-        silence_start: Optional[float] = None
-        is_speaking = False
-        last_partial_time: float = 0
-        chunk_count = 0
-        log_peak = 0.0        # peak since the last level log line
-        utterance_peak = 0.0  # peak since the buffer last reset (gates hallucinations)
-        noise_floor: Optional[float] = None
-        threshold = SILENCE_THRESHOLD
+            chunks: list[np.ndarray] = []
+            total_samples = 0
+            silence_start: Optional[float] = None
+            is_speaking = False
+            last_partial_time: float = 0
+            chunk_count = 0
+            log_peak = 0.0        # peak since the last level log line
+            utterance_peak = 0.0  # peak since the buffer last reset (gates hallucinations)
+            noise_floor: Optional[float] = None
+            threshold = SILENCE_THRESHOLD
 
-        while self._running:
-            try:
-                chunk = self._audio_q.get(timeout=0.1)
-            except queue.Empty:
-                continue
+            while self._running:
+                try:
+                    chunk = self._audio_q.get(timeout=0.1)
+                except queue.Empty:
+                    continue
 
-            chunks.append(chunk)
-            total_samples += len(chunk)
-            rms = float(np.sqrt(np.mean(chunk ** 2)))
-            chunk_count += 1
-            log_peak = max(log_peak, rms)
-            utterance_peak = max(utterance_peak, rms)
-
-            # Adaptive VAD threshold: drop to a new quietest level instantly,
-            # creep upward very slowly (so speech doesn't inflate the floor).
-            # User sensitivity scales the whole thing: higher sensitivity =
-            # lower threshold = picks up quieter speech (for quiet mics).
-            if noise_floor is None or rms < noise_floor:
-                noise_floor = rms
-            else:
-                noise_floor += (rms - noise_floor) * 0.02
-            sens = max(0.5, min(2.0, getattr(self._settings, "vad_sensitivity", 1.0)))
-            threshold = max(VAD_THRESHOLD_MIN / sens,
-                            min(SILENCE_THRESHOLD / sens,
-                                noise_floor * VAD_NOISE_MULTIPLIER / sens))
-            self._vad_threshold = threshold
-
-            if self._on_level:
-                # Normalized mic level for the overlay's audio indicator —
-                # calibrated so NORMAL speaking volume lands around mid-bar
-                self._on_level(min(1.0, (rms / 0.012) ** 0.6))
-
-            # Log mic levels periodically so we can diagnose issues
-            if chunk_count % 20 == 0:
-                log.info(
-                    "Mic level: RMS=%.5f peak=%.5f threshold=%.4f (floor=%.5f) speaking=%s buf=%.1fs",
-                    rms, log_peak, threshold, noise_floor, is_speaking,
-                    total_samples / SAMPLE_RATE,
-                )
-                log_peak = 0.0
-
-            if rms > threshold:
-                silence_start = None
-                if not is_speaking:
-                    is_speaking = True
-                    last_partial_time = time.monotonic()
-                    log.info("Speech detected (RMS=%.5f)", rms)
-
-                now = time.monotonic()
-                buf_duration = total_samples / SAMPLE_RATE
-                if buf_duration > 1.0 and (now - last_partial_time) >= PARTIAL_INTERVAL:
-                    last_partial_time = now
-                    # Bounded tail keeps partial latency flat on long phrases;
-                    # the final transcription still sees the full buffer.
-                    tail = max(1, int(PARTIAL_TAIL_SECONDS / CHUNK_DURATION))
-                    self._do_partial(np.concatenate(chunks[-tail:]))
-            else:
-                if is_speaking:
-                    if silence_start is None:
-                        silence_start = time.monotonic()
-                    elif time.monotonic() - silence_start > SILENCE_TIMEOUT:
-                        buf_duration = total_samples / SAMPLE_RATE
-                        if buf_duration >= MIN_PHRASE_DURATION:
-                            log.info("Silence detected, transcribing %.1fs of audio", buf_duration)
-                            self._do_complete(np.concatenate(chunks),
-                                              peak_rms=utterance_peak, threshold=threshold)
-                        chunks = []
-                        total_samples = 0
-                        utterance_peak = 0.0
-                        is_speaking = False
-                        silence_start = None
-
-        # Drain any remaining chunks from the queue
-        while not self._audio_q.empty():
-            try:
-                chunk = self._audio_q.get_nowait()
                 chunks.append(chunk)
                 total_samples += len(chunk)
-                utterance_peak = max(utterance_peak, float(np.sqrt(np.mean(chunk ** 2))))
-            except queue.Empty:
-                break
+                rms = float(np.sqrt(np.mean(chunk ** 2)))
+                chunk_count += 1
+                log_peak = max(log_peak, rms)
+                utterance_peak = max(utterance_peak, rms)
 
-        # Flush all remaining audio on stop (don't require is_speaking —
-        # the user releasing the hold key IS the stop signal)
-        buf_duration = total_samples / SAMPLE_RATE
-        if buf_duration >= MIN_PHRASE_DURATION:
-            log.info("Flushing remaining %.1fs of audio on stop", buf_duration)
-            self._do_complete(np.concatenate(chunks),
-                              peak_rms=utterance_peak, threshold=threshold)
+                # Adaptive VAD threshold: drop to a new quietest level instantly,
+                # creep upward very slowly (so speech doesn't inflate the floor).
+                # User sensitivity scales the whole thing: higher sensitivity =
+                # lower threshold = picks up quieter speech (for quiet mics).
+                if noise_floor is None or rms < noise_floor:
+                    noise_floor = rms
+                else:
+                    noise_floor += (rms - noise_floor) * 0.02
+                sens = max(0.5, min(2.0, getattr(self._settings, "vad_sensitivity", 1.0)))
+                threshold = max(VAD_THRESHOLD_MIN / sens,
+                                min(SILENCE_THRESHOLD / sens,
+                                    noise_floor * VAD_NOISE_MULTIPLIER / sens))
+                self._vad_threshold = threshold
 
-    def _do_partial(self, audio: np.ndarray) -> None:
+                if self._on_level:
+                    # Normalized mic level for the overlay's audio indicator —
+                    # calibrated so NORMAL speaking volume lands around mid-bar
+                    self._on_level(min(1.0, (rms / 0.012) ** 0.6))
+
+                # Log mic levels periodically so we can diagnose issues
+                if chunk_count % 20 == 0:
+                    log.info(
+                        "Mic level: RMS=%.5f peak=%.5f threshold=%.4f (floor=%.5f) speaking=%s buf=%.1fs",
+                        rms, log_peak, threshold, noise_floor, is_speaking,
+                        total_samples / SAMPLE_RATE,
+                    )
+                    log_peak = 0.0
+
+                if rms > threshold:
+                    silence_start = None
+                    if not is_speaking:
+                        is_speaking = True
+                        last_partial_time = time.monotonic()
+                        log.info("Speech detected (RMS=%.5f)", rms)
+
+                    now = time.monotonic()
+                    buf_duration = total_samples / SAMPLE_RATE
+                    if buf_duration > 1.0 and (now - last_partial_time) >= PARTIAL_INTERVAL:
+                        last_partial_time = now
+                        # Bounded tail keeps partial latency flat on long phrases;
+                        # the final transcription still sees the full buffer.
+                        tail = max(1, int(PARTIAL_TAIL_SECONDS / CHUNK_DURATION))
+                        self._do_partial(np.concatenate(chunks[-tail:]), session)
+                else:
+                    if is_speaking:
+                        if silence_start is None:
+                            silence_start = time.monotonic()
+                        elif time.monotonic() - silence_start > SILENCE_TIMEOUT:
+                            buf_duration = total_samples / SAMPLE_RATE
+                            if buf_duration >= MIN_PHRASE_DURATION:
+                                log.info("Silence detected, transcribing %.1fs of audio", buf_duration)
+                                self._do_complete(np.concatenate(chunks), session,
+                                                  peak_rms=utterance_peak, threshold=threshold)
+                            chunks = []
+                            total_samples = 0
+                            utterance_peak = 0.0
+                            is_speaking = False
+                            silence_start = None
+
+            # Drain any remaining chunks from the queue
+            while not self._audio_q.empty():
+                try:
+                    chunk = self._audio_q.get_nowait()
+                    chunks.append(chunk)
+                    total_samples += len(chunk)
+                    utterance_peak = max(utterance_peak, float(np.sqrt(np.mean(chunk ** 2))))
+                except queue.Empty:
+                    break
+
+            # Flush all remaining audio on stop (don't require is_speaking —
+            # the user releasing the hold key IS the stop signal)
+            buf_duration = total_samples / SAMPLE_RATE
+            if buf_duration >= MIN_PHRASE_DURATION:
+                log.info("Flushing remaining %.1fs of audio on stop", buf_duration)
+                self._do_complete(np.concatenate(chunks), session,
+                                  peak_rms=utterance_peak, threshold=threshold)
+        except Exception as e:
+            log.exception("Transcription loop crashed")
+            abort_reason = f"Dictation error: {type(e).__name__}: {e}"
+        finally:
+            with self._lock:
+                was_running = self._running
+                self._running = False
+            self._close_stream()
+            if was_running and self._on_abort is not None:
+                # The session ended on its own while the app still thought it
+                # was live. The session id lets the app ignore aborts that
+                # belong to an already-replaced session.
+                try:
+                    self._on_abort(abort_reason or "Dictation stopped unexpectedly",
+                                   session)
+                except Exception:
+                    log.exception("Session abort callback failed")
+
+    def _deliver(self, session: int, callback, *args) -> None:
+        """Deliver a result to the app only if `session` is still current.
+        stop() closes the session once its final-flush window is over, so a
+        transcription that finishes late can never land in the NEXT
+        dictation. The callback runs under the lock so a stop() that closes
+        the session can never interleave between the check and the delivery
+        (lock order: transcriber._lock before any app-side lock)."""
+        with self._lock:
+            if session != self._session_id:
+                log.info("Dropped result from closed session %d (current: %d)",
+                         session, self._session_id)
+                return
+            if callback is not None:
+                callback(*args)
+
+    def _do_partial(self, audio: np.ndarray, session: int) -> None:
         try:
             segments = self._host.transcribe(
                 audio, self._settings.language, 1,
                 self._settings.initial_prompt or "")
             text = " ".join(s["text"].strip() for s in segments if s["text"].strip())
-            if text and self._on_partial:
-                log.info("Partial: %s", text)
-                self._on_partial(text)
+            if text:
+                # Log the length, never the content — transcripts are
+                # private and must not land in eqho.log (F10).
+                log.info("Partial transcript: %d chars", len(text))
+                self._deliver(session, self._on_partial, text)
         except Exception as e:
             log.error("Partial transcription error: %s", e)
 
-    def _do_complete(self, audio: np.ndarray, peak_rms: Optional[float] = None,
+    def _do_complete(self, audio: np.ndarray, session: int,
+                     peak_rms: Optional[float] = None,
                      threshold: float = SILENCE_THRESHOLD) -> None:
         if peak_rms is not None and peak_rms < threshold * NEAR_SILENCE_FACTOR:
             log.info("Skipping near-silent buffer (peak RMS %.5f < %.5f) — hallucination bait.",
@@ -337,8 +394,8 @@ class VoiceTranscriber:
                     continue
                 if s["no_speech_prob"] > NO_SPEECH_PROB_MAX and s["avg_logprob"] < AVG_LOGPROB_MIN:
                     log.info(
-                        "Dropped low-confidence segment %r (no_speech=%.2f logprob=%.2f)",
-                        t, s["no_speech_prob"], s["avg_logprob"],
+                        "Dropped low-confidence segment (%d chars, no_speech=%.2f logprob=%.2f)",
+                        len(t), s["no_speech_prob"], s["avg_logprob"],
                     )
                     continue
                 kept.append(t)
@@ -346,12 +403,14 @@ class VoiceTranscriber:
 
             duration = len(audio) / SAMPLE_RATE
             if text and duration < 2.0 and text.lower().strip(' .!?"') in HALLUCINATION_BLOCKLIST:
-                log.info("Dropped known hallucination artifact: %r", text)
+                log.info("Dropped known hallucination artifact (%d chars)", len(text))
                 return
 
-            if text and self._on_complete:
-                log.info("Complete: %s", text)
-                self._on_complete(text)
+            if text:
+                # Length/timing only — never the transcript itself (F10).
+                log.info("Complete transcript: %d chars (%.1fs audio)",
+                         len(text), duration)
+                self._deliver(session, self._on_complete, text)
         except Exception as e:
             log.error("Transcription error: %s", e)
 
@@ -361,10 +420,17 @@ class VoiceTranscriber:
                 return
             self._running = False
 
-        # Wait for worker to finish (it drains the queue and flushes audio)
+        # Give the worker a moment to finish its final flush (the last
+        # phrase the user spoke). If it can't finish within the window, the
+        # session is closed below and the in-flight result is dropped by
+        # the session check in _deliver — it can never leak into the next
+        # dictation (F2).
         if self._worker:
-            self._worker.join(timeout=5)
+            self._worker.join(timeout=STOP_JOIN_TIMEOUT)
             self._worker = None
+
+        with self._lock:
+            self._session_id += 1  # close the session: late results are dropped
 
         # Close mic AFTER worker is done so no audio chunks are lost
         self._close_stream()
