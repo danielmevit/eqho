@@ -516,7 +516,7 @@ class Dashboard(ctk.CTkToplevel):
             return
         self._settings.model_size = new_model
         self._settings.save()
-        self.ctx.emit("model_changed", new_model)
+        self._ctx.emit("model_changed", new_model)
         self._apply_settings(reload_model=True)
 
     def _mark_hidden_tabs_stale(self) -> None:

@@ -338,7 +338,6 @@ class ModelsTab(TabBase):
     # -- Selection (in-place highlight swap) --------------------------------------
 
     def _select_model_from_card(self, key: str) -> None:
-        # A model change needs a fresh process (in-process swap crashes on
-        # this CUDA stack). change_model confirms via a one-time dialog, then
-        # cleanly restarts the app to load the new model.
+        # Switch models seamlessly — the model host swaps in the background
+        # (a fresh child process loads the new model), no app restart needed.
         self.ctx.change_model(key)
