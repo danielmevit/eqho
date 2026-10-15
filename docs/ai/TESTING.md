@@ -149,3 +149,41 @@ data, uncached model, Eqho already running, model failed to load).
 
 Everything the run produced (per-clip text, results CSV, Eqho's own log and
 config dir) is kept under `--work` for inspection.
+
+## UI interactive test — `tools/test_ui.py` (EQ-TESTUI)
+
+Automated end-to-end verification of every screen, tab, and control in the
+CustomTkinter dashboard (`src/ui/`):
+1. **In-process construction**: Builds the real `Dashboard` window the way the app
+   does (with minimal fake app context; no model inference, no child processes,
+   no global hotkey hooks, no system tray).
+2. **Full coverage**: Visits every tab (`general`, `models`, `history`, `settings`,
+   including embedded Overlay and About panels).
+3. **Control traversal**: Finds every button, switch/checkbox, dropdown, segmented
+   button, slider, entry, and textbox in the widget tree, exercises each (invokes,
+   toggles, cycles choices, sets values), and pumps the Tk event loop.
+4. **Exception detection**: Catches and fails on any unhandled Tkinter callback
+   exceptions via `report_callback_exception`.
+5. **Safety SKIP list**: Never triggers quit/exit, history deletion/clearing,
+   file/folder/URL dialogs, Windows autostart, model downloads, or interactive
+   hotkey capture.
+6. **Screenshots**: Captures a PIL ImageGrab screenshot of the dashboard window for
+   each visited tab to `<work>/ui-<tab>.png`.
+
+### Run
+
+```bash
+# Owner's Windows venv (opens interactive desktop window for ~1 minute)
+"/mnt/d/Vibe Coding/Eqho/venv/Scripts/python.exe" tools/test_ui.py --work _test/ui
+```
+
+### Flags
+
+| Flag | Meaning |
+|------|---------|
+| `--work DIR` | Output directory for tab screenshots (default `_test/ui`) |
+| `--delay SEC` | Delay in seconds between control operations (default `0.03`) |
+
+### Exit codes
+
+`0` pass · `1` any exception or Tk callback failure.
