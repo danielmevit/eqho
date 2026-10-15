@@ -60,6 +60,53 @@ Core dictation on Linux + macOS with graceful degradation.
 - [x] Linux tar.gz + AppImage · macOS .app + unsigned dmg
 - [x] CI build matrix (windows/ubuntu/macos) with headless `--smoke`
 
+## Next versions (owner plan 2026-10-16) — stay in 0.8.x while in beta
+Order: fix what we have → onboarding + Store readiness → speed & languages → interface languages → competitor research
+and new features. Every change is checked with the test system (docs/ai/TESTING.md: ASR benchmark, end-to-end
+dictation test, UI walker) before release.
+
+### 0.8.9 — reliability + test system (in progress, on dev)
+- [x] Model host: no stale replies after a timeout; first-run download can't time out (EQ-HOST)
+- [x] Model change no longer crashes (EQ-DASH)
+- [x] Sessions always clean up: audio never stays muted, no text leaks into the next dictation, transcripts kept out
+      of the log (EQ-SESSION)
+- [x] Settings saved safely, survive a locked or corrupt file (EQ-SETTINGS)
+- [x] Test system: ASR accuracy/speed benchmark, end-to-end dictation test, UI walker (EQ-TESTASR/E2E/UI)
+- [ ] Run the end-to-end + UI tests on the desktop; fix what they find
+- [ ] Bigger accuracy run (100+ clips, harder speakers/noise, CPU-only speed) before any accuracy claims
+- [ ] Pinned release dependencies (customtkinter 5.2.2), CI Python 3.13; macOS Cmd+V paste; docs/site truth
+      (AMD/Vulkan engine not in public builds yet)
+
+### 0.8.10 — onboarding + Microsoft Store readiness
+- [ ] **First-launch onboarding** (must, same as Vecto/Laydown): welcome → **which language do you speak?** (picks the
+      model: English → distil-large-v3, other/several → multilingual model + auto-detect) → microphone test with a level
+      meter → model download with consent, size and progress → audio lowering on/off (consent) → try it ("press Alt+Q
+      and say something") → done. Skippable, reopen from the dashboard.
+- [ ] Microphone turned off in Windows privacy settings: clear message + link, no crash
+- [ ] Privacy page on the site (Store requirement); AI disclosure in the listing
+- [ ] One window only (single instance), like Vecto/Laydown
+- [ ] Store package (MSIX, microphone capability) + listing text; pricing decision (one-time, like Vecto/Laydown)
+
+### 0.8.11 — speed and languages
+- [ ] Automatic model choice by hardware (NVIDIA → faster-whisper CUDA; AMD/Intel GPU → whisper.cpp Vulkan; CPU-only →
+      a smaller fast model), shown and changeable in settings
+- [ ] Ship the whisper.cpp Vulkan engine in public releases (built and proven locally 2026-07, not yet in CI builds)
+- [ ] Non-English: multilingual model when a non-English language is chosen; offer every language Whisper supports
+      (~99), not only 13
+- [ ] Keep the model ready after start (no wait on the first Alt+Q)
+
+### 0.8.12 — the app in many languages (interface)
+- [ ] Move all UI text (dashboard, onboarding, tray, overlay, messages) into translation files
+- [ ] Translate into the main languages first (en, de, es, fr, it, pt, nl, pl, ru, uk, ja, zh, ko), more later;
+      follow the Windows display language, with a picker in onboarding and settings
+
+### Later 0.8.x — competitor research, then new features
+- [ ] **Competitor scan:** features and approach of other dictation apps (open-source ones by reading their code for
+      ideas only — never copy code), what users praise/complain about; turn it into a feature plan
+- [ ] Voice commands and clean-up: "new line", "full stop", "comma"; remove "um/uh"; capitalisation
+- [ ] Friendly "words to know" list (names, products, jargon) + fixed replacements (today: hidden initial_prompt)
+- [ ] Demo GIF + README/Store screenshots
+
 ## Phase 7 -- Public Launch (→ v1.0)
 - [x] Relocate internal docs (now root AGENTS/SOUL/TODO + docs/ai/)
 - [x] Add AGPL-3.0 license
