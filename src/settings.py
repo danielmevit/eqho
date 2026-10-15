@@ -17,8 +17,17 @@ log = logging.getLogger(__name__)
 
 # Config lives in the platform-native config dir. On Windows (roaming=True)
 # this resolves to %APPDATA%\Eqho — the same directory Eqho has always used,
-# so existing installs keep their settings without migration.
-CONFIG_DIR = Path(platformdirs.user_config_dir("Eqho", appauthor=False, roaming=True))
+# so existing installs keep their settings without migration. EQHO_CONFIG_DIR
+# overrides it so tests/tools can run against an isolated config dir and
+# never touch the owner's real settings, history or logs (EQ-TESTE2E).
+def _resolve_config_dir() -> Path:
+    env_dir = os.environ.get("EQHO_CONFIG_DIR")
+    if env_dir:
+        return Path(env_dir)
+    return Path(platformdirs.user_config_dir("Eqho", appauthor=False, roaming=True))
+
+
+CONFIG_DIR = _resolve_config_dir()
 CONFIG_FILE = CONFIG_DIR / "settings.json"
 
 # Pre-0.3.3 installs cached models to a hardcoded D:\EqhoModels. If that

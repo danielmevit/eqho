@@ -54,6 +54,83 @@ HALLUCINATION_BLOCKLIST = {
 # child process, where the engine is actually loaded).
 
 
+class TestAudioSource:
+    """Test-only microphone stand-in, used when EQHO_TEST_AUDIO is set
+    (EQ-TESTE2E). Decodes a WAV/FLAC file to float32 mono 16 kHz and feeds
+    0.5 s chunks into the audio queue at real-time pace, then silence until
+    stopped — the VAD and the worker see exactly what a mic in a quiet room
+    would produce. The file is (re-)read on every start(), so a test can swap
+    its content between dictations. Zero effect when the env var is unset.
+    """
+
+    def __init__(self, path: str, audio_q: "queue.Queue") -> None:
+        self._path = path
+        self._queue = audio_q
+        self._thread: Optional[threading.Thread] = None
+        self._stop = threading.Event()
+
+    def _decode(self) -> np.ndarray:
+        import av  # already in the venv (tools use it); test-only path
+        container = av.open(str(self._path))
+        try:
+            stream = container.streams.audio[0]
+            resampler = av.AudioResampler(
+                format=av.AudioFormat("s16"), layout="mono", rate=SAMPLE_RATE)
+            parts = []
+            for frame in container.decode(stream):
+                outs = resampler.resample(frame)
+                if not isinstance(outs, list):  # older PyAV returns one frame
+                    outs = [outs]
+                for out in outs:
+                    arr = out.to_ndarray()
+                    if arr.ndim == 2:  # packed mono -> (1, n)
+                        arr = arr.reshape(-1)
+                    parts.append(arr.astype(np.float32) / 32768.0)
+            return np.concatenate(parts) if parts else np.zeros(0, dtype=np.float32)
+        finally:
+            container.close()
+
+    def _feed(self) -> None:
+        try:
+            audio = self._decode()
+        except Exception as e:
+            log.error("EQHO_TEST_AUDIO: could not decode %s: %s", self._path, e)
+            return
+        chunk_len = int(SAMPLE_RATE * CHUNK_DURATION)
+        log.info("TEST AUDIO: feeding %s (%.1f s) in real time",
+                 self._path, len(audio) / SAMPLE_RATE)
+        for start in range(0, len(audio), chunk_len):
+            if self._stop.is_set():
+                return
+            t0 = time.monotonic()
+            self._queue.put(audio[start:start + chunk_len].copy())
+            delay = CHUNK_DURATION - (time.monotonic() - t0)  # real-time pace
+            if delay > 0:
+                self._stop.wait(delay)
+        silence = np.zeros(chunk_len, dtype=np.float32)
+        while not self._stop.is_set():  # then silence, like a quiet room
+            t0 = time.monotonic()
+            self._queue.put(silence.copy())
+            delay = CHUNK_DURATION - (time.monotonic() - t0)
+            if delay > 0:
+                self._stop.wait(delay)
+
+    def start(self) -> None:
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._feed, name="test-audio",
+                                        daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=2.0)
+            self._thread = None
+
+    def close(self) -> None:
+        self.stop()
+
+
 class VoiceTranscriber:
     """Records from mic, detects speech via energy-based VAD, transcribes with faster-whisper."""
 
@@ -142,7 +219,13 @@ class VoiceTranscriber:
                                      self._settings.initial_prompt or "")
         return " ".join(s["text"].strip() for s in segs if s["text"].strip())
 
-    def _open_stream(self, device: Optional[int]) -> sd.InputStream:
+    def _open_stream(self, device: Optional[int]):
+        test_audio = os.environ.get("EQHO_TEST_AUDIO")
+        if test_audio:
+            # Test hook (EQ-TESTE2E): feed a file instead of the microphone.
+            source = TestAudioSource(test_audio, self._audio_q)
+            source.start()
+            return source
         stream = sd.InputStream(
             samplerate=SAMPLE_RATE,
             channels=1,

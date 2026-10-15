@@ -74,3 +74,78 @@ and use it as the reference:
 This prints the WER/RTF deltas and fails the run if WER exceeds 15% or
 regresses more than 1 pp versus the reference — the guard for engine, model
 or post-processing changes.
+
+## End-to-end dictation test — `tools/test_e2e.py` (EQ-TESTE2E)
+
+Drives the **whole app like a user**: starts Eqho (`run.py`) with a recording
+instead of the microphone, presses the real Alt+Q hotkey, and checks that
+the transcript lands in a target window. Covers everything the ASR benchmark
+cannot: hotkey, VAD, overlay, volume duck/restore, focus handling, text
+injection, teardown.
+
+**WARNING: this test uses the real desktop.** It sends real Alt+Q keypresses
+and brings its own target window to the foreground. Do not touch the machine
+while it runs. Before every keypress it verifies that its own target window
+is the foreground window and aborts without pressing anything if it is not —
+but focus can change at any moment, so the machine must be left alone for
+the duration of the run. Quit any running Eqho first (the single-instance
+lock would make the test instance exit immediately).
+
+### How it works
+
+- `EQHO_TEST_AUDIO=<wav/flac>` — the recorder feeds that file (decoded to
+  float32 mono 16 kHz, real-time pacing, then silence) instead of opening the
+  microphone. Zero effect when unset. The file is re-read on every
+  dictation start, so the test swaps its content between clips.
+- `EQHO_CONFIG_DIR=<dir>` — settings, history and the log live in that
+  folder instead of `%APPDATA%\Eqho`, so the run never touches the owner's
+  real settings or history. Zero effect when unset.
+- The test writes its own `settings.json` (the owner's model and language,
+  but toggle mode, Alt+Q, history off), starts `tools/e2e_target.py` (a Tk
+  text box that writes its content to a file when told to close), waits for
+  Eqho's log to say the model is pre-loaded, then per clip: foreground the
+  target, Alt+Q (start), wait out the clip, Alt+Q (stop), read the target's
+  text, compute WER (same normalizer/Levenshtein as the ASR benchmark), and
+  measure latency from Eqho's log (Alt+Q → "Transcription started",
+  stop → "Injected N chars"). System volume is checked after every clip
+  (pycaw) and restored by the test if Eqho left it ducked.
+- Shutdown kills the Eqho process tree (`taskkill /T /F`) — the app has no
+  remote-quit IPC; volume is verified/restored separately, which is what
+  matters.
+
+### Run
+
+```bash
+# owner's Windows venv — never pip-install into it; Windows only
+"/mnt/d/Vibe Coding/Eqho/venv/Scripts/python.exe" tools/test_e2e.py --clips 3 --gate-wer 0.25
+```
+
+| Flag | Meaning |
+|------|---------|
+| `--clips N` | N LibriSpeech test-clean clips, round-robin over speakers (default 3) |
+| `--audio F --ref "text"` | single clip from any wav/flac with known text |
+| `--gate-wer X` | exit 1 if total WER > X (e.g. `0.25` = 25%) |
+| `--work DIR` | output dir; writes `DIR/e2e-results.csv` (default `_bench/e2e`) |
+| `--data DIR` | LibriSpeech test-clean root (default: the known path from part 1) |
+| `--model NAME` / `--language CODE` | override the owner's settings (model must be cached — the test never downloads) |
+| `--ready-timeout S` | seconds to wait for the model to load (default 300) |
+
+### What the numbers mean
+
+- **WER (total)** — pooled over all clips, same normalization as the ASR
+  benchmark. A clip with no text in the target window counts as all
+  deletions AND fails the run on its own.
+- **Latency** — start: Alt+Q → "Transcription started" in the log (the mic
+  path is live); stop: Alt+Q → "Injected N chars" (text is in the target).
+  Wall-clock from the keypress to the log line, so it includes the app's
+  deliberate stop-path sleeps.
+- **Volume** — the system master volume must be back at its starting level
+  (and unmuted, unless it started muted) after every clip.
+
+### Exit codes
+
+`0` pass · `1` clip/gate failure or safety abort · `2` setup error (missing
+data, uncached model, Eqho already running, model failed to load).
+
+Everything the run produced (per-clip text, results CSV, Eqho's own log and
+config dir) is kept under `--work` for inspection.
