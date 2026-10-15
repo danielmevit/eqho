@@ -338,7 +338,7 @@ def run_clip(index: int, clip: dict, *, work: Path, swap: Path, tail: LogTail,
                  row["wer"] * 100, len(ref_words), "" if text else " (EMPTY)")
     finally:
         # Never leave a dictation session live, whatever happened above.
-        _ensure_stopped(tail, proc)
+        _ensure_stopped(tail, proc, hwnd)
         if target.poll() is None:
             stopfile.write_text("", encoding="utf-8")
             try:
@@ -348,9 +348,23 @@ def run_clip(index: int, clip: dict, *, work: Path, swap: Path, tail: LogTail,
     return row
 
 
-def _ensure_stopped(tail: LogTail, proc: subprocess.Popen) -> None:
-    """If a dictation is still active, press the hotkey once to end it."""
+def _ensure_stopped(tail: LogTail, proc: subprocess.Popen, hwnd) -> None:
+    """If a dictation is still active, press the hotkey once to end it.
+    Only ever presses with our own target window in the foreground — if the
+    app already stopped on its own (race), the press would START a new
+    dictation into whatever is front, so a window we cannot foreground means
+    no press at all (the process-tree kill ends the session without typing)."""
     if tail.count(ACTIVATED_RE) <= tail.count(ENDED_RE):
+        return
+    if hwnd is None:
+        log.error("Dictation still active but the target window is gone — "
+                  "NOT sending Alt+Q (shutdown will kill the session).")
+        return
+    try:
+        ensure_foreground(hwnd)
+    except SafetyAbort as e:
+        log.error("Dictation still active but %s — NOT sending Alt+Q "
+                  "(shutdown will kill the session).", e)
         return
     log.warning("Dictation still active — sending Alt+Q to stop it.")
     try:
