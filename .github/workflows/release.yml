@@ -16,17 +16,17 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - name: Create venv and install deps
         run: |
           python -m venv venv
           venv\Scripts\python.exe -m pip install --upgrade pip
-          venv\Scripts\python.exe -m pip install -r requirements.txt
+          venv\Scripts\python.exe -m pip install -r requirements-lock.txt
 
       - name: Smoke gate
         run: venv\Scripts\python.exe run.py --smoke
@@ -39,14 +39,15 @@ jobs:
 
       - name: Attach artifacts to the release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
+          name: Eqho ${{ github.ref_name }}
           files: |
             dist/Eqho-portable-*.zip
             dist/Eqho-Setup-*.exe
 
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: eqho-windows
           path: |
@@ -56,11 +57,11 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - name: System deps (PortAudio, xvfb, AppImage tooling)
         run: |
@@ -74,7 +75,7 @@ jobs:
         run: |
           python -m venv venv
           venv/bin/pip install --upgrade pip
-          venv/bin/pip install -r requirements.txt
+          venv/bin/pip install -r requirements-lock.txt
 
       - name: Smoke gate (headless X)
         run: xvfb-run -a venv/bin/python run.py --smoke
@@ -84,14 +85,15 @@ jobs:
 
       - name: Attach artifacts to the release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
+          name: Eqho ${{ github.ref_name }}
           files: |
             dist/Eqho-linux-*.tar.gz
             dist/Eqho-*.AppImage
 
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: eqho-linux
           path: |
@@ -102,17 +104,17 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - name: Create venv and install deps
         run: |
           python -m venv venv
           venv/bin/pip install --upgrade pip
-          venv/bin/pip install -r requirements.txt
+          venv/bin/pip install -r requirements-lock.txt
 
       - name: Smoke gate
         run: venv/bin/python run.py --smoke
@@ -122,12 +124,13 @@ jobs:
 
       - name: Attach artifacts to the release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
+          name: Eqho ${{ github.ref_name }}
           files: dist/Eqho-macos-*.dmg
 
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: eqho-macos
           path: dist/Eqho-macos-*.dmg

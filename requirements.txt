@@ -7,7 +7,8 @@ pystray
 Pillow
 pynput
 pyperclip
-customtkinter>=5.2.0
+# customtkinter 6.0 changed internals Eqho uses (_parent_canvas, _fg_color, ...) — stay on 5.x
+customtkinter>=5.2.0,<6
 
 # Windows-only
 keyboard ; sys_platform == "win32"

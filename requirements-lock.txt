@@ -1,0 +1,23 @@
+# Eqho release lockfile — exact versions the app is tested with.
+# Release builds (CI) install this file; dev can keep using requirements.txt.
+# Refresh: test the app with the new versions first, then update all pins
+# together — never bump a single pin on its own.
+
+faster-whisper==1.2.1
+ctranslate2==4.7.1
+av==17.0.0
+tokenizers==0.22.2
+onnxruntime==1.24.4
+huggingface_hub==1.8.0
+numpy==2.5.1
+sounddevice==0.5.5
+platformdirs==4.10.0
+pystray==0.19.5
+pynput==1.8.1
+pyperclip==1.11.0
+customtkinter==5.2.2
+Pillow==12.3.0
+
+# Windows-only
+keyboard==0.13.5 ; sys_platform == "win32"
+pycaw==20251023 ; sys_platform == "win32"
