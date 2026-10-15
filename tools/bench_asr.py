@@ -90,7 +90,7 @@ def collect_utterances(data_dir: Path) -> list:
     utts = []
     for spk_dir in sorted(p for p in data_dir.iterdir() if p.is_dir()):
         for ch_dir in sorted(p for p in spk_dir.iterdir() if p.is_dir()):
-            trans = ch_dir / f"{ch_dir.name}.trans.txt"
+            trans = ch_dir / f"{spk_dir.name}-{ch_dir.name}.trans.txt"
             if not trans.exists():
                 continue
             for line in trans.read_text(encoding="utf-8").splitlines():
