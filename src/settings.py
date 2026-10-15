@@ -2,7 +2,10 @@
 
 import json
 import logging
+import math
 import os
+import tempfile
+import threading
 import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -183,6 +186,104 @@ OVERLAY_POSITIONS = [
 ]
 
 
+def _coerce_value(val: object, default_val: object) -> object:
+    """Coerce val to match default_val's type (bool, int, float, str, dict).
+    If coercion is impossible, returns default_val.
+    """
+    if default_val is None:
+        if val is None or isinstance(val, bool):
+            return None
+        if isinstance(val, int):
+            return val
+        if isinstance(val, float):
+            try:
+                return int(val)
+            except (ValueError, OverflowError):
+                return None
+        if isinstance(val, str):
+            try:
+                return int(val.strip())
+            except ValueError:
+                return None
+        return None
+
+    # bool must be checked before int because bool subclasses int in Python
+    if isinstance(default_val, bool):
+        if isinstance(val, bool):
+            return val
+        if isinstance(val, (int, float)):
+            if val == 1:
+                return True
+            if val == 0:
+                return False
+            return default_val
+        if isinstance(val, str):
+            s = val.strip().lower()
+            if s in ("true", "1", "yes", "on"):
+                return True
+            if s in ("false", "0", "no", "off"):
+                return False
+            return default_val
+        return default_val
+
+    if isinstance(default_val, int):
+        if isinstance(val, bool):
+            return default_val
+        if isinstance(val, int):
+            return val
+        if isinstance(val, float):
+            try:
+                return int(val)
+            except (ValueError, OverflowError):
+                return default_val
+        if isinstance(val, str):
+            try:
+                return int(val.strip())
+            except ValueError:
+                try:
+                    f = float(val.strip())
+                    if math.isnan(f) or math.isinf(f):
+                        return default_val
+                    return int(f)
+                except (ValueError, OverflowError):
+                    return default_val
+        return default_val
+
+    if isinstance(default_val, float):
+        if isinstance(val, bool):
+            return default_val
+        if isinstance(val, (int, float)):
+            f = float(val)
+            if math.isnan(f) or math.isinf(f):
+                return default_val
+            return f
+        if isinstance(val, str):
+            try:
+                f = float(val.strip())
+                if math.isnan(f) or math.isinf(f):
+                    return default_val
+                return f
+            except (ValueError, OverflowError):
+                return default_val
+        return default_val
+
+    if isinstance(default_val, str):
+        if isinstance(val, str):
+            return val
+        if isinstance(val, (int, float)) and not isinstance(val, bool):
+            return str(val)
+        return default_val
+
+    if isinstance(default_val, dict):
+        if isinstance(val, dict):
+            return val
+        return default_val
+
+    if isinstance(val, type(default_val)):
+        return val
+    return default_val
+
+
 @dataclass
 class Settings:
     language: str = "en"
@@ -217,6 +318,22 @@ class Settings:
     # runtime-only (not persisted)
     _listeners: list = field(default_factory=list, repr=False)
 
+    def __post_init__(self) -> None:
+        if not hasattr(self, "_lock"):
+            self._lock = threading.Lock()
+
+    def __deepcopy__(self, memo: dict) -> "Settings":
+        import copy
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            if k == "_lock":
+                setattr(result, k, threading.Lock())
+            else:
+                setattr(result, k, copy.deepcopy(v, memo))
+        return result
+
     def resolve_model_dir(self) -> Path:
         """Directory Whisper models are cached in."""
         if self.model_dir:
@@ -226,21 +343,78 @@ class Settings:
         return DEFAULT_MODEL_DIR
 
     def save(self) -> None:
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        data = asdict(self)
-        data.pop("_listeners", None)
-        CONFIG_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        if not hasattr(self, "_lock"):
+            self._lock = threading.Lock()
+        with self._lock:
+            config_dir = CONFIG_FILE.parent
+            config_dir.mkdir(parents=True, exist_ok=True)
+            data = asdict(self)
+            data.pop("_listeners", None)
+            content = json.dumps(data, indent=2)
+            tmp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    dir=config_dir,
+                    prefix="settings_",
+                    suffix=".tmp",
+                    delete=False,
+                ) as f:
+                    tmp_path = Path(f.name)
+                    f.write(content)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, CONFIG_FILE)
+            except Exception:
+                if tmp_path is not None and tmp_path.exists():
+                    try:
+                        tmp_path.unlink()
+                    except OSError:
+                        pass
+                raise
 
     @classmethod
     def load(cls) -> "Settings":
         settings = None
         if CONFIG_FILE.exists():
+            bad_file = CONFIG_FILE.with_name(CONFIG_FILE.name + ".bad")
+            is_corrupt = False
+            data = None
             try:
-                data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-                data.pop("_listeners", None)
-                settings = cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
-            except (json.JSONDecodeError, TypeError):
-                pass
+                raw_text = CONFIG_FILE.read_text(encoding="utf-8")
+                data = json.loads(raw_text)
+                if not isinstance(data, dict):
+                    is_corrupt = True
+            except Exception as e:
+                log.warning("Could not read settings from %s: %s", CONFIG_FILE, e)
+                is_corrupt = True
+
+            if is_corrupt:
+                try:
+                    os.replace(CONFIG_FILE, bad_file)
+                    log.warning("Corrupted settings file moved to %s; using defaults.", bad_file)
+                except Exception as e:
+                    log.warning("Could not rename corrupted settings file %s to %s: %s", CONFIG_FILE, bad_file, e)
+                settings = cls()
+            else:
+                try:
+                    defaults = cls()
+                    clean_data = {}
+                    for k, v in data.items():
+                        if k not in cls.__dataclass_fields__ or k == "_listeners":
+                            continue
+                        default_val = getattr(defaults, k)
+                        clean_data[k] = _coerce_value(v, default_val)
+                    settings = cls(**clean_data)
+                except Exception as e:
+                    log.warning("Error constructing Settings from %s: %s", CONFIG_FILE, e)
+                    try:
+                        os.replace(CONFIG_FILE, bad_file)
+                    except Exception:
+                        pass
+                    settings = cls()
+
         if settings is None:
             settings = cls()
 
