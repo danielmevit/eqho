@@ -6,10 +6,6 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
-### Fixed — 2026-10-15
-- **Model host can no longer serve stale replies (review F3).** When a transcription times out (or the child returns any error), the child process is now killed immediately — its late answer used to sit in the queue and get read by the NEXT dictation, leaving every later answer one dictation behind. A dead child now raises a clear error instead of silently returning empty text; the next model load respawns a fresh child as before.
-- **First-run model download no longer races a fixed 10-minute limit (review F8).** The load timeout is now inactivity-based: the child reports progress while downloading (byte-level via the HF hub), loading and warming up, and the load only fails after 120 s of silence — a slow connection that keeps making progress waits as long as it needs. New probe `tools/probe_host_timeout.py` verifies all three behaviours with a fake child (no real model); exit 0 on success.
-
 ## [0.8.8] - 2026-07-14 (continued — content restructure)
 
 The three sections now answer three different questions (Daniel's plan review): General = *how do I dictate*, Models = *what does the transcribing*, Settings = *the nit-picky rest*.
