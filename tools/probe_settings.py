@@ -167,7 +167,7 @@ def test_concurrent_saves():
 
         def worker(thread_id: int):
             try:
-                barrier.wait()
+                barrier.wait(timeout=10.0)
                 for i in range(40):
                     s.hotkey = f"ctrl+{thread_id}+{i}"
                     s.overlay_font_size = 10 + (i % 20)
@@ -177,11 +177,12 @@ def test_concurrent_saves():
             except Exception as e:
                 errors.append((thread_id, e))
 
-        threads = [threading.Thread(target=worker, args=(i,)) for i in range(3)]
+        threads = [threading.Thread(target=worker, args=(i,), name=f"worker-{i}") for i in range(3)]
         for t in threads:
             t.start()
         for t in threads:
-            t.join()
+            t.join(timeout=10.0)
+            assert not t.is_alive(), f"Worker thread {t.name} timed out (stuck)"
 
         assert not errors, f"Errors in concurrent save threads: {errors}"
         assert test_file.exists(), "Settings file must exist after concurrent saves"
@@ -210,33 +211,40 @@ def test_save_is_atomic():
         read_errors = []
         read_count = [0]
 
-        # Reader thread reading constantly during rapid saves
+        # Reader thread reading constantly during rapid saves.
+        # Models Windows realistically: open, read and CLOSE quickly.
         def reader():
             while not stop_event.is_set():
                 if test_file.exists():
                     try:
-                        raw = test_file.read_text(encoding="utf-8")
-                        if raw:
-                            data = json.loads(raw)
-                            assert isinstance(data, dict)
-                            assert "language" in data
-                            read_count[0] += 1
+                        with open(test_file, "r", encoding="utf-8") as f:
+                            raw = f.read()
+                        data = json.loads(raw)
+                        assert isinstance(data, dict), f"Read non-dict: {type(data)}"
+                        assert "language" in data, "Missing 'language' key"
+                        read_count[0] += 1
+                    except (FileNotFoundError, PermissionError):
+                        # On Windows, opening a file while os.replace is in-flight
+                        # can briefly raise PermissionError / WinError 32 or FileNotFoundError.
+                        pass
                     except Exception as e:
                         read_errors.append(e)
-                time.sleep(0.0005)
+                time.sleep(0.001)
 
-        r_thread = threading.Thread(target=reader)
+        r_thread = threading.Thread(target=reader, name="atomic-reader")
         r_thread.start()
 
-        # Perform 50 rapid saves with varying sizes
-        for i in range(50):
-            s.initial_prompt = "x" * (i * 200)  # variable content size
-            s.overlay_font_size = 12 + (i % 10)
-            s.save()
-            time.sleep(0.001)
-
-        stop_event.set()
-        r_thread.join()
+        try:
+            # Perform 50 rapid saves with varying sizes
+            for i in range(50):
+                s.initial_prompt = "x" * (i * 200)  # variable content size
+                s.overlay_font_size = 12 + (i % 10)
+                s.save()
+                time.sleep(0.001)
+        finally:
+            stop_event.set()
+            r_thread.join(timeout=10.0)
+            assert not r_thread.is_alive(), "Reader thread timed out (stuck)"
 
         assert not read_errors, f"Reader saw corrupted/partial file during save: {read_errors}"
         assert read_count[0] > 0, "Reader should have successfully read the file multiple times"
@@ -253,6 +261,119 @@ def test_save_is_atomic():
     print("  -> Atomic save tests passed.")
 
 
+def test_save_reader_holds_file():
+    """Verify that when a reader HOLDS the file open for ~0.3 s during a save,
+    save() succeeds after the reader releases (retry), or degrades gracefully
+    (logs warning, no exception).
+    """
+    print("Testing save while reader holds file open (~0.3 s)...")
+    with tempfile.TemporaryDirectory() as td:
+        test_file = Path(td) / "settings.json"
+        settings_mod.CONFIG_FILE = test_file
+        settings_mod.LEGACY_MODEL_DIR = Path(test_file).parent / "no-legacy-model-cache"
+
+        s = Settings(hotkey="alt+q", overlay_font_size=14)
+        s.save()
+        assert test_file.exists()
+
+        holder_started = threading.Event()
+        holder_error = []
+
+        def lock_holder():
+            try:
+                with open(test_file, "r", encoding="utf-8") as f:
+                    _ = f.read()
+                    holder_started.set()
+                    time.sleep(0.3)
+            except Exception as e:
+                holder_error.append(e)
+                holder_started.set()
+
+        h_thread = threading.Thread(target=lock_holder, name="lock-holder")
+        h_thread.start()
+
+        try:
+            assert holder_started.wait(timeout=5.0), "Lock holder thread did not start in time"
+            assert not holder_error, f"Error in lock holder thread: {holder_error}"
+
+            s.hotkey = "ctrl+shift+p"
+            s.overlay_font_size = 28
+            # Must succeed after reader releases (retry), or degrade gracefully (never raise)
+            s.save()
+        finally:
+            h_thread.join(timeout=10.0)
+            assert not h_thread.is_alive(), "Lock holder thread timed out (stuck)"
+
+        # Check no temporary files were left behind
+        tmp_files = list(Path(td).glob("*.tmp")) + list(Path(td).glob("settings_*.tmp"))
+        assert not tmp_files, f"Found leftover temp files: {tmp_files}"
+
+        # Verify final file is valid JSON and loadable
+        loaded = Settings.load()
+        assert isinstance(loaded, Settings)
+        assert loaded.hotkey in ("alt+q", "ctrl+shift+p")
+
+    print("  -> Save with held file tests passed.")
+
+
+def test_save_retries_and_degrades_gracefully():
+    """Explicitly verify retry loop and graceful degradation on PermissionError/OSError."""
+    print("Testing save() retry loop and graceful degradation...")
+    with tempfile.TemporaryDirectory() as td:
+        test_file = Path(td) / "settings.json"
+        settings_mod.CONFIG_FILE = test_file
+        settings_mod.LEGACY_MODEL_DIR = Path(test_file).parent / "no-legacy-model-cache"
+
+        s = Settings(hotkey="alt+q", overlay_font_size=14)
+        s.save()
+        assert test_file.exists()
+
+        # Case 1: Transient PermissionError (fails 3 times, then succeeds)
+        orig_replace = os.replace
+        replace_attempts = [0]
+
+        def transient_replace(src, dst):
+            replace_attempts[0] += 1
+            if replace_attempts[0] <= 3:
+                raise PermissionError("[WinError 5] Access is denied")
+            return orig_replace(src, dst)
+
+        os.replace = transient_replace
+        try:
+            s.hotkey = "ctrl+alt+t"
+            s.save()
+            assert replace_attempts[0] == 4, f"Expected 4 attempts, got {replace_attempts[0]}"
+            loaded = Settings.load()
+            assert loaded.hotkey == "ctrl+alt+t"
+        finally:
+            os.replace = orig_replace
+
+        # Case 2: Persistent PermissionError (fails all 10 times)
+        persistent_attempts = [0]
+
+        def persistent_fail_replace(src, dst):
+            persistent_attempts[0] += 1
+            raise PermissionError("[WinError 5] Access is denied")
+
+        os.replace = persistent_fail_replace
+        try:
+            s.hotkey = "ctrl+alt+fail"
+            # Must NOT raise to caller; logs ONE warning, deletes temp file, keeps in-memory settings
+            s.save()
+            assert persistent_attempts[0] == 10, f"Expected 10 attempts, got {persistent_attempts[0]}"
+            assert s.hotkey == "ctrl+alt+fail", "In-memory settings must be kept"
+            # No leftover temp files
+            tmp_files = list(Path(td).glob("*.tmp")) + list(Path(td).glob("settings_*.tmp"))
+            assert not tmp_files, f"Temp file was not cleaned up: {tmp_files}"
+            # File on disk should still be the previous valid file
+            loaded = Settings.load()
+            assert loaded.hotkey == "ctrl+alt+t"
+        finally:
+            os.replace = orig_replace
+
+    print("  -> Retry and graceful degradation tests passed.")
+
+
 def main():
     print("Running settings probe (EQ-SETTINGS)...")
     try:
@@ -260,6 +381,8 @@ def main():
         test_type_coercion_and_unknown_keys()
         test_concurrent_saves()
         test_save_is_atomic()
+        test_save_reader_holds_file()
+        test_save_retries_and_degrades_gracefully()
         print("\nALL SETTINGS PROBE TESTS PASSED.")
         return 0
     except Exception as e:

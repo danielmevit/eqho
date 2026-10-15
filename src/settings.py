@@ -347,32 +347,54 @@ class Settings:
             self._lock = threading.Lock()
         with self._lock:
             config_dir = CONFIG_FILE.parent
-            config_dir.mkdir(parents=True, exist_ok=True)
-            data = asdict(self)
-            data.pop("_listeners", None)
-            content = json.dumps(data, indent=2)
-            tmp_path = None
             try:
-                with tempfile.NamedTemporaryFile(
-                    mode="w",
-                    encoding="utf-8",
-                    dir=config_dir,
-                    prefix="settings_",
-                    suffix=".tmp",
-                    delete=False,
-                ) as f:
-                    tmp_path = Path(f.name)
-                    f.write(content)
-                    f.flush()
-                    os.fsync(f.fileno())
-                os.replace(tmp_path, CONFIG_FILE)
-            except Exception:
-                if tmp_path is not None and tmp_path.exists():
-                    try:
-                        tmp_path.unlink()
-                    except OSError:
-                        pass
-                raise
+                config_dir.mkdir(parents=True, exist_ok=True)
+                data = asdict(self)
+                data.pop("_listeners", None)
+                content = json.dumps(data, indent=2)
+                tmp_path = None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        mode="w",
+                        encoding="utf-8",
+                        dir=config_dir,
+                        prefix="settings_",
+                        suffix=".tmp",
+                        delete=False,
+                    ) as f:
+                        tmp_path = Path(f.name)
+                        f.write(content)
+                        f.flush()
+                        os.fsync(f.fileno())
+
+                    # Retry os.replace a few times with a short growing pause
+                    # (up to ~10 tries over ~1.5 s). On Windows, os.replace
+                    # fails with PermissionError / WinError 5 or 32 if another
+                    # handle has settings.json open.
+                    for attempt in range(10):
+                        try:
+                            os.replace(tmp_path, CONFIG_FILE)
+                            tmp_path = None
+                            break
+                        except OSError as e:
+                            if attempt < 9:
+                                time.sleep(0.02 * (1.5 ** attempt))
+                            else:
+                                log.warning(
+                                    "Could not save settings to %s after retries: %s",
+                                    CONFIG_FILE,
+                                    e,
+                                )
+                finally:
+                    if tmp_path is not None and tmp_path.exists():
+                        for _ in range(3):
+                            try:
+                                tmp_path.unlink()
+                                break
+                            except OSError:
+                                time.sleep(0.05)
+            except Exception as e:
+                log.warning("Failed to save settings to %s: %s", CONFIG_FILE, e)
 
     @classmethod
     def load(cls) -> "Settings":
