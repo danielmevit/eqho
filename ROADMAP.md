@@ -98,7 +98,7 @@ dictation test, UI walker) before release.
 ### 0.8.12 — the app in many languages (interface)
 - [ ] Move all UI text (dashboard, onboarding, tray, overlay, messages) into translation files
 - [ ] Translate the interface, then grow the list; follow the Windows display language, with a picker in
-      onboarding and settings. Wave 1 languages: **main** — English, German, Spanish, French, Italian, Portuguese, Dutch, Polish, Russian, Ukrainian, Turkish, Japanese, Chinese (Simplified), Korean; **Balkan** — Macedonian, Serbian (Cyrillic + Latin), Croatian, Bosnian, Slovenian, Bulgarian, Albanian, Romanian, Greek; **Central Europe** — Czech, Slovak. Later waves: as many more as quality allows (owner: "as huge as it can be").
+      onboarding and settings. Wave 1 languages: **main** — English, German, Spanish, French, Italian, Portuguese, Dutch, Polish, Russian, Ukrainian, Turkish, Japanese, Chinese (Simplified), Korean; **Balkan** — Macedonian, Serbian (Cyrillic + Latin), Croatian, Slovenian, Bulgarian, Albanian, Romanian, Greek (no separate Bosnian: Serbian and Croatian cover it); **Central Europe** — Czech, Slovak. Later waves: as many more as quality allows (owner: "as huge as it can be").
 - [ ] Speech: make sure every wave-1 language is offered for transcription with the multilingual model (Whisper
       covers all of them; accuracy is lower for smaller languages such as Macedonian and Albanian — measure with the
       ASR benchmark on public recordings where available)
