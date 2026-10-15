@@ -36,3 +36,6 @@ site/node_modules/
 site/.astro/
 site/dist/
 site/src/env.d.ts
+
+# local test/benchmark output (tools/bench_asr.py --work, probes)
+_bench/
