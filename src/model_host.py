@@ -208,6 +208,18 @@ _WHISPERCPP_NAME = {
 }
 
 
+def whispercpp_models_dir(model_dir) -> "Path":
+    """whisper.cpp GGML models live next to Eqho's other models."""
+    from pathlib import Path
+    return Path(model_dir) / "whispercpp"
+
+
+def whispercpp_model_path(model_dir, model_key: str) -> "Path":
+    """File pywhispercpp downloads for `model_key` (ggml-<name>.bin)."""
+    name = _WHISPERCPP_NAME.get(model_key, "base")
+    return whispercpp_models_dir(model_dir) / f"ggml-{name}.bin"
+
+
 class _WhisperCppBackend:
     """whisper.cpp backend via pywhispercpp — cross-vendor GPU (Vulkan on
     AMD/Intel/NVIDIA, Metal on Apple) or CPU. Same engine as Eqho Mobile.
@@ -222,14 +234,20 @@ class _WhisperCppBackend:
         # and offers no progress hook — coarse phase messages are the best
         # available (a stalled download still hits the inactivity timeout).
         report("downloading whisper.cpp model")
-        self._model = Model(name)
+        models_dir = whispercpp_models_dir(cfg["model_dir"])
+        models_dir.mkdir(parents=True, exist_ok=True)
+        self._model = Model(name, models_dir=str(models_dir))
         report("whisper.cpp model loaded")
         self.info = {"backend": "whisper.cpp", "model": name}
 
     def transcribe(self, p: dict):
         lang = p["language"] or "auto"
         # pywhispercpp accepts a float32 mono 16 kHz numpy array directly
-        segments = self._model.transcribe(p["audio"], language=lang)
+        kwargs = {"language": lang}
+        if p.get("initial_prompt"):
+            kwargs["initial_prompt"] = p["initial_prompt"]
+        # Greedy decoding on purpose (no beam settings): slow GPUs can't afford beam search.
+        segments = self._model.transcribe(p["audio"], **kwargs)
         # whisper.cpp segments carry text only — no per-segment confidence, so
         # return safe defaults (the transcriber's confidence gate then never
         # wrongly drops them; the RMS gate + blocklist still apply).
@@ -252,27 +270,132 @@ def _cpu_has_avx2() -> bool:
         return False
 
 
+_MIN_GPU_MEMORY = 2 * 1024 ** 3   # own (dedicated) memory a GPU needs for auto
+_adapters_cache: Optional[list] = None
+
+
+def _list_adapters_dxgi() -> list:
+    """Graphics adapters via DXGI (ctypes, Windows only) as dicts
+    {name, vendor, dedicated}; software adapters are skipped. Raises on failure."""
+    import ctypes
+    from ctypes import wintypes
+
+    class GUID(ctypes.Structure):
+        _fields_ = [("d1", ctypes.c_uint32), ("d2", ctypes.c_uint16),
+                    ("d3", ctypes.c_uint16), ("d4", ctypes.c_ubyte * 8)]
+
+    class DESC1(ctypes.Structure):
+        _fields_ = [("Description", ctypes.c_wchar * 128),
+                    ("VendorId", ctypes.c_uint), ("DeviceId", ctypes.c_uint),
+                    ("SubSysId", ctypes.c_uint), ("Revision", ctypes.c_uint),
+                    ("DedicatedVideoMemory", ctypes.c_size_t),
+                    ("DedicatedSystemMemory", ctypes.c_size_t),
+                    ("SharedSystemMemory", ctypes.c_size_t),
+                    ("LuidLow", wintypes.DWORD), ("LuidHigh", wintypes.LONG),
+                    ("Flags", ctypes.c_uint)]
+
+    # IID_IDXGIFactory1 {770aae78-f26f-4dba-a829-253c83d1b387}
+    iid = GUID(0x770AAE78, 0xF26F, 0x4DBA,
+               (ctypes.c_ubyte * 8)(0xA8, 0x29, 0x25, 0x3C, 0x83, 0xD1, 0xB3, 0x87))
+    HRESULT = ctypes.c_long
+
+    def method(obj, index, *argtypes):
+        vtbl = ctypes.cast(obj, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p)))[0]
+        return ctypes.WINFUNCTYPE(HRESULT, ctypes.c_void_p, *argtypes)(vtbl[index])
+
+    def release(obj):
+        vtbl = ctypes.cast(obj, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p)))[0]
+        ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vtbl[2])(obj)
+
+    create = ctypes.windll.dxgi.CreateDXGIFactory1
+    create.restype = HRESULT
+    create.argtypes = [ctypes.POINTER(GUID), ctypes.POINTER(ctypes.c_void_p)]
+    factory = ctypes.c_void_p()
+    hr = create(ctypes.byref(iid), ctypes.byref(factory))
+    if hr < 0 or not factory.value:
+        raise OSError(f"CreateDXGIFactory1 failed (0x{hr & 0xFFFFFFFF:08X})")
+    adapters = []
+    try:
+        enum1 = method(factory, 12, ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p))
+        i = 0
+        while i < 64:
+            adapter = ctypes.c_void_p()
+            hr = enum1(factory, i, ctypes.byref(adapter))
+            if hr < 0 or not adapter.value:  # DXGI_ERROR_NOT_FOUND ends the list
+                break
+            try:
+                desc = DESC1()
+                get_desc1 = method(adapter, 10, ctypes.POINTER(DESC1))
+                if get_desc1(adapter, ctypes.byref(desc)) >= 0:
+                    software = bool(desc.Flags & 2) or desc.VendorId == 0x1414
+                    if not software:
+                        adapters.append({"name": desc.Description,
+                                         "vendor": desc.VendorId,
+                                         "dedicated": int(desc.DedicatedVideoMemory)})
+            finally:
+                release(adapter)
+            i += 1
+    finally:
+        release(factory)
+    return adapters
+
+
+def _gpu_adapters() -> list:
+    """Hardware graphics adapters, queried once per process. A failed query
+    counts as "no graphics card" (empty list)."""
+    global _adapters_cache
+    if _adapters_cache is None:
+        try:
+            _adapters_cache = _list_adapters_dxgi()
+        except Exception as e:
+            log.debug("DXGI adapter query failed: %s", e)
+            _adapters_cache = []
+    return _adapters_cache
+
+
+def _cuda_available() -> bool:
+    try:
+        import ctranslate2
+        return "int8_float16" in ctranslate2.get_supported_compute_types("cuda")
+    except Exception:
+        return False
+
+
+_auto_logged = False
+
+
 def resolve_backend(setting: str) -> str:
     """Turn the engine_backend setting into a concrete backend.
     "auto": NVIDIA+CUDA -> faster-whisper (fastest there); otherwise
     whisper.cpp if installed AND (on Windows) the CPU has AVX2 — the bundled
-    Vulkan wheel's CPU part needs that baseline; else faster-whisper."""
+    Vulkan wheel's CPU part needs that baseline — AND (on Windows) a graphics
+    card with >= 2 GiB of its own memory: on built-in graphics faster-whisper
+    on the CPU is faster (Intel UHD 620 benchmark); else faster-whisper."""
+    global _auto_logged
     if setting in ("faster-whisper", "whisper.cpp"):
         return setting
-    try:
-        import ctranslate2
-        if "int8_float16" in ctranslate2.get_supported_compute_types("cuda"):
-            return "faster-whisper"
-    except Exception:
-        pass
+    if _cuda_available():
+        return "faster-whisper"
+    choice = "faster-whisper"
+    adapters = None
     try:
         import importlib.util
         if (importlib.util.find_spec("pywhispercpp") is not None
                 and _cpu_has_avx2()):
-            return "whisper.cpp"
+            if sys.platform == "win32":
+                adapters = _gpu_adapters()
+                if any(a["dedicated"] >= _MIN_GPU_MEMORY for a in adapters):
+                    choice = "whisper.cpp"
+            else:
+                choice = "whisper.cpp"
     except Exception:
         pass
-    return "faster-whisper"
+    if not _auto_logged:
+        _auto_logged = True
+        seen = ("n/a" if adapters is None else ", ".join(
+            f"{a['name']} {a['dedicated'] // (1024 * 1024)} MB" for a in adapters) or "none")
+        log.info("Engine auto: graphics adapters [%s] -> %s", seen, choice)
+    return choice
 
 
 # -- Main process --------------------------------------------------------------

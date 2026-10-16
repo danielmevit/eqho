@@ -65,7 +65,7 @@ STOPPED_RE = re.compile(r"Transcription stopped\.")
 TAIL_SILENCE_WAIT = 2.5
 
 CSV_COLUMNS = ["clip", "utt", "audio_s", "ref_words", "sub", "del", "ins", "wer",
-               "start_latency_s", "stop_latency_s", "volume_ok", "ref", "hyp"]
+               "start_latency_s", "stop_latency_s", "volume_ok", "ref", "hyp", "status"]
 
 
 class SetupError(Exception):
@@ -518,26 +518,36 @@ def main() -> None:
     proc = start_eqho(cfg_dir, swap, work)
     tail = LogTail(cfg_dir / "eqho.log")
     rows: list[dict] = []
+    csv_rows: list[dict] = []   # every clip, failed ones too (status column)
     failure: list[str] = []
+
+    def failed_row(i: int, clip: dict, reason: str) -> None:
+        csv_rows.append({"clip": i, "utt": clip["utt"], "ref": clip["ref"],
+                         "status": reason[:80]})
     exit_code = 0
     try:
         wait_until_ready(tail, proc, args.ready_timeout)
         durations: dict = {}
         for i, clip in enumerate(clips, 1):
             try:
-                rows.append(run_clip(i, clip, work=work, swap=swap, tail=tail,
-                                     proc=proc, vol0=vol0, durations=durations))
+                row = run_clip(i, clip, work=work, swap=swap, tail=tail,
+                               proc=proc, vol0=vol0, durations=durations)
+                rows.append(row)
+                csv_rows.append(dict(row, status="ok" if row["hyp"] else "empty text"))
             except SafetyAbort as e:
+                failed_row(i, clip, f"safety abort: {e}")
                 log.error("SAFETY ABORT: %s", e)
                 failure.append(f"safety abort on clip {i}: {e}")
                 exit_code = 1
                 break
             except ChildDied as e:
+                failed_row(i, clip, f"app died: {e}")
                 log.error("[clip %d] FAILED: %s", i, e)
                 failure.append(f"clip {i} ({clip['utt']}): {e}")
                 exit_code = 1
                 break
             except Exception as e:
+                failed_row(i, clip, f"{type(e).__name__}: {e}")
                 log.error("[clip %d] FAILED: %s", i, e)
                 failure.append(f"clip {i} ({clip['utt']}): {type(e).__name__}: {e}")
     except (SetupError, ChildDied) as e:
@@ -553,12 +563,17 @@ def main() -> None:
             restore_volume(vol0)
             failure.append(f"volume not restored (was {vol0}, ended {vol1})")
 
+    # Clips never reached (setup failure or abort) still get a row
+    for i, clip in enumerate(clips, 1):
+        if i > len(csv_rows):
+            failed_row(i, clip, "not run")
+
     # Results CSV
     out_csv = work / "e2e-results.csv"
     with out_csv.open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
         w.writeheader()
-        w.writerows(rows)
+        w.writerows(csv_rows)
 
     # Summary (pooled WER over all clips, like the ASR benchmark)
     ref_total = sum(r["ref_words"] for r in rows)

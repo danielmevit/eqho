@@ -40,6 +40,57 @@ def is_downloading(model_key: str) -> bool:
     return bool(s) and not s.get("done")
 
 
+def _engine(settings) -> str:
+    from .model_host import resolve_backend  # inside: avoids an import cycle
+    return resolve_backend(settings.engine_backend)
+
+
+def model_files(settings, model_key: str) -> list:
+    """On-disk files/folders of `model_key` for the engine in use."""
+    model_dir = settings.resolve_model_dir()
+    if _engine(settings) == "whisper.cpp":
+        from .model_host import whispercpp_model_path
+        path = whispercpp_model_path(model_dir, model_key)
+        return [path] if path.exists() else []
+    found = []
+    for root in (model_dir, model_dir / "huggingface"):
+        if root.exists():
+            found.extend(root.glob(f"models--*{model_key}*"))
+    if (model_dir / model_key).exists():
+        found.append(model_dir / model_key)
+    return found
+
+
+def model_size_mb(settings, model_key: str) -> float:
+    """Downloaded size of `model_key` for the engine in use (0 if absent)."""
+    total = 0
+    for item in model_files(settings, model_key):
+        files = [item] if item.is_file() else item.rglob("*")
+        for f in files:
+            try:
+                if f.is_file():
+                    total += f.stat().st_size
+            except OSError:
+                continue
+    return total / 1e6
+
+
+def delete_model(settings, model_key: str) -> bool:
+    """Remove `model_key`'s files for the engine in use. True if anything went."""
+    import shutil
+    removed = False
+    for item in model_files(settings, model_key):
+        try:
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+            removed = True
+        except OSError as e:
+            log.error("Could not delete %s: %s", item, e)
+    return removed
+
+
 def _dir_size_mb(model_dir: Path, model_key: str) -> float:
     total = 0
     roots = [model_dir, model_dir / "huggingface"]
@@ -70,13 +121,18 @@ def start_download(settings, model_key: str) -> bool:
 
     model_dir = settings.resolve_model_dir()
     expected_mb = MODEL_SIZES_MB.get(model_key, 1000)
+    engine = _engine(settings)
 
     def _worker() -> None:
         stop = threading.Event()
 
         def _poll_size() -> None:
             while not stop.wait(0.5):
-                fraction = min(0.99, _dir_size_mb(model_dir, model_key) / expected_mb)
+                if engine == "whisper.cpp":
+                    size = model_size_mb(settings, model_key)
+                else:
+                    size = _dir_size_mb(model_dir, model_key)
+                fraction = min(0.99, size / expected_mb)
                 with _lock:
                     entry = _downloads.get(model_key)
                     if not entry or entry.get("done"):
@@ -86,6 +142,18 @@ def start_download(settings, model_key: str) -> bool:
         threading.Thread(target=_poll_size, daemon=True).start()
         try:
             model_dir.mkdir(parents=True, exist_ok=True)
+            if engine == "whisper.cpp":
+                from pywhispercpp.utils import download_model as ggml_download
+                from .model_host import _WHISPERCPP_NAME, whispercpp_models_dir
+                target = whispercpp_models_dir(model_dir)
+                path = ggml_download(_WHISPERCPP_NAME.get(model_key, "base"),
+                                     download_dir=str(target))
+                if not path:
+                    raise RuntimeError("whisper.cpp model download failed")
+                with _lock:
+                    _downloads[model_key].update(progress=1.0, done=True)
+                log.info("Model %s (whisper.cpp) downloaded.", model_key)
+                return
             os.environ["HF_HUB_CACHE"] = str(model_dir / "huggingface")
             try:
                 from faster_whisper import download_model

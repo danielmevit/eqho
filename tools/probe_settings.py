@@ -85,6 +85,20 @@ def test_corrupt_files():
     print("  -> Corrupt file tests passed.")
 
 
+def test_bom_file_loads():
+    """A settings.json saved as "UTF-8 with BOM" loads its values (not corrupt)."""
+    print("Testing settings.json with a UTF-8 BOM...")
+    with tempfile.TemporaryDirectory() as td:
+        test_file = Path(td) / "settings.json"
+        settings_mod.CONFIG_FILE = test_file
+        settings_mod.LEGACY_MODEL_DIR = Path(td) / "no-legacy-model-cache"
+        test_file.write_bytes(b"\xef\xbb\xbf" + b'{"language": "fr"}')
+        s = Settings.load()
+        assert s.language == "fr", f"Expected 'fr' from BOM file, got {s.language}"
+        assert not (Path(td) / "settings.json.bad").exists(), "BOM file wrongly called corrupt"
+        print("  ok: BOM settings.json loads its values")
+
+
 def test_type_coercion_and_unknown_keys():
     """Verify known fields are coerced to expected types and unknown keys are ignored."""
     print("Testing type coercion and unknown keys...")
@@ -380,6 +394,7 @@ def main():
         test_corrupt_files()
         test_type_coercion_and_unknown_keys()
         test_concurrent_saves()
+        test_bom_file_loads()
         test_save_is_atomic()
         test_save_reader_holds_file()
         test_save_retries_and_degrades_gracefully()

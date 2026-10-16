@@ -13,6 +13,11 @@ Checks (src/model_host.py resolve_backend + src/transcriber.py):
    faster-whisper once, dictation still works.
 7. Explicit whisper.cpp keeps today's behaviour: the load error surfaces,
    no silent fallback.
+8. Auto vs. graphics adapters (EQ-SLOWPC, fake DXGI lists): 128 MB Intel ->
+   faster-whisper; 8 GB AMD -> whisper.cpp; none / DXGI failure ->
+   faster-whisper; CUDA -> faster-whisper. The real DXGI query runs once.
+9. whisper.cpp models live under <model_dir>/whispercpp/ and is_model_cached
+   follows that file (temp dir, fake file, no download).
 
 Standard library + src only. Runs with plain python:
     python tools/probe_engine.py
@@ -33,11 +38,20 @@ from src.model_host import ModelHostError, resolve_backend
 from src.transcriber import VoiceTranscriber
 
 
+_INTEL_128MB = {"name": "Intel(R) UHD Graphics 620", "vendor": 0x8086,
+                "dedicated": 128 * 1024 ** 2}
+_AMD_8GB = {"name": "AMD Radeon RX 6600", "vendor": 0x1002,
+            "dedicated": 8 * 1024 ** 3}
+
+
 class _Patches:
     """Scoped monkeypatcher: fake ctranslate2, fake find_spec, fake AVX2."""
 
-    def __init__(self, cuda_types=None, pywhispercpp=True, avx2=True):
+    def __init__(self, cuda_types=None, pywhispercpp=True, avx2=True,
+                 adapters=None):
         self.cuda_types = cuda_types          # None -> ctranslate2 missing/broken
+        # fake DXGI list; None -> one 8 GB AMD card, "fail" -> query raises
+        self.adapters = [_AMD_8GB] if adapters is None else adapters
         self.pywhispercpp = pywhispercpp
         self.avx2 = avx2
         self._saved = {}
@@ -62,11 +76,25 @@ class _Patches:
         # AVX2 check
         self._saved["avx2"] = model_host._cpu_has_avx2
         model_host._cpu_has_avx2 = lambda: self.avx2
+        # DXGI adapter list (Windows rule applies on every OS in the probe)
+        self._saved["dxgi"] = model_host._list_adapters_dxgi
+        self._saved["platform"] = sys.platform
+
+        def _fake_dxgi():
+            if self.adapters == "fail":
+                raise OSError("fake DXGI failure")
+            return list(self.adapters)
+        model_host._list_adapters_dxgi = _fake_dxgi
+        model_host._adapters_cache = None
+        sys.platform = "win32"
         return self
 
     def __exit__(self, *exc):
         importlib.util.find_spec = self._saved["find_spec"]
         model_host._cpu_has_avx2 = self._saved["avx2"]
+        model_host._list_adapters_dxgi = self._saved["dxgi"]
+        model_host._adapters_cache = None
+        sys.platform = self._saved["platform"]
         if self._saved["ctranslate2"] is None:
             sys.modules.pop("ctranslate2", None)
         else:
@@ -119,6 +147,76 @@ def test_resolve_backend():
               resolve_backend("whisper.cpp") == "whisper.cpp")
 
     print("  -> resolve_backend tests passed.")
+
+
+def test_adapters():
+    print("Testing auto vs. graphics adapters (EQ-SLOWPC)...")
+    cases = [
+        ("[128 MB Intel] -> faster-whisper", ["int8"], [_INTEL_128MB], "faster-whisper"),
+        ("[8 GB AMD] -> whisper.cpp", ["int8"], [_AMD_8GB], "whisper.cpp"),
+        ("[128 MB Intel, 8 GB AMD] -> whisper.cpp", ["int8"],
+         [_INTEL_128MB, _AMD_8GB], "whisper.cpp"),
+        ("[] -> faster-whisper", ["int8"], [], "faster-whisper"),
+        ("DXGI failure -> faster-whisper", ["int8"], "fail", "faster-whisper"),
+        ("CUDA present + 8 GB AMD -> faster-whisper", ["int8_float16"],
+         [_AMD_8GB], "faster-whisper"),
+    ]
+    for name, cuda, adapters, want in cases:
+        with _Patches(cuda_types=cuda, pywhispercpp=True, avx2=True, adapters=adapters):
+            got = resolve_backend("auto")
+            check(name, got == want, f"got {got}")
+
+    with _Patches(cuda_types=["int8"], adapters=[_AMD_8GB]):
+        calls = []
+        real = model_host._list_adapters_dxgi
+        model_host._list_adapters_dxgi = lambda: calls.append(1) or real()
+        resolve_backend("auto")
+        resolve_backend("auto")
+        check("DXGI queried once per process (cached)", len(calls) == 1, f"{calls}")
+
+    if sys.platform == "win32":
+        try:
+            found = model_host._list_adapters_dxgi()
+            seen = ", ".join(f"{a['name']} {a['dedicated'] // 1024 ** 2} MB "
+                             f"(vendor 0x{a['vendor']:04X})" for a in found) or "none"
+            print(f"  info: real DXGI query found: {seen}")
+            check("real DXGI query returns a list", isinstance(found, list))
+        except Exception as e:
+            print(f"  info: real DXGI query failed ({e}) -> auto treats it as no card")
+    else:
+        print("  info: real DXGI query skipped (not Windows)")
+
+    print("  -> adapter tests passed.")
+
+
+def test_whispercpp_model_dir():
+    print("Testing whisper.cpp model folder + is_model_cached...")
+    import tempfile
+    import src.settings as settings_mod
+    from src.settings import Settings, is_model_cached
+
+    with tempfile.TemporaryDirectory() as td:
+        path = model_host.whispercpp_model_path(td, "small")
+        check("whisper.cpp model path under <model_dir>/whispercpp/",
+              path.parent == Path(td) / "whispercpp" and path.name == "ggml-small.bin",
+              str(path))
+        check("distil model maps to its whisper.cpp file",
+              model_host.whispercpp_model_path(td, "distil-large-v3").name
+              == "ggml-large-v3-turbo.bin")
+        s = Settings()
+        s.engine_backend = "whisper.cpp"
+        s.resolve_model_dir = lambda: Path(td)
+        settings_mod._cache_check_memo.clear()
+        check("is_model_cached False before the file exists",
+              not is_model_cached(s, "small"))
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"fake")
+        settings_mod._cache_check_memo.clear()
+        check("is_model_cached True once the file exists", is_model_cached(s, "small"))
+        check("other models still absent", not is_model_cached(s, "base"))
+        settings_mod._cache_check_memo.clear()
+
+    print("  -> model folder tests passed.")
 
 
 class _FakeHost:
@@ -214,6 +312,8 @@ def main():
     try:
         test_resolve_backend()
         test_auto_fallback()
+        test_adapters()
+        test_whispercpp_model_dir()
         print("\nprobe_engine: ALL OK")
         return 0
     except Exception as e:

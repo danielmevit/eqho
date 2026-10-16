@@ -413,7 +413,7 @@ class Settings:
             is_corrupt = False
             data = None
             try:
-                raw_text = CONFIG_FILE.read_text(encoding="utf-8")
+                raw_text = CONFIG_FILE.read_text(encoding="utf-8-sig")  # tolerate a BOM
                 data = json.loads(raw_text)
                 if not isinstance(data, dict):
                     is_corrupt = True
@@ -480,16 +480,23 @@ def is_model_cached(settings: "Settings", model_key: str) -> bool:
     models look absent and disabled their Select button.
     Results are memoized for 5 s — the Models tab asks 9× per build.
     """
-    memo = _cache_check_memo.get(model_key)
+    from .model_host import resolve_backend  # inside: avoids an import cycle
+    engine = resolve_backend(settings.engine_backend)
+    memo_key = (engine, str(settings.resolve_model_dir()), model_key)
+    memo = _cache_check_memo.get(memo_key)
     if memo and time.monotonic() - memo[1] < 5.0:
         return memo[0]
-    result = _is_model_cached_uncached(settings, model_key)
-    _cache_check_memo[model_key] = (result, time.monotonic())
+    result = _is_model_cached_uncached(settings, model_key, engine)
+    _cache_check_memo[memo_key] = (result, time.monotonic())
     return result
 
 
-def _is_model_cached_uncached(settings: "Settings", model_key: str) -> bool:
+def _is_model_cached_uncached(settings: "Settings", model_key: str,
+                              engine: str = "faster-whisper") -> bool:
     cache_dir = settings.resolve_model_dir()
+    if engine == "whisper.cpp":
+        from .model_host import whispercpp_model_path
+        return whispercpp_model_path(cache_dir, model_key).is_file()
     try:
         try:
             from faster_whisper import download_model
