@@ -129,7 +129,8 @@ lock would make the test instance exit immediately).
 | `--gate-wer X` | exit 1 if total WER > X (e.g. `0.25` = 25%) |
 | `--work DIR` | output dir; writes `DIR/e2e-results.csv` (default `_bench/e2e`) |
 | `--data DIR` | LibriSpeech test-clean root (default: the known path from part 1) |
-| `--model NAME` / `--language CODE` | override the owner's settings (model must be cached — the test never downloads) |
+| `--model NAME` / `--language CODE` | override the owner's settings (model must be cached unless `--allow-download`) |
+| `--allow-download` | download an uncached model first (same engine, model folder and code path as the app's Models tab) instead of refusing |
 | `--ready-timeout S` | seconds to wait for the model to load (default 300) |
 
 ### What the numbers mean

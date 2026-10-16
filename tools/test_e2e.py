@@ -399,6 +399,35 @@ def _ensure_stopped(tail: LogTail, proc: subprocess.Popen, hwnd) -> None:
 
 # -- Eqho child lifecycle -----------------------------------------------------------
 
+def download_model(settings, model: str) -> None:
+    """Fetch `model` the way the app's Models tab does (src/modelstore.py):
+    same engine and model folder as `settings`. Blocks until done."""
+    from src import modelstore
+    from src.settings import is_model_cached
+    expected = modelstore.MODEL_SIZES_MB.get(model)
+    log.info("Downloading model %r (~%s MB) into %s ...", model,
+             expected if expected else "?", settings.resolve_model_dir())
+    if not modelstore.start_download(settings, model):
+        raise SetupError(f"A download of {model!r} is already running.")
+    t0 = time.monotonic()
+    last = -1
+    while True:
+        st = modelstore.status(model)
+        if st.get("done"):
+            break
+        pct = int(st.get("progress", 0.0) * 100)
+        if pct // 10 > last // 10:
+            log.info("  ... %d%%", pct)
+            last = pct
+        time.sleep(1.0)
+    if st.get("error"):
+        raise SetupError(f"Model download failed ({model}): {st['error']}")
+    if not is_model_cached(settings, model):
+        raise SetupError(f"Model {model!r} still isn't cached after the download.")
+    log.info("Model %r downloaded: %.0f MB in %.0f s.", model,
+             modelstore.model_size_mb(settings, model), time.monotonic() - t0)
+
+
 def write_test_settings(cfg_dir: Path, model: str, language: str) -> None:
     """settings.json for the test run: the owner's real settings (so the
     model cache resolves), but toggle mode, TEST_HOTKEY, start-with-Windows off, history off."""
@@ -473,6 +502,9 @@ def main() -> None:
     p.add_argument("--language", help="override the language from the owner's settings")
     p.add_argument("--ready-timeout", type=float, default=300.0,
                    help="seconds to wait for the model to load (default 300)")
+    p.add_argument("--allow-download", action="store_true",
+                   help="download the model first if it isn't cached "
+                        "(default: refuse)")
     args = p.parse_args()
 
     logging.basicConfig(level=logging.INFO,
@@ -489,15 +521,22 @@ def main() -> None:
         log.error("%s", e)
         sys.exit(2)
 
-    # The model must already be cached — the e2e test must not download.
+    # The model must already be cached — the e2e test only downloads when
+    # explicitly asked (--allow-download).
     from src.settings import Settings, is_model_cached
     owner = Settings.load()
     model = args.model or owner.model_size
     language = args.language or owner.language
     if not is_model_cached(owner, model):
-        log.error("Model %r is not cached — refusing to download it for an "
-                  "e2e run.", model)
-        sys.exit(2)
+        if not args.allow_download:
+            log.error("Model %r is not cached — refusing to download it for an "
+                      "e2e run (pass --allow-download to allow it).", model)
+            sys.exit(2)
+        try:
+            download_model(owner, model)
+        except SetupError as e:
+            log.error("%s", e)
+            sys.exit(2)
 
     work = (REPO_ROOT / args.work).resolve()
     work.mkdir(parents=True, exist_ok=True)
