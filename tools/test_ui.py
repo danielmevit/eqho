@@ -157,8 +157,10 @@ class UITestRunner:
     def _build_dashboard(self) -> None:
         """Instantiate the CustomTkinter root and Dashboard window."""
         import customtkinter as ctk
+        from src.fonts import load_fonts
         from src.ui.dashboard import Dashboard
 
+        load_fonts()  # like App.__init__ (src/main.py): Inter + the Phosphor icon font
         self.root = ctk.CTk()
         self.root.withdraw()
         self.root.report_callback_exception = self._on_tk_callback_exception
@@ -359,10 +361,13 @@ class UITestRunner:
             orig_state = widget.get()
             widget.toggle()
             self._pump(count=2)
+            mid_state = widget.get()
             widget.toggle()  # toggle back to preserve state
             self._pump(count=2)
             self.controls_exercised += 1
-            print(f"    [OK] Switch: toggled {orig_state} -> {widget.get()} -> {orig_state}")
+            if mid_state == orig_state or widget.get() != orig_state:
+                raise RuntimeError(f"switch did not flip: {orig_state} -> {mid_state} -> {widget.get()}")
+            print(f"    [OK] Switch: toggled {orig_state} -> {mid_state} -> {widget.get()}")
             return
 
         # Handle CTkCheckBox
@@ -370,10 +375,13 @@ class UITestRunner:
             orig_state = widget.get()
             widget.toggle()
             self._pump(count=2)
+            mid_state = widget.get()
             widget.toggle()
             self._pump(count=2)
             self.controls_exercised += 1
-            print(f"    [OK] CheckBox: toggled {orig_state}")
+            if mid_state == orig_state or widget.get() != orig_state:
+                raise RuntimeError(f"checkbox did not flip: {orig_state} -> {mid_state} -> {widget.get()}")
+            print(f"    [OK] CheckBox: toggled {orig_state} -> {mid_state} -> {widget.get()}")
             return
 
         # Handle CTkSegmentedButton (non-rebuilding segments)
