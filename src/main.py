@@ -475,6 +475,7 @@ def _start_instance_listener(sock, on_show) -> None:
                 conn.settimeout(2.0)
                 data = conn.recv(64)
                 if data == b"show":
+                    conn.sendall(b"ok")  # the asker waits for this (an old Eqho never replies)
                     try:
                         on_show()
                     except Exception:
@@ -502,7 +503,9 @@ def _request_show(port: int = SINGLE_INSTANCE_PORT,
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=timeout) as s:
             s.sendall(b"show")
-        return True
+            # Only an Eqho with this listener replies; an older version (or
+            # anything else on the port) accepts the connection but stays silent.
+            return s.recv(8) == b"ok"
     except OSError:
         return False
 
