@@ -190,7 +190,9 @@ class Dashboard(ctk.CTkToplevel):
         parent: Optional[ctk.CTk] = None,
         on_restart: Optional[Callable] = None,
         initial_tab: Optional[str] = None,
+        onboarding: bool = False,
     ):
+        self._onboarding = None  # OnboardingScreen while first-time setup shows
         self._on_restart = on_restart
         initial_tab = TAB_ALIASES.get(initial_tab, initial_tab)
         self._initial_tab = initial_tab if initial_tab in TAB_CLASSES else "general"
@@ -234,7 +236,10 @@ class Dashboard(ctk.CTkToplevel):
         self._build_content_area()
         # Tabs build lazily on first show — keeps window open and theme
         # switching fast (only the visible tab is rebuilt synchronously)
-        self._show_tab(self._initial_tab)
+        if onboarding:
+            self.show_onboarding()
+        else:
+            self._show_tab(self._initial_tab)
 
         # Responsive resize handler
         self._content.bind("<Configure>", self._on_content_resize)
@@ -508,6 +513,46 @@ class Dashboard(ctk.CTkToplevel):
         tab_obj.build(frame)
         self._tab_built_cols[key] = self._get_col_count()
 
+    # -- First-time setup --------------------------------------------------------
+
+    def show_onboarding(self) -> None:
+        """Replace the tabs with the first-time setup pages (same window)."""
+        if self._onboarding is not None:
+            return
+        from .onboarding import OnboardingScreen
+        for attr in ("_topbar", "_topbar_rule", "_content"):
+            if hasattr(self, attr):
+                getattr(self, attr).pack_forget()
+        self._onboarding = OnboardingScreen(self._ctx, self, on_done=self._end_onboarding)
+        self._onboarding.frame.pack(fill="both", expand=True)
+
+    def _end_onboarding(self, skipped: bool, model_changed: bool) -> None:
+        """Setup finished (show the tabs) or skipped (close the window)."""
+        screen, self._onboarding = self._onboarding, None
+        self._settings.onboarding_done = True
+        self._settings.save()
+        if _onboarding_callback is not None:
+            try:
+                _onboarding_callback(model_changed)
+            except Exception:
+                log.exception("First-time setup callback failed")
+        if skipped:
+            self._on_close()
+            return
+        if screen is not None:
+            screen.frame.destroy()
+        # Language/mic/model may have changed: rebuild every tab fresh.
+        self._tab_frames.clear()
+        self._tabs.clear()
+        self._tab_built_cols.clear()
+        for child in self._content.winfo_children():
+            child.destroy()
+        self._topbar.pack(side="top", fill="x")
+        self._topbar_rule.pack(side="top", fill="x")
+        self._content.pack(side="top", fill="both", expand=True)
+        self._refresh_topbar_status()
+        self._show_tab("general")
+
     def _change_model(self, new_model: str) -> None:
         """Switch models seamlessly — the model host swaps in the background (a
         fresh child process loads the new model), no app restart needed. The
@@ -620,6 +665,11 @@ class Dashboard(ctk.CTkToplevel):
             clear("dashboard-ui")
         except Exception:
             pass
+        if self._onboarding is not None:
+            # X during setup counts as "Skip setup": marked done, no nagging.
+            # skip() -> _end_onboarding -> _on_close again with no setup.
+            self._onboarding.skip()
+            return
         general = self._tabs.get("general")
         if general is not None and getattr(general, "_hotkey_capturing", False):
             general._stop_hotkey_capture(cancelled=True)
@@ -637,6 +687,13 @@ class Dashboard(ctk.CTkToplevel):
 
 # Singleton tracking
 _active_dashboard: Optional[Dashboard] = None
+# Called (on the dashboard thread) when first-time setup ends: cb(model_changed)
+_onboarding_callback: Optional[Callable[[bool], None]] = None
+
+
+def set_onboarding_callback(cb: Optional[Callable[[bool], None]]) -> None:
+    global _onboarding_callback
+    _onboarding_callback = cb
 _dashboard_lock = threading.Lock()
 
 
@@ -671,14 +728,19 @@ _opening = False  # prevents multiple threads launching at once
 
 def open_dashboard(settings: Settings, on_settings_changed: Callable,
                    on_restart: Optional[Callable] = None,
-                   initial_tab: Optional[str] = None) -> None:
-    """Open the dashboard, or focus the existing one if already open."""
+                   initial_tab: Optional[str] = None,
+                   onboarding: bool = False) -> None:
+    """Open the dashboard, or focus the existing one if already open.
+    `onboarding` shows the first-time setup pages instead of the tabs."""
     global _active_dashboard, _opening
 
     with _dashboard_lock:
         if _active_dashboard is not None:
             try:
-                _active_dashboard.after(0, lambda: _focus_existing(_active_dashboard))
+                dash = _active_dashboard
+                if onboarding:
+                    dash.after(0, dash.show_onboarding)
+                dash.after(0, lambda: _focus_existing(dash))
                 return
             except Exception:
                 _active_dashboard = None
@@ -691,7 +753,7 @@ def open_dashboard(settings: Settings, on_settings_changed: Callable,
         global _opening
         try:
             Dashboard(settings, on_settings_changed, on_restart=on_restart,
-                      initial_tab=initial_tab)
+                      initial_tab=initial_tab, onboarding=onboarding)
         finally:
             _opening = False
 

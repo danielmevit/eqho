@@ -30,10 +30,8 @@ def _resolve_config_dir() -> Path:
 CONFIG_DIR = _resolve_config_dir()
 CONFIG_FILE = CONFIG_DIR / "settings.json"
 
-# Pre-0.3.3 installs cached models to a hardcoded D:\EqhoModels. If that
-# directory exists, Settings.load() pins it into `model_dir` so the cache
-# keeps working; fresh installs use the platform cache dir instead.
-LEGACY_MODEL_DIR = Path("D:/EqhoModels")
+# Models live in the platform cache folder unless the user picks a folder
+# (`model_dir`).
 DEFAULT_MODEL_DIR = Path(platformdirs.user_cache_dir("Eqho", appauthor=False)) / "models"
 
 WHISPER_MODELS = {
@@ -300,7 +298,7 @@ class Settings:
     hotkey_mode: str = "toggle"  # "toggle" or "hold"
     hotkey_backend: str = "auto"  # "auto" (keyboard on Windows, pynput elsewhere), "keyboard", "pynput"
     model_size: str = "distil-large-v3"
-    model_dir: str = ""  # empty = resolve_model_dir() picks legacy dir or platform cache
+    model_dir: str = ""  # empty = resolve_model_dir() uses the platform cache
     audio_device: Optional[int] = None  # None = system default input device
     auto_paste: bool = True  # paste via clipboard vs simulated keystrokes
     overlay_enabled: bool = True
@@ -308,7 +306,7 @@ class Settings:
     overlay_font_size: int = 14
     overlay_position: str = "bottom-center"
     overlay_show_level: bool = True  # audio-level line at the overlay bottom
-    volume_duck: str = "mute"  # "off", "50%", "25%", "10%", "mute"
+    volume_duck: str = "off"  # "off", "50%", "25%", "10%", "mute" — asked during first-time setup
     start_with_windows: bool = False
     theme: str = "dark"  # "dark", "light", "system"
     ui_scale: float = 1.25  # dashboard zoom factor (1.0–2.0)
@@ -323,6 +321,7 @@ class Settings:
     engine_backend: str = "auto"     # "auto" | "faster-whisper" (NVIDIA/CPU) | "whisper.cpp" (AMD/Intel Vulkan, CPU)
     vad_sensitivity: float = 1.0     # mic sensitivity 0.5 (needs louder) .. 2.0 (picks up quiet)
     paste_rules: dict = field(default_factory=dict)  # exe name (lower) -> "clipboard"|"typing"
+    onboarding_done: bool = False    # first-time setup finished or skipped (EQ-ONBOARD)
 
     # runtime-only (not persisted)
     _listeners: list = field(default_factory=list, repr=False)
@@ -347,8 +346,6 @@ class Settings:
         """Directory Whisper models are cached in."""
         if self.model_dir:
             return Path(self.model_dir)
-        if LEGACY_MODEL_DIR.exists():
-            return LEGACY_MODEL_DIR
         return DEFAULT_MODEL_DIR
 
     def save(self) -> None:
@@ -427,7 +424,7 @@ class Settings:
                     log.warning("Corrupted settings file moved to %s; using defaults.", bad_file)
                 except Exception as e:
                     log.warning("Could not rename corrupted settings file %s to %s: %s", CONFIG_FILE, bad_file, e)
-                settings = cls()
+                settings = cls(onboarding_done=True)  # not a fresh install
             else:
                 try:
                     defaults = cls()
@@ -437,6 +434,11 @@ class Settings:
                             continue
                         default_val = getattr(defaults, k)
                         clean_data[k] = _coerce_value(v, default_val)
+                    # Upgrading users (a settings.json from before first-time
+                    # setup existed) never see setup, and keep the old
+                    # volume-duck default they were running with.
+                    clean_data.setdefault("onboarding_done", True)
+                    clean_data.setdefault("volume_duck", "mute")
                     settings = cls(**clean_data)
                 except Exception as e:
                     log.warning("Error constructing Settings from %s: %s", CONFIG_FILE, e)
@@ -444,20 +446,11 @@ class Settings:
                         os.replace(CONFIG_FILE, bad_file)
                     except Exception:
                         pass
-                    settings = cls()
+                    settings = cls(onboarding_done=True)
 
         if settings is None:
             settings = cls()
 
-        # One-time migration: pin a pre-0.3.3 legacy model cache explicitly so
-        # it survives even if the drive layout changes later.
-        if not settings.model_dir and LEGACY_MODEL_DIR.exists():
-            settings.model_dir = str(LEGACY_MODEL_DIR)
-            try:
-                settings.save()
-                log.info("Pinned legacy model cache %s into settings.", LEGACY_MODEL_DIR)
-            except Exception as e:
-                log.debug("Could not persist model_dir migration: %s", e)
         return settings
 
     def add_listener(self, callback) -> None:

@@ -13,6 +13,37 @@ VERSION = re.search(
     (ROOT / "src" / "version.py").read_text(encoding="utf-8"),
 ).group(1)
 
+# --- Windows version resource (Properties -> Details) ------------------------
+# Generated from VERSION so there is no separate version file to keep in sync.
+# tools/check_exe_version.py verifies the built exe (CI) and this tuple (--spec-only).
+from PyInstaller.utils.win32.versioninfo import (
+    FixedFileInfo, StringFileInfo, StringStruct, StringTable,
+    VarFileInfo, VarStruct, VSVersionInfo,
+)
+
+_vnums = [int(n) for n in re.findall(r"\d+", VERSION)[:4]]
+VERSION_TUPLE = tuple(_vnums + [0] * (4 - len(_vnums)))
+_vstr = ".".join(str(n) for n in VERSION_TUPLE)
+
+
+def _version_info(original_filename):
+    return VSVersionInfo(
+        ffi=FixedFileInfo(filevers=VERSION_TUPLE, prodvers=VERSION_TUPLE),
+        kids=[
+            StringFileInfo([StringTable("040904B0", [
+                StringStruct("CompanyName", "Daniel Mevit"),
+                StringStruct("FileDescription", "Eqho \u2014 offline voice to text"),
+                StringStruct("FileVersion", _vstr),
+                StringStruct("InternalName", "Eqho"),
+                StringStruct("LegalCopyright", "\u00a9 2026 Daniel Mevit \u2014 AGPL-3.0"),
+                StringStruct("OriginalFilename", original_filename),
+                StringStruct("ProductName", "Eqho"),
+                StringStruct("ProductVersion", _vstr),
+            ])]),
+            VarFileInfo([VarStruct("Translation", [0x0409, 1200])]),
+        ],
+    )
+
 # --- pywhispercpp (whisper.cpp / Vulkan backend) ------------------------------
 # _pywhispercpp is a TOP-LEVEL extension module; its whisper/ggml DLLs sit beside
 # it in site-packages (self-contained wheel built by tools/mkwheel.py). Bundle
@@ -74,6 +105,7 @@ exe = EXE(
     upx=True,
     console=False,
     icon=str(ROOT / "assets" / "eqho.ico"),
+    version=_version_info("Eqho.exe"),
 )
 
 coll = COLLECT(

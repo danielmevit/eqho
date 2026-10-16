@@ -85,6 +85,12 @@ class OsKit:
         """Open the OS microphone privacy settings page. True on success."""
         return False
 
+    # -- Memory --------------------------------------------------------------------
+    def free_memory_mb(self) -> Optional[int]:
+        """Memory the PC can still hand to a new program, in MB (None when
+        unknown). Used to warn before loading a speech model on the CPU."""
+        return None
+
     # -- Misc OS behaviors ---------------------------------------------------------
     def disable_os_mic_ducking(self) -> None:
         """Stop the OS from auto-ducking other audio while the mic is open."""

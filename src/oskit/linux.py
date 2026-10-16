@@ -132,6 +132,16 @@ class LinuxOsKit(OsKit):
 
     # -- theme -----------------------------------------------------------------------------
 
+    def free_memory_mb(self) -> Optional[int]:
+        try:
+            with open("/proc/meminfo", encoding="ascii") as f:
+                for line in f:
+                    if line.startswith("MemAvailable:"):
+                        return int(line.split()[1]) // 1024  # kB -> MB
+        except Exception:
+            log.debug("Reading /proc/meminfo failed", exc_info=True)
+        return None
+
     def system_theme(self) -> str:
         out = _run(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"])
         if out and "dark" in out.lower():

@@ -38,6 +38,33 @@ STOP_JOIN_TIMEOUT = 5.0  # stop() waits this long for the final flush; anything
                          # uses request_stop()/finish_stop() with a much longer cap.
 PARTIAL_MAX_INFER_S = 1.5  # live preview only while one model call is faster than this
 
+# Low free memory (owner rule: plain words, no error codes). A model that runs
+# on the PC's memory (CPU faster-whisper, or whisper.cpp — on built-in graphics
+# it shares the PC's memory too) needs about size × 1.3 + 300 MB free.
+LOW_MEMORY_LOAD_TEXT = ("Not enough free memory to load the speech model. Close "
+                        "some programs, or pick a smaller model in Eqho → Models.")
+_MEMORY_ERROR_MARKERS = ("memoryerror", "mkl_malloc", "out of memory",
+                         "bad_alloc", "failed to allocate")
+
+
+def looks_like_memory_error(text: str) -> bool:
+    low = (text or "").lower()
+    return any(m in low for m in _MEMORY_ERROR_MARKERS)
+
+
+def low_memory_warning(free_mb: int, need_mb: int) -> str:
+    return (f"Your computer is short on free memory (about {free_mb / 1024:.1f} GB "
+            f"free; this speech model needs about {need_mb / 1024:.1f} GB). Close "
+            "some programs, or pick a smaller model in Eqho → Models.")
+
+
+class LowMemoryLoadError(RuntimeError):
+    """A model load failed for lack of memory; str() is the plain user text."""
+
+    def __init__(self):
+        super().__init__(LOW_MEMORY_LOAD_TEXT)
+
+
 # Hallucination gating: Whisper invents text on (near-)silence. Buffers whose
 # peak RMS never rose meaningfully above the VAD threshold are skipped, low
 # confidence segments are dropped, and short utterances matching the known
@@ -158,6 +185,7 @@ class VoiceTranscriber:
         self._on_status: Optional[Callable[[str], None]] = None
         self._on_level: Optional[Callable[[float], None]] = None
         self._on_abort: Optional[Callable[[str, int], None]] = None
+        self._on_notice: Optional[Callable[[str], None]] = None
         self._running = False
         self._session_id = 0  # bumped by start()/stop(); results from a
                                # closed session are never delivered
@@ -183,12 +211,14 @@ class VoiceTranscriber:
         on_status: Optional[Callable[[str], None]] = None,
         on_level: Optional[Callable[[float], None]] = None,
         on_abort: Optional[Callable[[str, int], None]] = None,
+        on_notice: Optional[Callable[[str], None]] = None,
     ) -> None:
         self._on_partial = on_partial
         self._on_complete = on_complete
         self._on_status = on_status
         self._on_level = on_level
         self._on_abort = on_abort
+        self._on_notice = on_notice
 
     def current_session(self) -> int:
         """Id of the latest session (bumped by start() and stop())."""
@@ -237,8 +267,16 @@ class VoiceTranscriber:
                 self._current_model_size = target
                 return
             self._model_dir = self._settings.resolve_model_dir()
+            self._check_free_memory(target)
             phase_start = time.monotonic()
-            ok = self._load_with_auto_fallback(target)
+            try:
+                ok = self._load_with_auto_fallback(target)
+            except Exception as e:
+                if looks_like_memory_error(str(e)) or isinstance(e, MemoryError):
+                    log.error("Model load ran out of memory: %s", e)
+                    self._model_loaded = False
+                    raise LowMemoryLoadError() from e
+                raise
             if ok:
                 self._current_model_size = target
                 self._model_loaded = True
@@ -246,7 +284,42 @@ class VoiceTranscriber:
                          time.monotonic() - phase_start)
             else:
                 self._model_loaded = False
+                if looks_like_memory_error(getattr(self._host, "last_load_error", "")):
+                    raise LowMemoryLoadError()
                 raise RuntimeError(f"Model host failed to load {target}")
+
+    def _runs_on_pc_memory(self) -> bool:
+        """True when the model will live in the PC's memory: whisper.cpp
+        (built-in graphics share it), or faster-whisper without CUDA."""
+        if self._host.backend == "whisper.cpp":
+            return True
+        from .model_host import _cuda_available
+        if self._settings.model_size == "large-v3":  # always on the CPU
+            return True
+        return not _cuda_available()
+
+    def _check_free_memory(self, target: str) -> None:
+        """Warn once per load (never block it) when free memory looks too
+        small for the model."""
+        try:
+            if not self._runs_on_pc_memory():
+                return
+            free_mb = oskit.get().free_memory_mb()
+            if free_mb is None:
+                return
+            from .modelstore import MODEL_SIZES_MB
+            size_mb = MODEL_SIZES_MB.get(target)
+            if size_mb is None:
+                return
+            need_mb = int(size_mb * 1.3 + 300)
+            if free_mb >= need_mb:
+                return
+            log.warning("Low free memory before loading %s: %d MB free, about %d MB needed",
+                        target, free_mb, need_mb)
+            if self._on_notice:
+                self._on_notice(low_memory_warning(free_mb, need_mb))
+        except Exception:
+            log.debug("Free-memory check failed", exc_info=True)
 
     def transcribe_once(self, audio: np.ndarray) -> str:
         """Synchronously transcribe a float32 mono 16 kHz array (used by --smoke)."""
@@ -349,7 +422,10 @@ class VoiceTranscriber:
                     # (audio ducked, overlay up, tray active) — abort and
                     # let the app's teardown restore everything.
                     log.error("Model load failed: %s", e)
-                    abort_reason = f"Model failed to load — {e}"
+                    if isinstance(e, LowMemoryLoadError):
+                        abort_reason = str(e)
+                    else:
+                        abort_reason = f"Model failed to load — {e}"
                     return
                 if self._running and self._on_status:
                     self._on_status("Listening...")
