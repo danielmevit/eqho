@@ -6,6 +6,24 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+Planned as 0.8.10: first launch, and speed on every PC.
+
+### Added
+- **First-time setup.** The first time you start Eqho, a short setup helps you pick your language and microphone,
+  shows that the microphone hears you, and asks before downloading the speech model. It also asks whether to turn
+  other sounds off while you dictate, and lets you try dictating right away. Nothing is downloaded until you agree.
+  You can run it again any time from About. People upgrading from an earlier version don't see it.
+- **Low-memory warning.** If your computer is short on free memory for the speech model you picked, Eqho says so in
+  plain words and suggests closing some programs or picking a smaller model. A load that fails for lack of memory
+  says exactly that instead of a technical error.
+- **Version details in Eqho.exe.** Right-click → Properties → Details shows Eqho's name and version, like any normal
+  Windows program.
+
+### Changed
+- **Other sounds are no longer muted unless you say so.** New installs ask during setup; your current choice stays.
+- Eqho no longer looks for models in a fixed developer folder (`D:\EqhoModels`); models go to the standard folder
+  unless you pick one.
+
 ## [0.8.9] - 2026-10-16
 
 Reliability, slow PCs, a test system, and the AMD/Intel engine in the Windows downloads.
