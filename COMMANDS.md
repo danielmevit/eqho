@@ -67,12 +67,12 @@ python run.py --smoke
 ## Git — Two-Repo Workflow
 
 ```powershell
-# You have two remotes:
-#   origin  → github.com/danielmevit/eqho          (PUBLIC)
-#   private → github.com/danielmevit/Eqho-private   (private)
+# One repo (since 2026-10-16):
+#   origin → github.com/danielmevit/eqho   (PUBLIC)
+#   (the old Eqho-private repo is archived, read-only)
 #
 # Two branches:
-#   dev  → daily work (default push goes to private)
+#   dev  → daily work (pushed to origin)
 #   main → public releases only
 
 # Check status

@@ -133,7 +133,7 @@ system (docs/ai/TESTING.md: ASR benchmark, end-to-end dictation test, UI walker)
 - [x] CONTRIBUTING.md
 - [x] Landing page (danielmevit.github.io/eqho, Astro in site/) · [ ] demo GIF/video (Daniel — see TODO.md)
 - [ ] Final QA pass on a clean Windows install (Daniel — see TODO.md)
-- [x] Repo public (dev history stays in Eqho-private)
+- [x] Repo public; since 2026-10-16 one repo — `dev` is public too (Eqho-private archived)
 
 ## Phase 8 -- Native Engine (future)
 Migrate off the Python runtime for a lean commercial-grade product.

@@ -28,7 +28,7 @@
 ## Commit & push
 - Conventional commits: `type(scope): short description`.
 - Work on `dev`; merge to `main` ONLY on Daniel's explicit release request.
-- Two remotes: `origin` → `github.com/danielmevit/eqho` (**PUBLIC**, stable only) · `private` → `github.com/danielmevit/Eqho-private` (all WIP). Plain `git push` on `dev` goes to `private`.
+- One repo since 2026-10-16: `origin` → `github.com/danielmevit/eqho` (**PUBLIC**) — `dev` = all work, `main` = releases. Plain `git push` on `dev` goes to `origin`. The old `danielmevit/Eqho-private` is archived (read-only history).
 - Pushing from WSL needs Windows-side credentials: `cmd.exe /c "cd /d D:\Vibe Coding\Eqho && git push"`.
 
 ## Documentation upkeep
