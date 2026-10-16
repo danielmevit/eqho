@@ -632,6 +632,12 @@ class UITestRunner:
 
 
 def main() -> int:
+    # Output may be redirected to a file (cp1252 on Windows): never crash on symbols like "✕".
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     parser = argparse.ArgumentParser(description="Eqho UI Interactive Test (EQ-TESTUI)")
     parser.add_argument(
         "--work",
