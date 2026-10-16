@@ -83,6 +83,8 @@ dictation test, UI walker) before release.
       meter → model download with consent, size and progress → audio lowering on/off (consent) → try it ("press Alt+Q
       and say something") → done. Skippable, reopen from the dashboard.
 - [ ] Microphone turned off in Windows privacy settings: clear message + link, no crash
+- [ ] Low free memory: warn in plain words before loading the model on the processor (needs about 1.5–2 GB free;
+      seen 2026-10-16: on a full PC the model stopped partway)
 - [ ] Privacy page on the site (Store requirement); AI disclosure in the listing
 - [ ] One window only (single instance), like Vecto/Laydown
 - [ ] Store package (MSIX, microphone capability) + listing text; pricing decision (one-time, like Vecto/Laydown)
