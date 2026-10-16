@@ -15,6 +15,9 @@ Key properties:
 5. Enforces a safety SKIP list (never triggers quit/exit, history deletion,
    dialogs/URLs, Windows autostart, model downloads, or hotkey capture).
 6. Captures screenshots of each tab to `<work>/ui-<tab>.png`.
+6b. Opens the first-time setup screen and walks every page (mic stream and
+    model download stubbed) with one screenshot per page:
+    `<work>/ui-setup-<n>-<page>.png`.
 7. Prints a comprehensive summary and exits 1 on any error, 0 on success.
 
 Usage:
@@ -48,6 +51,7 @@ SKIP_RULES = [
     ("Start with Windows", "HKCU Run / autostart toggle in Settings"),
     ("Model Download / Delete", "Download button (↓) in Models tab"),
     ("Writes Outside Temp Folder", "Settings/history paths redirected to isolated temp folder"),
+    ("Run Setup Again", "About's 'Run first-time setup again' (walked separately as the setup screen)"),
     ("Interactive Hotkey Capture", "Global hotkey button in General tab (starts background keyboard hook)"),
     ("Disabled Controls", "Buttons or controls with state == 'disabled'"),
 ]
@@ -284,6 +288,9 @@ class UITestRunner:
         cmd = getattr(widget, "_command", None)
         cmd_str = str(cmd).lower() if cmd else ""
         cmd_name = getattr(cmd, "__name__", "").lower() if cmd else ""
+
+        if text == "Run first-time setup again":
+            return True, "Setup screen is walked separately"
 
         # 3. Quit / exit
         if any(q in text.lower() for q in ("quit", "exit", "close")):
@@ -570,6 +577,8 @@ class UITestRunner:
                 if tab_name == "settings":
                     self._exercise_rebuilding_settings()
 
+            self._walk_onboarding()
+
             # Test top bar actions
             print(f"\n==================================================")
             print("Exercising Top Bar Controls...")
@@ -591,6 +600,66 @@ class UITestRunner:
             self._teardown()
 
         return self._print_summary()
+
+    def _walk_onboarding(self) -> None:
+        """Show the first-time setup screen and walk every page. No mic
+        stream (the level meter is fed a fake value) and no download (the
+        modelstore entry is marked done instantly)."""
+        print(f"\n==================================================")
+        print("Walking First-Time Setup...")
+        print(f"==================================================")
+        from src import modelstore
+        from src.ui import onboarding as ob
+
+        def _fake_mic(screen, device):
+            screen._level = 0.55
+            return True
+
+        def _fake_download(screen, model):
+            with modelstore._lock:
+                modelstore._downloads[model] = {"progress": 1.0, "done": True, "error": None}
+
+        ob.OnboardingScreen._open_mic_stream = _fake_mic
+        ob.OnboardingScreen._start_download = _fake_download
+        self.settings.model_dir = str(self._temp_path / "empty-models")  # model page offers the download
+        self.dash.show_onboarding()
+        self._pump(count=8, step_delay=0.03)
+        screen = self.dash._onboarding
+        if screen is None:
+            self.errors.append("Setup screen did not open")
+            return
+        for n, page in enumerate(ob.PAGES, 1):
+            if screen.page_name != page:
+                self.errors.append(f"Setup: expected page '{page}', got '{screen.page_name}'")
+                return
+            self._capture_tab_screenshot(f"setup-{n}-{page}")
+            if page == "model" and hasattr(screen, "_dl_btn"):
+                screen._dl_btn.invoke()
+                self._pump(count=30, step_delay=0.03)
+                self._capture_tab_screenshot(f"setup-{n}-{page}-done")
+            if page == "sound":
+                screen._sound_btns["mute"].invoke()
+                screen._sound_btns["off"].invoke()
+            if str(screen._next_btn.cget("state")) == "disabled":
+                self.errors.append(f"Setup: Next disabled on page '{page}'")
+                return
+            if n > 1:
+                screen.back()
+                self._pump(count=4, step_delay=0.02)
+                screen.next()
+                self._pump(count=4, step_delay=0.02)
+                if page == "model" and hasattr(screen, "_later_btn"):
+                    screen._later_btn.invoke()
+            screen._next_btn.invoke()
+            self._pump(count=8, step_delay=0.03)
+            self.controls_exercised += 1
+            print(f"    [OK] Setup page '{page}'")
+        if self.dash._onboarding is not None or not self.settings.onboarding_done:
+            self.errors.append("Setup: Finish did not end setup")
+        elif "general" not in self.dash._tab_frames:
+            self.errors.append("Setup: tabs not shown after Finish")
+        else:
+            print("    [OK] Finish -> tabs shown, onboarding_done saved")
 
     def _teardown(self) -> None:
         """Cleanly close the dashboard window and remove temp files."""

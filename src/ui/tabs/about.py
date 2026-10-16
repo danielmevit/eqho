@@ -5,6 +5,7 @@ import customtkinter as ctk
 from ...theme import SPACING, font
 from ...version import __version__
 from ..layout import TabBase
+from ..widgets import secondary_button
 
 
 class AboutTab(TabBase):
@@ -104,6 +105,16 @@ class AboutTab(TabBase):
         )
         site_link.pack(side="left")
         site_link.bind("<Button-1>", lambda e: self._open_url("https://damt.xyz"))
+
+        secondary_button(
+            inner, self._colors, text="Run first-time setup again",
+            command=self._run_setup_again,
+        ).pack(anchor="w", pady=(SPACING["md"], 0))
+
+    def _run_setup_again(self) -> None:
+        dash = self.ctx.master()
+        if dash is not None and hasattr(dash, "show_onboarding"):
+            dash.show_onboarding()
 
     def _build_about_credits(self, parent) -> None:
         """About tab: powered by section."""

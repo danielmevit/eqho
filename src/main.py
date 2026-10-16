@@ -426,7 +426,14 @@ class App:
         self.overlay.start()
         self.hotkey.register()
 
-        threading.Thread(target=self._preload_model, daemon=True).start()
+        from .ui.dashboard import set_onboarding_callback
+        set_onboarding_callback(self._on_onboarding_finished)
+        if self.settings.onboarding_done:
+            threading.Thread(target=self._preload_model, daemon=True).start()
+        else:
+            # First launch: download nothing until the user agrees in setup.
+            log.info("First launch: opening first-time setup.")
+            self._open_onboarding()
 
         # When launched with --open-dashboard --tab=<name>, reopen the
         # dashboard to that tab once the app is up.
@@ -436,6 +443,35 @@ class App:
             threading.Timer(1.2, lambda: self._open_dashboard_startup(tab)).start()
 
         self.tray.run()
+
+    def _open_onboarding(self) -> None:
+        try:
+            from .ui import open_dashboard
+            open_dashboard(self.settings, self._on_settings_changed,
+                           onboarding=True)
+        except Exception as e:
+            log.error("Opening first-time setup failed: %s", e)
+
+    def _on_onboarding_finished(self, model_changed: bool = False) -> None:
+        """Setup finished or was skipped (runs on the dashboard thread —
+        never block it). Loads the model only if it is already downloaded
+        ("Download now"); after "Later" the first dictation downloads it."""
+        def _run() -> None:
+            try:
+                if model_changed:
+                    self.transcriber.reload_model()  # marks stale only
+                from . import modelstore
+                model = self.settings.model_size
+                while modelstore.is_downloading(model):
+                    time.sleep(1.0)
+                if self._model_is_cached():
+                    self._preload_model()
+                else:
+                    log.info("Setup done; model not downloaded yet — it "
+                             "downloads on the first dictation.")
+            except Exception:
+                log.exception("Post-setup preload failed")
+        threading.Thread(target=_run, name="post-setup-preload", daemon=True).start()
 
     def _open_dashboard_startup(self, tab) -> None:
         try:
