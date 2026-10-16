@@ -421,15 +421,18 @@ def auto_wrap_label(
             except Exception:
                 pass
 
-    def _on_configure(event):
-        if event.widget is target:
-            _update_wraplength(event.width)
+    def _on_configure(_event=None):
+        # CTkFrame.bind() lands on the frame's inner canvas, so event.widget is
+        # never the CTkFrame itself: read the container's real width instead.
+        try:
+            _update_wraplength(target.winfo_width())
+        except Exception:
+            pass
 
     try:
         target.bind("<Configure>", _on_configure, add="+")
-        cur_w = target.winfo_width()
-        if cur_w > 20:
-            _update_wraplength(cur_w)
+        # At build time the width is still 1; catch the first real layout too.
+        label.after_idle(_on_configure)
     except Exception:
         pass
 

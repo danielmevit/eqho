@@ -49,7 +49,9 @@ Planned as 0.8.9: reliability, a test system, and the AMD/Intel engine in the Wi
 - **No live preview on slow PCs.** When one transcription takes longer than a moment, Eqho skips the
   words-while-you-talk preview, so you wait once instead of twice.
 - **A bit faster without a graphics card:** the processor engine now uses all your processor cores (about 10%).
-- Dashboard help texts wrap instead of being cut off; the log shows how long each dictation took to transcribe.
+- Dashboard texts wrap instead of being cut off, at any window size and zoom (a new automatic check in the screen
+  test catches cut-off text); plainer wording for Custom Vocabulary ("Names and special words Eqho should know")
+  and in About. The log shows how long each dictation took to transcribe.
 
 ## [0.8.8] - 2026-07-14 (continued — content restructure)
 

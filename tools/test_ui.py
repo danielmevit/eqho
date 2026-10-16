@@ -515,6 +515,61 @@ class UITestRunner:
                 settings_tab._on_zoom_changed(orig_zoom)
                 self._pump(count=8, step_delay=0.03)
 
+    def _check_cutoff(self, tab_name: str, where: str) -> None:
+        """Fail on any visible CTkLabel whose text does not fit the width it got.
+
+        A freshly built tab can still be mid-layout, so offenders are only
+        reported if they persist after the event loop has settled.
+        """
+        for attempt in range(3):
+            found = self._find_cutoff(tab_name, where, report=(attempt == 2))
+            if not found:
+                return
+            self._pump(count=20, step_delay=0.05)
+
+    def _find_cutoff(self, tab_name: str, where: str, report: bool) -> int:
+        import customtkinter as ctk
+
+        frame = self.dash._tab_frames.get(tab_name)
+        if not frame:
+            return 0
+        self._pump(count=6, step_delay=0.02)
+        offenders = 0
+        checked = 0
+
+        def _walk(w: Any) -> None:
+            nonlocal offenders, checked
+            if isinstance(w, ctk.CTkLabel):
+                inner = getattr(w, "_label", None)
+                try:
+                    text = str(w.cget("text") or "")
+                    visible = inner is not None and inner.winfo_ismapped()
+                except Exception:
+                    text, visible = "", False
+                if text.strip() and visible:
+                    checked += 1
+                    req, got = inner.winfo_reqwidth(), inner.winfo_width()
+                    parent = w.master
+                    right = w.winfo_rootx() + w.winfo_width()
+                    p_right = parent.winfo_rootx() + parent.winfo_width()
+                    if req > got + 2 or right > p_right + 2:
+                        offenders += 1
+                        msg = (f"Cut-off text on tab '{tab_name}' ({where}): {text!r} "
+                               f"needs {req}px, got {got}px (right edge {right} > {p_right})"
+                               if right > p_right + 2 else
+                               f"Cut-off text on tab '{tab_name}' ({where}): {text!r} "
+                               f"needs {req}px, got {got}px")
+                        if report:
+                            print(f"    [CUT-OFF] {msg}")
+                            self.errors.append(msg)
+            for child in w.winfo_children():
+                _walk(child)
+
+        _walk(frame)
+        if report or not offenders:
+            print(f"  [cut-off] {where}: {checked} labels checked, {offenders} cut off")
+        return offenders
+
     def run(self) -> int:
         """Execute the full UI test suite."""
         print_skip_list()
@@ -538,6 +593,7 @@ class UITestRunner:
 
                 # Capture clean screenshot of the tab
                 self._capture_tab_screenshot(tab_name)
+                self._check_cutoff(tab_name, f"{self.dash.winfo_width()}px")
 
                 # Discover and exercise tab controls
                 tab_frame = self.dash._tab_frames.get(tab_name)
@@ -577,6 +633,20 @@ class UITestRunner:
                 if tab_name == "settings":
                     self._exercise_rebuilding_settings()
 
+            # Re-check every tab at a narrower window to prove wrapping follows resizes
+            print(f"\n==================================================")
+            print("Cut-off check at a narrower window (1100 px)...")
+            print(f"==================================================")
+            # geometry() takes logical px; the walker reports physical px
+            scale = self.dash._get_window_scaling()
+            self.dash.geometry(f"{int(1100 / scale)}x{int(self.dash.winfo_height() / scale)}")
+            self._pump(count=10, step_delay=0.03)
+            for tab_name in tabs_to_test:
+                self.dash._show_tab(tab_name)
+                self._pump(count=6, step_delay=0.03)
+                self._check_cutoff(tab_name, f"{self.dash.winfo_width()}px")
+                if tab_name in ("general", "models"):
+                    self._capture_tab_screenshot(f"{tab_name}-narrow")
             self._walk_onboarding()
 
             # Test top bar actions
