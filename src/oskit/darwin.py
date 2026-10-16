@@ -92,3 +92,7 @@ class DarwinOsKit(OsKit):
             return "dark" if out.returncode == 0 and "dark" in out.stdout.lower() else "light"
         except Exception:
             return "dark"
+
+    # -- injection / paste modifier ---------------------------------------------------
+    def paste_modifier(self) -> str:
+        return "cmd"

@@ -7,6 +7,7 @@ extras light up per-OS.
 """
 
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -67,6 +68,11 @@ class OsKit:
         """'dark' or 'light' for the tray icon (Windows can differ from apps)."""
         return self.system_theme()
 
+    # -- Injection / clipboard -----------------------------------------------------
+    def paste_modifier(self) -> str:
+        """The modifier key used for pasting text ('ctrl' or 'cmd')."""
+        return "ctrl"
+
     # -- Misc OS behaviors ---------------------------------------------------------
     def disable_os_mic_ducking(self) -> None:
         """Stop the OS from auto-ducking other audio while the mic is open."""
@@ -75,7 +81,9 @@ class OsKit:
 
 def autostart_command() -> str:
     """The command that relaunches this app at login (frozen exe or script)."""
-    import sys
+    appimage = os.environ.get("APPIMAGE")
+    if appimage and os.path.isfile(appimage):
+        return f'"{appimage}"'
     if getattr(sys, "frozen", False):
         return f'"{sys.executable}"'
     script = Path(sys.argv[0]).resolve()
