@@ -33,6 +33,11 @@ Planned as 0.8.10: first launch, and speed on every PC.
   about 1 in 7 dictations typed nothing (measured 2026-10-16, also in 0.8.9 and earlier). Eqho now only releases keys
   that are really held down: 40 of 40 test dictations pasted.
 
+- **The window fits your screen.** On laptops with high display scaling (e.g. 1080p at 150 %) the window could reach
+  behind the taskbar, hiding the setup's Next button. The window now fits the space above the taskbar at any scaling
+  and zoom, setup's Skip / Back / Next always stay visible, and no text is cut off or overlapping even at the
+  smallest window size.
+
 ### Changed
 - **Other sounds are no longer muted unless you say so.** New installs ask during setup; your current choice stays.
 - Developer checks run in a temporary folder and never touch your Eqho settings or log.

@@ -134,11 +134,15 @@ class ModelsTab(TabBase):
     def _build_storage_setting(self, card) -> None:
         control = self._setting_row(card, "Model Storage", "Where downloaded models live")
         path = str(self._settings.resolve_model_dir())
-        ctk.CTkLabel(
+        path_lbl = ctk.CTkLabel(
             control, text=path,
             font=font("xs"), text_color=self._colors.fg_muted,
-            anchor="w", justify="left", wraplength=260,
-        ).pack(anchor="w")
+            anchor="w", justify="left",
+        )
+        path_lbl.pack(anchor="w", fill="x")
+        # Follow the real width (a fixed wraplength overflowed at high scaling);
+        # Tk breaks a long path mid-word once it exceeds the wrap width.
+        auto_wrap_label(path_lbl, control, padding=4)
         secondary_button(
             control, self._colors, text="Open Folder", width=100,
             command=lambda: self._open_folder(path),
