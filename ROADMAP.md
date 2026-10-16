@@ -96,7 +96,7 @@ system (docs/ai/TESTING.md: ASR benchmark, end-to-end dictation test, UI walker)
 - [x] Keep the model ready after start — already true: the model preloads at startup (ready ~17 s after launch on NVIDIA) and is never unloaded
 - [x] Low free memory (EQ-LOWMEM): warn in plain words before loading the model on the processor (needs about 1.5–2 GB free;
       seen 2026-10-16: on a full PC the model stopped partway)
-- [ ] whisper.cpp: try a shorter audio window for short sentences (`audio_ctx`) — keep only if accuracy holds
+- [ ] (low priority) whisper.cpp: shorter audio window for short sentences (`audio_ctx`). Since Auto now uses whisper.cpp only on real graphics cards, which are already fast, this matters little; faster-whisper has no such option
 - [x] Version number in Eqho.exe's file properties (EQ-EXEVER; CI checks it)
 - [ ] Probes write into a temporary folder, never the real eqho.log
 
