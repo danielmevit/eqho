@@ -91,8 +91,12 @@ dictation test, UI walker) before release.
 
 ### 0.8.11 — speed and languages
 - [ ] Automatic model choice by hardware (NVIDIA → faster-whisper CUDA; AMD/Intel GPU → whisper.cpp Vulkan; CPU-only →
-      a smaller fast model), shown and changeable in settings
-- [ ] Ship the whisper.cpp Vulkan engine in public releases (built and proven locally 2026-07, not yet in CI builds)
+      a smaller fast model), shown and changeable in settings. **Why it matters (measured 2026-10-16, Ryzen 7 5800H,
+      no GPU):** distil-large-v3 on the processor is SLOWER than real time (0.7–0.9x, a 10 s sentence takes 11–14 s);
+      8 threads instead of the default 4 gives only ~10%, skipping MKL ~5% more. The big encoder is the cost, so
+      CPU-only PCs need a smaller model (measure small/base/distil-small speed + accuracy with tools/bench_asr.py).
+      Intel iGPU via Vulkan vs CPU: see the Dell Latitude 5400 test (Intel-test kit).
+- [x] Ship the whisper.cpp Vulkan engine in the Windows downloads (moved into 0.8.9, EQ-AMD)
 - [ ] Non-English: multilingual model when a non-English language is chosen; offer every language Whisper supports
       (~99), not only 13
 - [ ] Keep the model ready after start (no wait on the first Alt+Q)

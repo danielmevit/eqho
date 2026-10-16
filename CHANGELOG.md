@@ -6,6 +6,36 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+Planned as 0.8.9: reliability, a test system, and the AMD/Intel engine in the Windows downloads.
+
+### Fixed
+- **Sound never stays muted.** If the speech model fails to load or a dictation goes wrong, Eqho now always turns
+  your volume back up, hides the overlay and resets the tray icon.
+- **No text in the wrong dictation.** A slow last sentence can no longer land in your next dictation; leftovers from
+  a finished dictation are dropped.
+- **No stale text after a timeout.** The speech engine can no longer hand back the previous dictation's text after a
+  timeout, and the first model download no longer times out while it is still downloading.
+- **Choosing another model no longer crashes** the dashboard.
+- **Settings are saved safely.** No more half-written settings file; if the file is locked Eqho retries, and a
+  damaged file is set aside as `settings.json.bad` so the app still starts.
+- **macOS: dictation pastes again** (it pressed Ctrl+V instead of Cmd+V). On every system your old clipboard comes
+  back a moment later, and only if it still holds the dictation; a picture or file on the clipboard is no longer
+  wiped to empty.
+- **Linux AppImage:** "Start with system" now points at the AppImage itself instead of a temporary folder.
+
+### Added
+- **AMD and Intel graphics on Windows.** The Windows downloads now include the second engine (whisper.cpp with
+  Vulkan). "Auto" uses it when there is no NVIDIA card and the processor supports it (AVX2); if it can't start,
+  Eqho quietly uses the standard engine for that session.
+- **Test system** for developers: accuracy/speed benchmark on public recordings, an end-to-end dictation test, a
+  button walker for every screen, and small checks for each fix (see `docs/ai/TESTING.md`).
+
+### Changed
+- **Privacy:** your dictated text is no longer written to `eqho.log` (only how long it was).
+- **Steadier downloads:** release builds use the exact library versions Eqho is tested with, built on Python 3.13
+  with current GitHub Actions (third-party ones pinned to exact versions). Release titles read "Eqho vX.Y.Z".
+- README and website describe the engines as they really ship.
+
 ## [0.8.8] - 2026-07-14 (continued — content restructure)
 
 The three sections now answer three different questions (Daniel's plan review): General = *how do I dictate*, Models = *what does the transcribing*, Settings = *the nit-picky rest*.
