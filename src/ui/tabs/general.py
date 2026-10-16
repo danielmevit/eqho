@@ -11,7 +11,7 @@ from ...audio import list_input_devices
 from ...settings import LANGUAGE_TIERS, SUPPORTED_LANGUAGES, is_english_only_model
 from ...theme import SPACING, RADIUS_SM, font
 from ..layout import TabBase
-from ..widgets import segmented
+from ..widgets import segmented, auto_wrap_label
 
 log = logging.getLogger(__name__)
 
@@ -209,10 +209,12 @@ class GeneralTab(TabBase):
             row, text="Custom Vocabulary",
             font=font("base"), text_color=self._colors.fg_primary, anchor="w",
         ).pack(anchor="w")
-        ctk.CTkLabel(
+        help_lbl = ctk.CTkLabel(
             row, text="Names and jargon Whisper should expect (used as its prompt)",
             font=font("xs"), text_color=self._colors.fg_muted, anchor="w",
-        ).pack(anchor="w")
+        )
+        help_lbl.pack(anchor="w", fill="x")
+        auto_wrap_label(help_lbl, card)
         self._vocab_box = ctk.CTkTextbox(
             row, height=56, corner_radius=RADIUS_SM, font=font("sm"),
             fg_color=self._colors.bg_tertiary, text_color=self._colors.fg_primary,

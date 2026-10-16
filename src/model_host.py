@@ -15,12 +15,19 @@ The inference BACKEND inside the child is pluggable:
 
 import logging
 import multiprocessing as mp
+import os
 import sys
 import threading
 import time
 from typing import Optional
 
 log = logging.getLogger(__name__)
+
+
+def _cpu_threads() -> int:
+    """Physical-core estimate for CPU inference: os.cpu_count() // 2 (SMT), clamped to 4..16."""
+    count = os.cpu_count() or 4
+    return max(4, min(16, count // 2))
 
 _LOAD_INACTIVITY_TIMEOUT = 120.0  # a load fails only after this long with NO
                                   # progress message from the child — a slow
@@ -144,7 +151,12 @@ class _FasterWhisperBackend:
         report("downloading model files")
         model_path = _download_model_files(target, model_dir, report)
         report(f"loading model on {device} ({compute})")
-        model = WhisperModel(model_path, device=device, compute_type=compute)
+        model_kwargs = {}
+        if device == "cpu":
+            threads = _cpu_threads()
+            model_kwargs["cpu_threads"] = threads
+            log.info("Loading faster-whisper on CPU with %d threads", threads)
+        model = WhisperModel(model_path, device=device, compute_type=compute, **model_kwargs)
         # Verify CUDA / warm CPU with a dummy inference
         try:
             report("warming up")
@@ -154,7 +166,9 @@ class _FasterWhisperBackend:
             if device == "cuda":
                 log.warning("CUDA inference failed (%s), falling back to CPU.", e)
                 report("CUDA failed — reloading on CPU")
-                model = WhisperModel(model_path, device="cpu", compute_type="int8")
+                threads = _cpu_threads()
+                log.info("Loading faster-whisper on CPU with %d threads (CUDA fallback)", threads)
+                model = WhisperModel(model_path, device="cpu", compute_type="int8", cpu_threads=threads)
                 device, compute = "cpu", "int8"
         self._model = model
         self.info = {"backend": "faster-whisper", "device": device, "compute": compute}

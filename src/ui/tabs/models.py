@@ -9,7 +9,7 @@ import customtkinter as ctk
 from ...modelstore import is_downloading, start_download, status as download_status
 from ...theme import MODEL_INFO, SPACING, RADIUS_LG, RADIUS_SM, font
 from ..layout import TabBase
-from ..widgets import secondary_button
+from ..widgets import secondary_button, auto_wrap_label
 
 _EN_MODELS = ["distil-large-v3", "distil-medium.en", "distil-small.en"]
 _ML_MODELS = ["large-v3-turbo", "medium", "small", "base", "tiny", "large-v3"]
@@ -192,19 +192,23 @@ class ModelsTab(TabBase):
         status_label.pack(side="right")
 
         detail = f"{info.get('lang', '')} · {info.get('size', '')} · {info.get('device', '')}"
-        ctk.CTkLabel(
+        detail_lbl = ctk.CTkLabel(
             inner, text=detail,
             font=font("xs"),
             text_color=self._colors.fg_secondary, anchor="w",
-        ).pack(fill="x")
+        )
+        detail_lbl.pack(fill="x")
+        auto_wrap_label(detail_lbl, card)
 
         rec = info.get("rec", "")
         if rec:
-            ctk.CTkLabel(
+            rec_lbl = ctk.CTkLabel(
                 inner, text=rec,
                 font=font("xs"),
                 text_color=self._colors.fg_muted, anchor="w",
-            ).pack(fill="x")
+            )
+            rec_lbl.pack(fill="x")
+            auto_wrap_label(rec_lbl, card)
 
         # Actions row is ALWAYS built (hidden while selected) so selection
         # changes can toggle it in place without rebuilding the card.

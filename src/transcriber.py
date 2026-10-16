@@ -499,9 +499,11 @@ class VoiceTranscriber:
                      peak_rms, threshold * NEAR_SILENCE_FACTOR)
             return
         try:
+            t0 = time.perf_counter()
             segments = self._host.transcribe(
                 audio, self._settings.language, 5,
                 self._settings.initial_prompt or "")
+            infer_dur = time.perf_counter() - t0
             kept = []
             for s in segments:
                 t = s["text"].strip()
@@ -523,8 +525,8 @@ class VoiceTranscriber:
 
             if text:
                 # Length/timing only — never the transcript itself (F10).
-                log.info("Complete transcript: %d chars (%.1fs audio)",
-                         len(text), duration)
+                log.info("Complete transcript: %d chars (%.1fs audio, transcribed in %.2fs)",
+                         len(text), duration, infer_dur)
                 self._deliver(session, self._on_complete, text)
         except Exception as e:
             log.error("Transcription error: %s", e)

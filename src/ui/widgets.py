@@ -382,3 +382,54 @@ class ThemedDropdown(ctk.CTkFrame):
 
     def get(self) -> str:
         return self._variable.get() if self._variable else ""
+
+
+def auto_wrap_label(
+    label: ctk.CTkLabel,
+    container=None,
+    padding: int = 28,
+) -> None:
+    """Make a CTkLabel wrap dynamically to its container's width.
+
+    Binds <Configure> on container (defaults to card or label's master) so
+    wraplength updates dynamically in unscaled logical pixels, preventing text
+    clipping across responsive column breakpoints and all UI zoom levels.
+    """
+    target = container if container is not None else label.master
+    try:
+        label.configure(justify="left")
+    except Exception:
+        pass
+
+    last_w = -1
+
+    def _update_wraplength(physical_w: int) -> None:
+        nonlocal last_w
+        if physical_w <= 20 or physical_w == last_w:
+            return
+        last_w = physical_w
+        try:
+            logical_w = int(label._reverse_widget_scaling(physical_w)) - padding
+        except Exception:
+            try:
+                logical_w = int(physical_w / label._get_widget_scaling()) - padding
+            except Exception:
+                logical_w = physical_w - padding
+        if logical_w > 10:
+            try:
+                label.configure(wraplength=logical_w)
+            except Exception:
+                pass
+
+    def _on_configure(event):
+        if event.widget is target:
+            _update_wraplength(event.width)
+
+    try:
+        target.bind("<Configure>", _on_configure, add="+")
+        cur_w = target.winfo_width()
+        if cur_w > 20:
+            _update_wraplength(cur_w)
+    except Exception:
+        pass
+

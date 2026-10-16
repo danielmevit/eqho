@@ -263,7 +263,7 @@ MODEL_INFO = {
         "name": "Large v3",
         "size": "~3.1 GB",
         "lang": "100+ languages",
-        "device": "CPU only (too large for 6 GB VRAM)",
+        "device": "CPU only (too big for 6 GB graphics cards)",
         "rec": "Highest accuracy, significantly slower",
         "icon": "⚠",
     },
