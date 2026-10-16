@@ -1,0 +1,26 @@
+﻿INFO test_e2e: Dataset: 60 utterances, picked 3 (round-robin over speakers).
+INFO test_e2e: Test settings: model=distil-large-v3 language=en toggle mode, history off (config dir: C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\eqho-config)
+INFO test_e2e: System volume at start: 100% (muted=False)
+INFO test_e2e: Waiting for Eqho to load the model (up to 300s)...
+INFO test_e2e: Eqho ready (model pre-loaded).
+INFO test_e2e: [clip 1] 1089-134686-0000: 10.4s audio
+INFO test_e2e: [clip 1] start latency: 0.21s
+ERROR test_e2e: [clip 1] FAILED: no text was injected (no 'Injected N chars' in the log)
+INFO test_e2e: [clip 2] 1188-133604-0000: 10.7s audio
+INFO test_e2e: [clip 2] start latency: 0.05s
+ERROR test_e2e: [clip 2] FAILED: no text was injected (no 'Injected N chars' in the log)
+INFO test_e2e: [clip 3] 121-121726-0000: 8.5s audio
+INFO test_e2e: [clip 3] start latency: 0.03s
+ERROR test_e2e: [clip 3] FAILED: no text was injected (no 'Injected N chars' in the log)
+INFO test_e2e: Shutting Eqho down (process tree)...
+ERROR test_e2e: FAILED: clip 1 (1089-134686-0000): RuntimeError: no text was injected (no 'Injected N chars' in the log); clip 2 (1188-133604-0000): RuntimeError: no text was injected (no 'Injected N chars' in the log); clip 3 (121-121726-0000): RuntimeError: no text was injected (no 'Injected N chars' in the log)
+
+----------------------------------------------------------------
+ Eqho end-to-end dictation test
+ clips        : 3  (ok 0, empty 0, failed 3)
+ WER (total)  : 0.00%  (0 errors / 0 ref words)
+ volume       : restored OK
+ config dir   : C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\eqho-config
+ results      : C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\e2e-results.csv
+ eqho log     : C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\eqho-config\eqho.log
+----------------------------------------------------------------

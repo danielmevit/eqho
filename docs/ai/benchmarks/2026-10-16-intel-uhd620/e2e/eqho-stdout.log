@@ -1,0 +1,101 @@
+12:49:58 [INFO] src.transcriber: Inference backend: whisper.cpp
+12:49:58 [INFO] src.oskit.base: OS kit: windows
+12:49:58 [INFO] src.fonts: Loaded 5 Inter font file(s) from assets/fonts.
+12:49:58 [INFO] eqho: Eqho starting...
+12:49:58 [INFO] eqho: Model: distil-large-v3 | Hotkey: ctrl+shift+f9 (toggle mode)
+12:49:59 [INFO] src.hotkey: Hotkey registered: ctrl+shift+f9 (toggle mode, keyboard backend)
+12:49:59 [INFO] eqho: Pre-loading model from cache...
+12:49:59 [INFO] src.model_host: Model host: loading distil-large-v3 (backend=whisper.cpp)
+12:50:00 [INFO] src.model_host: Model host load: downloading whisper.cpp model
+whisper_init_from_file_with_params_no_state: loading model from 'C:\Users\pc\AppData\Local\pywhispercpp\pywhispercpp\models\ggml-large-v3-turbo.bin'
+whisper_init_with_params_no_state: use gpu    = 1
+whisper_init_with_params_no_state: flash attn = 1
+whisper_init_with_params_no_state: gpu_device = 0
+whisper_init_with_params_no_state: dtw        = 0
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = Intel(R) UHD Graphics 620 (Intel Corporation) | uma: 1 | fp16: 1 | bf16: 0 | warp size: 32 | shared memory: 32768 | int dot: 0 | matrix cores: none
+whisper_init_with_params_no_state: devices    = 2
+whisper_init_with_params_no_state: backends   = 2
+whisper_model_load: loading model
+whisper_model_load: n_vocab       = 51866
+whisper_model_load: n_audio_ctx   = 1500
+whisper_model_load: n_audio_state = 1280
+whisper_model_load: n_audio_head  = 20
+whisper_model_load: n_audio_layer = 32
+whisper_model_load: n_text_ctx    = 448
+whisper_model_load: n_text_state  = 1280
+whisper_model_load: n_text_head   = 20
+whisper_model_load: n_text_layer  = 4
+whisper_model_load: n_mels        = 128
+whisper_model_load: ftype         = 1
+whisper_model_load: qntvr         = 0
+whisper_model_load: type          = 5 (large v3)
+whisper_model_load: adding 1609 extra tokens
+whisper_model_load: n_langs       = 100
+whisper_model_load:      Vulkan0 total size =  1623.92 MB
+whisper_model_load: model size    = 1623.92 MB
+whisper_backend_init_gpu: device 0: Vulkan0 (type: 2)
+whisper_backend_init_gpu: found GPU device 0: Vulkan0 (type: 2, cnt: 0)
+whisper_backend_init_gpu: using Vulkan0 backend
+whisper_init_state: kv self size  =   10.49 MB
+whisper_init_state: kv cross size =   31.46 MB
+whisper_init_state: kv pad  size  =    7.86 MB
+whisper_init_state: compute buffer (conv)   =   37.69 MB
+whisper_init_state: compute buffer (encode) =   55.35 MB
+whisper_init_state: compute buffer (cross)  =   39.99 MB
+whisper_init_state: compute buffer (decode) =  100.04 MB
+12:50:05 [INFO] src.model_host: Model host load: whisper.cpp model loaded
+12:50:05 [INFO] src.model_host: Model host ready: distil-large-v3 {'backend': 'whisper.cpp', 'model': 'large-v3-turbo'}
+12:50:05 [INFO] src.transcriber: Model ready: distil-large-v3 {'backend': 'whisper.cpp', 'model': 'large-v3-turbo'} (6.0s)
+12:50:05 [INFO] eqho: Model pre-loaded and ready.
+12:50:06 [INFO] eqho: Dictation activated (target window: 132078)
+12:50:06 [INFO] src.transcriber: Transcription started (session 1, mic recording).
+12:50:06 [INFO] src.transcriber: TEST AUDIO: feeding C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\test-audio.flac (10.4 s) in real time
+12:50:07 [INFO] src.transcriber: Speech detected (RMS=0.09891)
+12:50:07 [INFO] eqho: Volume ducked: 100% \u2192 muted
+Progress:   0%
+12:50:19 [INFO] eqho: Dictation deactivated
+12:50:24 [INFO] src.transcriber: Transcription stopped.
+12:50:24 [INFO] eqho: Volume restored to 100%.
+Progress: 100%
+12:50:34 [INFO] src.transcriber: Partial transcript: 32 chars
+12:50:34 [INFO] src.transcriber: Dropped result from closed session 1 (current: 2)
+12:50:34 [INFO] src.transcriber: Flushing remaining 17.9s of audio on stop
+Progress:   0%
+Progress: 100%
+12:51:01 [INFO] src.transcriber: Complete transcript: 163 chars (17.9s audio, transcribed in 27.05s)
+12:51:01 [INFO] src.transcriber: Dropped result from closed session 1 (current: 2)
+12:51:05 [INFO] eqho: Dictation activated (target window: 197558)
+12:51:05 [INFO] src.transcriber: Transcription started (session 3, mic recording).
+12:51:05 [INFO] src.transcriber: TEST AUDIO: feeding C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\test-audio.flac (10.7 s) in real time
+12:51:05 [INFO] src.transcriber: Speech detected (RMS=0.05118)
+12:51:06 [INFO] eqho: Volume ducked: 100% \u2192 muted
+Progress:   0%
+12:51:18 [INFO] eqho: Dictation deactivated
+12:51:23 [INFO] src.transcriber: Transcription stopped.
+12:51:23 [INFO] eqho: Volume restored to 100%.
+Progress: 100%
+12:51:33 [INFO] src.transcriber: Partial transcript: 39 chars
+12:51:33 [INFO] src.transcriber: Dropped result from closed session 3 (current: 4)
+12:51:33 [INFO] src.transcriber: Flushing remaining 17.7s of audio on stop
+Progress:   0%
+Progress: 100%
+12:52:00 [INFO] src.transcriber: Complete transcript: 115 chars (17.7s audio, transcribed in 26.82s)
+12:52:00 [INFO] src.transcriber: Dropped result from closed session 3 (current: 4)
+12:52:03 [INFO] eqho: Dictation activated (target window: 263150)
+12:52:03 [INFO] src.transcriber: Transcription started (session 5, mic recording).
+12:52:03 [INFO] src.transcriber: TEST AUDIO: feeding C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\test-audio.flac (8.5 s) in real time
+12:52:03 [INFO] src.transcriber: Speech detected (RMS=0.06744)
+Progress:   0%
+12:52:04 [INFO] eqho: Volume ducked: 100% \u2192 muted
+12:52:14 [INFO] eqho: Dictation deactivated
+12:52:19 [INFO] src.transcriber: Transcription stopped.
+12:52:20 [INFO] eqho: Volume restored to 100%.
+Progress: 100%
+12:52:31 [INFO] src.transcriber: Partial transcript: 15 chars
+12:52:31 [INFO] src.transcriber: Dropped result from closed session 5 (current: 6)
+12:52:31 [INFO] src.transcriber: Flushing remaining 16.0s of audio on stop
+Progress:   0%
+Progress: 100%
+12:52:58 [INFO] src.transcriber: Complete transcript: 105 chars (16.0s audio, transcribed in 26.67s)
+12:52:58 [INFO] src.transcriber: Dropped result from closed session 5 (current: 6)

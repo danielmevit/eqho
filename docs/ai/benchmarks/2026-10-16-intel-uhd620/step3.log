@@ -1,0 +1,9 @@
+### whisper_print_system_info
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = Intel(R) UHD Graphics 620 (Intel Corporation) | uma: 1 | fp16: 1 | bf16: 0 | warp size: 32 | shared memory: 32768 | int dot: 0 | matrix cores: none
+WHISPER : COREML = 0 | OPENVINO = 0 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | OPENMP = 1 | REPACK = 1 | 
+### resolve_backend
+auto picks: whisper.cpp
+avx2: True
+### ctranslate2 cuda types
+0 {'int8', 'float32', 'int16', 'int8_float32'}

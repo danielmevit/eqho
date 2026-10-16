@@ -1,0 +1,52 @@
+2026-10-16 12:49:58 [INFO] src.transcriber: Inference backend: whisper.cpp
+2026-10-16 12:49:58 [INFO] src.oskit.base: OS kit: windows
+2026-10-16 12:49:58 [INFO] src.fonts: Loaded 5 Inter font file(s) from assets/fonts.
+2026-10-16 12:49:58 [INFO] eqho: Eqho starting...
+2026-10-16 12:49:58 [INFO] eqho: Model: distil-large-v3 | Hotkey: ctrl+shift+f9 (toggle mode)
+2026-10-16 12:49:59 [INFO] src.hotkey: Hotkey registered: ctrl+shift+f9 (toggle mode, keyboard backend)
+2026-10-16 12:49:59 [INFO] eqho: Pre-loading model from cache...
+2026-10-16 12:49:59 [INFO] src.model_host: Model host: loading distil-large-v3 (backend=whisper.cpp)
+2026-10-16 12:50:00 [INFO] src.model_host: Model host load: downloading whisper.cpp model
+2026-10-16 12:50:05 [INFO] src.model_host: Model host load: whisper.cpp model loaded
+2026-10-16 12:50:05 [INFO] src.model_host: Model host ready: distil-large-v3 {'backend': 'whisper.cpp', 'model': 'large-v3-turbo'}
+2026-10-16 12:50:05 [INFO] src.transcriber: Model ready: distil-large-v3 {'backend': 'whisper.cpp', 'model': 'large-v3-turbo'} (6.0s)
+2026-10-16 12:50:05 [INFO] eqho: Model pre-loaded and ready.
+2026-10-16 12:50:06 [INFO] eqho: Dictation activated (target window: 132078)
+2026-10-16 12:50:06 [INFO] src.transcriber: Transcription started (session 1, mic recording).
+2026-10-16 12:50:06 [INFO] src.transcriber: TEST AUDIO: feeding C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\test-audio.flac (10.4 s) in real time
+2026-10-16 12:50:07 [INFO] src.transcriber: Speech detected (RMS=0.09891)
+2026-10-16 12:50:07 [INFO] eqho: Volume ducked: 100% → muted
+2026-10-16 12:50:19 [INFO] eqho: Dictation deactivated
+2026-10-16 12:50:24 [INFO] src.transcriber: Transcription stopped.
+2026-10-16 12:50:24 [INFO] eqho: Volume restored to 100%.
+2026-10-16 12:50:34 [INFO] src.transcriber: Partial transcript: 32 chars
+2026-10-16 12:50:34 [INFO] src.transcriber: Dropped result from closed session 1 (current: 2)
+2026-10-16 12:50:34 [INFO] src.transcriber: Flushing remaining 17.9s of audio on stop
+2026-10-16 12:51:01 [INFO] src.transcriber: Complete transcript: 163 chars (17.9s audio, transcribed in 27.05s)
+2026-10-16 12:51:01 [INFO] src.transcriber: Dropped result from closed session 1 (current: 2)
+2026-10-16 12:51:05 [INFO] eqho: Dictation activated (target window: 197558)
+2026-10-16 12:51:05 [INFO] src.transcriber: Transcription started (session 3, mic recording).
+2026-10-16 12:51:05 [INFO] src.transcriber: TEST AUDIO: feeding C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\test-audio.flac (10.7 s) in real time
+2026-10-16 12:51:05 [INFO] src.transcriber: Speech detected (RMS=0.05118)
+2026-10-16 12:51:06 [INFO] eqho: Volume ducked: 100% → muted
+2026-10-16 12:51:18 [INFO] eqho: Dictation deactivated
+2026-10-16 12:51:23 [INFO] src.transcriber: Transcription stopped.
+2026-10-16 12:51:23 [INFO] eqho: Volume restored to 100%.
+2026-10-16 12:51:33 [INFO] src.transcriber: Partial transcript: 39 chars
+2026-10-16 12:51:33 [INFO] src.transcriber: Dropped result from closed session 3 (current: 4)
+2026-10-16 12:51:33 [INFO] src.transcriber: Flushing remaining 17.7s of audio on stop
+2026-10-16 12:52:00 [INFO] src.transcriber: Complete transcript: 115 chars (17.7s audio, transcribed in 26.82s)
+2026-10-16 12:52:00 [INFO] src.transcriber: Dropped result from closed session 3 (current: 4)
+2026-10-16 12:52:03 [INFO] eqho: Dictation activated (target window: 263150)
+2026-10-16 12:52:03 [INFO] src.transcriber: Transcription started (session 5, mic recording).
+2026-10-16 12:52:03 [INFO] src.transcriber: TEST AUDIO: feeding C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\test-audio.flac (8.5 s) in real time
+2026-10-16 12:52:03 [INFO] src.transcriber: Speech detected (RMS=0.06744)
+2026-10-16 12:52:04 [INFO] eqho: Volume ducked: 100% → muted
+2026-10-16 12:52:14 [INFO] eqho: Dictation deactivated
+2026-10-16 12:52:19 [INFO] src.transcriber: Transcription stopped.
+2026-10-16 12:52:20 [INFO] eqho: Volume restored to 100%.
+2026-10-16 12:52:31 [INFO] src.transcriber: Partial transcript: 15 chars
+2026-10-16 12:52:31 [INFO] src.transcriber: Dropped result from closed session 5 (current: 6)
+2026-10-16 12:52:31 [INFO] src.transcriber: Flushing remaining 16.0s of audio on stop
+2026-10-16 12:52:58 [INFO] src.transcriber: Complete transcript: 105 chars (16.0s audio, transcribed in 26.67s)
+2026-10-16 12:52:58 [INFO] src.transcriber: Dropped result from closed session 5 (current: 6)
