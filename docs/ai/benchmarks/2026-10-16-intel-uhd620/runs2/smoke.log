@@ -1,0 +1,19 @@
+Fetching 4 files:   0%|          | 0/4 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+KIT\venv\Lib\site-packages\huggingface_hub\file_download.py:129: UserWarning: `huggingface_hub` cache-system uses symlinks by default to efficiently store duplicated files but your machine does not support them in KIT\models\models--Systran--faster-whisper-tiny. Caching files will still work but in a degraded version that might require more space on your disk. This warning can be disabled by setting the `HF_HUB_DISABLE_SYMLINKS_WARNING` environment variable. For more details, see https://huggingface.co/docs/huggingface_hub/how-to-cache#limitations.
+To support symlinks on Windows, you either need to activate Developer Mode or to run Python as an administrator. In order to activate developer mode, see this article: https://docs.microsoft.com/en-us/windows/apps/get-started/enable-your-device-for-development
+  warnings.warn(message)
+Fetching 4 files:  25%|██▌       | 1/4 [00:00<00:00,  4.05it/s]Fetching 4 files:  50%|█████     | 2/4 [00:07<00:08,  4.42s/it]Fetching 4 files: 100%|██████████| 4/4 [00:07<00:00,  1.90s/it]
+{
+  "ok": true,
+  "steps": {
+    "settings": "ok",
+    "audio_devices": 12,
+    "textproc": "ok",
+    "history": "ok",
+    "model_load": "ok",
+    "transcribe_silence": "ok"
+  },
+  "version": "0.8.9",
+  "model_dir": "KIT\\models",
+  "silence_text": ""
+}

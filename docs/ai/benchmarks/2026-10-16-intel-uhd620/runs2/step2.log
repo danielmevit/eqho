@@ -1,0 +1,2 @@
+INFO:src.model_host:Engine auto: graphics adapters [Intel(R) UHD Graphics 620 128 MB] -> faster-whisper
+engine: faster-whisper | hardware: cpu | model en: distil-small.en | model de: small

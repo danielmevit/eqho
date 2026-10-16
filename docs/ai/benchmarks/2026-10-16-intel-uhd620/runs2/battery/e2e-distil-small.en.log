@@ -1,0 +1,3 @@
+INFO test_e2e: Dataset: 60 utterances, picked 3 (round-robin over speakers).
+INFO src.model_host: Engine auto: graphics adapters [Intel(R) UHD Graphics 620 128 MB] -> faster-whisper
+ERROR test_e2e: Model 'distil-small.en' is not cached — refusing to download it for an e2e run.

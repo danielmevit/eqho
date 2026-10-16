@@ -1,0 +1,61 @@
+22:27:23 [INFO] src.model_host: Engine auto: graphics adapters [Intel(R) UHD Graphics 620 128 MB] -> faster-whisper
+22:27:23 [INFO] src.transcriber: Inference backend: faster-whisper
+22:27:24 [INFO] src.oskit.base: OS kit: windows
+22:27:24 [INFO] src.fonts: Loaded 5 Inter font file(s) from assets/fonts.
+22:27:24 [INFO] eqho: Eqho starting...
+22:27:24 [INFO] eqho: Model: distil-large-v3 | Hotkey: ctrl+shift+f9 (toggle mode)
+22:27:24 [INFO] src.hotkey: Hotkey registered: ctrl+shift+f9 (toggle mode, keyboard backend)
+22:27:24 [INFO] eqho: Pre-loading model from cache...
+22:27:24 [INFO] src.model_host: Model host: loading distil-large-v3 (backend=faster-whisper)
+22:27:25 [INFO] src.model_host: Model host load: downloading model files
+22:27:25 [INFO] src.model_host: Model host load: loading model on cpu (int8)
+22:27:28 [INFO] src.model_host: Model host load: warming up
+22:27:39 [INFO] src.model_host: Model host ready: distil-large-v3 {'backend': 'faster-whisper', 'device': 'cpu', 'compute': 'int8'}
+22:27:39 [INFO] src.transcriber: Model ready: distil-large-v3 {'backend': 'faster-whisper', 'device': 'cpu', 'compute': 'int8'} (14.6s)
+22:27:39 [INFO] eqho: Model pre-loaded and ready.
+22:27:39 [INFO] eqho: Dictation activated (target window: 463988)
+22:27:39 [INFO] src.transcriber: Transcription started (session 1, mic recording).
+22:27:39 [INFO] src.transcriber: TEST AUDIO: feeding KIT\runs2\e2e-distil-large-v3\test-audio.flac (10.4 s) in real time
+22:27:40 [INFO] src.transcriber: Speech detected (RMS=0.09891)
+22:27:40 [INFO] eqho: Volume ducked: 100% → muted
+22:27:41 [INFO] src.transcriber: Live preview off: engine not on CUDA and not measured yet
+22:27:49 [INFO] src.transcriber: Mic level: RMS=0.03513 peak=0.09891 threshold=0.0030 (floor=0.01484) speaking=True buf=10.0s
+22:27:51 [INFO] src.transcriber: Silence detected, transcribing 12.4s of audio
+22:27:52 [INFO] eqho: Dictation deactivated
+22:27:52 [INFO] eqho: Volume restored to 100%.
+22:28:05 [INFO] src.transcriber: Complete transcript: 162 chars (12.4s audio, transcribed in 13.47s)
+22:28:05 [INFO] src.transcriber: Slow-model tip shown: distil-large-v3 took 13.47s (suggested distil-small.en)
+22:28:05 [INFO] src.transcriber: Flushing remaining 13.0s of audio on stop
+22:28:05 [INFO] src.transcriber: Skipping near-silent buffer (peak RMS 0.00000 < 0.00135) — hallucination bait.
+22:28:05 [INFO] src.transcriber: Transcription stopped.
+22:28:06 [INFO] eqho: Injected 162 chars
+22:28:06 [INFO] eqho: Dictation activated (target window: 398286)
+22:28:06 [INFO] src.transcriber: Transcription started (session 3, mic recording).
+22:28:06 [INFO] src.transcriber: TEST AUDIO: feeding KIT\runs2\e2e-distil-large-v3\test-audio.flac (10.7 s) in real time
+22:28:07 [INFO] eqho: Volume ducked: 100% → muted
+22:28:07 [INFO] src.transcriber: Speech detected (RMS=0.05118)
+22:28:08 [INFO] src.transcriber: Live preview off: last transcription took 13.5s
+22:28:16 [INFO] src.transcriber: Mic level: RMS=0.03163 peak=0.05152 threshold=0.0030 (floor=0.00511) speaking=True buf=10.0s
+22:28:19 [INFO] src.transcriber: Silence detected, transcribing 12.2s of audio
+22:28:20 [INFO] eqho: Dictation deactivated
+22:28:20 [INFO] eqho: Volume restored to 100%.
+22:28:32 [INFO] src.transcriber: Complete transcript: 109 chars (12.2s audio, transcribed in 13.44s)
+22:28:32 [INFO] src.transcriber: Flushing remaining 13.0s of audio on stop
+22:28:32 [INFO] src.transcriber: Skipping near-silent buffer (peak RMS 0.00000 < 0.00135) — hallucination bait.
+22:28:32 [INFO] src.transcriber: Transcription stopped.
+22:28:33 [INFO] eqho: Injected 109 chars
+22:28:34 [INFO] eqho: Dictation activated (target window: 464012)
+22:28:34 [INFO] src.transcriber: Transcription started (session 5, mic recording).
+22:28:34 [INFO] src.transcriber: TEST AUDIO: feeding KIT\runs2\e2e-distil-large-v3\test-audio.flac (8.5 s) in real time
+22:28:34 [INFO] src.transcriber: Speech detected (RMS=0.06744)
+22:28:35 [INFO] src.transcriber: Live preview off: last transcription took 13.4s
+22:28:35 [INFO] eqho: Volume ducked: 100% → muted
+22:28:43 [INFO] src.transcriber: Mic level: RMS=0.00000 peak=0.08155 threshold=0.0009 (floor=0.00000) speaking=True buf=10.0s
+22:28:43 [INFO] src.transcriber: Silence detected, transcribing 10.0s of audio
+22:28:45 [INFO] eqho: Dictation deactivated
+22:28:45 [INFO] eqho: Volume restored to 100%.
+22:28:57 [INFO] src.transcriber: Complete transcript: 104 chars (10.0s audio, transcribed in 13.49s)
+22:28:57 [INFO] src.transcriber: Flushing remaining 13.0s of audio on stop
+22:28:57 [INFO] src.transcriber: Skipping near-silent buffer (peak RMS 0.00000 < 0.00135) — hallucination bait.
+22:28:57 [INFO] src.transcriber: Transcription stopped.
+22:28:58 [INFO] eqho: Injected 104 chars

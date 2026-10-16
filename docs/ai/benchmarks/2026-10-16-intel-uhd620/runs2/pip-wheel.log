@@ -1,0 +1,7 @@
+Processing KIT\src2\eqho-dev\packaging\windows\wheels\pywhispercpp-0.0.0-cp313-cp313-win_amd64.whl
+Installing collected packages: pywhispercpp
+  Attempting uninstall: pywhispercpp
+    Found existing installation: pywhispercpp 0.0.0
+    Uninstalling pywhispercpp-0.0.0:
+      Successfully uninstalled pywhispercpp-0.0.0
+Successfully installed pywhispercpp-0.0.0

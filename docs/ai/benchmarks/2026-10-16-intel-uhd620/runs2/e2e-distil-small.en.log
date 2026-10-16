@@ -1,0 +1,31 @@
+INFO test_e2e: Dataset: 60 utterances, picked 3 (round-robin over speakers).
+INFO src.model_host: Engine auto: graphics adapters [Intel(R) UHD Graphics 620 128 MB] -> faster-whisper
+INFO test_e2e: Test settings: model=distil-small.en language=en toggle mode, history off (config dir: KIT\runs2\e2e-distil-small.en\eqho-config)
+INFO test_e2e: System volume at start: 100% (muted=False)
+INFO test_e2e: Waiting for Eqho to load the model (up to 300s)...
+INFO test_e2e: Eqho ready (model pre-loaded).
+INFO test_e2e: [clip 1] 1089-134686-0000: 10.4s audio
+INFO test_e2e: [clip 1] start latency: 0.17s
+INFO test_e2e: [clip 1] stop latency: 3.30s (161 chars injected)
+INFO test_e2e: [clip 1] WER 3.6% (28 ref words)
+INFO test_e2e: [clip 2] 1188-133604-0000: 10.7s audio
+INFO test_e2e: [clip 2] start latency: 0.03s
+INFO test_e2e: [clip 2] stop latency: 2.92s (115 chars injected)
+INFO test_e2e: [clip 2] WER 10.5% (19 ref words)
+INFO test_e2e: [clip 3] 121-121726-0000: 8.5s audio
+INFO test_e2e: [clip 3] start latency: 0.03s
+INFO test_e2e: [clip 3] stop latency: 2.45s (107 chars injected)
+INFO test_e2e: [clip 3] WER 0.0% (17 ref words)
+INFO test_e2e: Shutting Eqho down (process tree)...
+
+----------------------------------------------------------------
+ Eqho end-to-end dictation test
+ clips        : 3  (ok 3, empty 0, failed 0)
+ WER (total)  : 4.69%  (3 errors / 64 ref words)
+ latency      : start 0.08s avg, stop 2.89s avg (hotkey -> listening / stop -> text appears)
+ volume       : restored OK
+ config dir   : KIT\runs2\e2e-distil-small.en\eqho-config
+ results      : KIT\runs2\e2e-distil-small.en\e2e-results.csv
+ eqho log     : KIT\runs2\e2e-distil-small.en\eqho-config\eqho.log
+----------------------------------------------------------------
+INFO test_e2e: All checks passed.

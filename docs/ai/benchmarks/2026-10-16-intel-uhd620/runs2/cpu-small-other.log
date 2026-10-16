@@ -1,0 +1,79 @@
+INFO bench_asr: Dataset: 60 utterances, picked 60 (round-robin over speakers).
+INFO bench_asr: Loading model small (backend=faster-whisper, dir=KIT\models)...
+INFO src.model_host: Model host: loading small (backend=faster-whisper)
+INFO src.model_host: Model host load: downloading model files
+INFO src.model_host: Model host load: loading model on cpu (int8)
+INFO src.model_host: Model host load: warming up
+INFO src.model_host: Model host ready: small {'backend': 'faster-whisper', 'device': 'cpu', 'compute': 'int8'}
+INFO bench_asr: [1/60] 1688-142285-0000 15.0s audio, WER 0.0%, RTF 0.259
+INFO bench_asr: [2/60] 1998-15444-0000 13.3s audio, WER 0.0%, RTF 0.294
+INFO bench_asr: [3/60] 2033-164914-0000 9.1s audio, WER 5.3%, RTF 0.360
+INFO bench_asr: [4/60] 2414-128291-0000 2.9s audio, WER 40.0%, RTF 1.103
+INFO bench_asr: [5/60] 2609-156975-0000 4.5s audio, WER 9.1%, RTF 0.681
+INFO bench_asr: [6/60] 3005-163389-0000 8.4s audio, WER 0.0%, RTF 0.409
+INFO bench_asr: [7/60] 3080-5032-0000 4.6s audio, WER 0.0%, RTF 0.655
+INFO bench_asr: [8/60] 3331-159605-0000 13.7s audio, WER 5.3%, RTF 0.278
+INFO bench_asr: [9/60] 3528-168656-0000 3.4s audio, WER 0.0%, RTF 0.871
+INFO bench_asr: [10/60] 3538-142836-0000 5.2s audio, WER 11.1%, RTF 0.597
+INFO bench_asr: [11/60] 367-130732-0000 2.4s audio, WER 0.0%, RTF 1.214
+INFO bench_asr: [12/60] 3764-168670-0000 8.8s audio, WER 4.2%, RTF 0.393
+INFO bench_asr: [13/60] 3997-180294-0000 8.0s audio, WER 4.2%, RTF 0.421
+INFO bench_asr: [14/60] 4198-12259-0000 5.7s audio, WER 0.0%, RTF 0.530
+INFO bench_asr: [15/60] 4294-14317-0000 7.5s audio, WER 0.0%, RTF 0.450
+INFO bench_asr: [16/60] 4350-10919-0000 5.2s audio, WER 0.0%, RTF 0.618
+INFO bench_asr: [17/60] 4852-28311-0000 2.0s audio, WER 25.0%, RTF 1.577
+INFO bench_asr: [18/60] 533-1066-0000 2.5s audio, WER 66.7%, RTF 1.109
+INFO bench_asr: [19/60] 5442-32873-0000 3.9s audio, WER 8.3%, RTF 1.008
+INFO bench_asr: [20/60] 5484-24317-0000 3.5s audio, WER 0.0%, RTF 0.931
+INFO bench_asr: [21/60] 5764-299665-0000 17.3s audio, WER 5.9%, RTF 0.222
+INFO bench_asr: [22/60] 6070-63485-0000 9.4s audio, WER 14.3%, RTF 0.363
+INFO bench_asr: [23/60] 6128-63240-0000 14.6s audio, WER 0.0%, RTF 0.275
+INFO bench_asr: [24/60] 6432-63722-0000 4.3s audio, WER 78.6%, RTF 0.730
+INFO bench_asr: [25/60] 6938-70848-0000 3.3s audio, WER 0.0%, RTF 0.921
+INFO bench_asr: [26/60] 7018-75788-0000 10.7s audio, WER 0.0%, RTF 0.336
+INFO bench_asr: [27/60] 7105-2330-0000 5.5s audio, WER 25.0%, RTF 0.567
+INFO bench_asr: [28/60] 7902-96591-0000 2.1s audio, WER 22.2%, RTF 1.380
+INFO bench_asr: [29/60] 7975-280057-0000 4.8s audio, WER 0.0%, RTF 0.636
+INFO bench_asr: [30/60] 8131-117016-0000 2.2s audio, WER 50.0%, RTF 1.239
+INFO bench_asr: [31/60] 8188-269288-0000 3.4s audio, WER 55.6%, RTF 0.882
+INFO bench_asr: [32/60] 8280-266249-0000 9.6s audio, WER 3.4%, RTF 0.364
+INFO bench_asr: [33/60] 8461-258277-0000 3.6s audio, WER 0.0%, RTF 0.802
+INFO bench_asr: [34/60] 1688-142285-0001 12.6s audio, WER 8.8%, RTF 0.299
+INFO bench_asr: [35/60] 1998-15444-0001 6.0s audio, WER 0.0%, RTF 0.599
+INFO bench_asr: [36/60] 2033-164914-0001 6.7s audio, WER 0.0%, RTF 0.462
+INFO bench_asr: [37/60] 2414-128291-0001 8.4s audio, WER 6.7%, RTF 0.421
+INFO bench_asr: [38/60] 2609-156975-0001 4.9s audio, WER 0.0%, RTF 0.622
+INFO bench_asr: [39/60] 3005-163389-0001 5.4s audio, WER 9.1%, RTF 0.547
+INFO bench_asr: [40/60] 3080-5032-0001 7.8s audio, WER 0.0%, RTF 0.417
+INFO bench_asr: [41/60] 3331-159605-0001 3.1s audio, WER 0.0%, RTF 0.948
+INFO bench_asr: [42/60] 3528-168656-0001 4.3s audio, WER 0.0%, RTF 0.720
+INFO bench_asr: [43/60] 3538-142836-0001 8.8s audio, WER 8.0%, RTF 0.383
+INFO bench_asr: [44/60] 367-130732-0001 4.4s audio, WER 0.0%, RTF 0.719
+INFO bench_asr: [45/60] 3764-168670-0001 2.1s audio, WER 0.0%, RTF 1.333
+INFO bench_asr: [46/60] 3997-180294-0001 5.7s audio, WER 0.0%, RTF 0.515
+INFO bench_asr: [47/60] 4198-12259-0001 9.6s audio, WER 0.0%, RTF 0.345
+INFO bench_asr: [48/60] 4294-14317-0001 12.1s audio, WER 9.1%, RTF 0.332
+INFO bench_asr: [49/60] 4350-10919-0001 2.9s audio, WER 0.0%, RTF 1.028
+INFO bench_asr: [50/60] 4852-28311-0001 5.0s audio, WER 0.0%, RTF 0.641
+INFO bench_asr: [51/60] 533-1066-0001 9.2s audio, WER 8.7%, RTF 0.373
+INFO bench_asr: [52/60] 5442-32873-0001 8.2s audio, WER 10.0%, RTF 0.407
+INFO bench_asr: [53/60] 5484-24317-0001 18.4s audio, WER 5.8%, RTF 0.244
+INFO bench_asr: [54/60] 5764-299665-0001 3.9s audio, WER 0.0%, RTF 0.759
+INFO bench_asr: [55/60] 6070-63485-0001 8.1s audio, WER 0.0%, RTF 0.393
+INFO bench_asr: [56/60] 6128-63240-0001 4.3s audio, WER 0.0%, RTF 0.700
+INFO bench_asr: [57/60] 6432-63722-0001 8.0s audio, WER 0.0%, RTF 0.428
+INFO bench_asr: [58/60] 6938-70848-0001 4.0s audio, WER 0.0%, RTF 0.749
+INFO bench_asr: [59/60] 7018-75788-0001 5.9s audio, WER 0.0%, RTF 0.533
+INFO bench_asr: [60/60] 7105-2330-0001 15.6s audio, WER 0.0%, RTF 0.255
+
+----------------------------------------------------------------
+ Eqho ASR benchmark
+ utterances   : 60  (ok 60, empty 0, failed 0)
+ audio        : 415.9 s   transcribe: 197.5 s
+ RTF          : 0.475  (2.1x realtime)
+ WER (total)  : 5.44%  (59 errors / 1085 ref words)
+ model load   : 4.9 s
+ model        : small  backend=faster-whisper  device=cpu compute=int8
+ results      : KIT\runs2\cpu-small-other\asr-results.csv
+----------------------------------------------------------------
+INFO bench_asr: All gates passed.

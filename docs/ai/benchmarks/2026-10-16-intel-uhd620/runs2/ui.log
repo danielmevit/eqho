@@ -1,0 +1,204 @@
+================================================================
+SAFETY SKIP LIST (Guaranteed never to be triggered):
+  - [Quit / Exit]: quit, exit, or window destroy actions
+  - [Delete / Clear History]: Clear All button and per-entry delete (✕) in History
+  - [Dialogs / URLs / Modal Windows]: Open Folder, Export .txt, Text Replacements / Paste Rules modal editors, website/author links
+  - [Start with Windows]: HKCU Run / autostart toggle in Settings
+  - [Model Download / Delete]: Download button (↓) in Models tab
+  - [Writes Outside Temp Folder]: Settings/history paths redirected to isolated temp folder
+  - [Run Setup Again]: About's 'Run first-time setup again' (walked separately as the setup screen)
+  - [Interactive Hotkey Capture]: Global hotkey button in General tab (starts background keyboard hook)
+  - [Disabled Controls]: Buttons or controls with state == 'disabled'
+================================================================
+
+Starting Eqho UI Interactive Test...
+
+
+==================================================
+Visiting Tab: 'GENERAL'
+==================================================
+  [screenshot] Captured 'general' -> ui-general.png (1762x1050)
+  [cut-off] 1762px: 30 labels checked, 0 cut off
+  Discovered 10 controls in widget tree.
+    [OK] Dropdown: cycled 13 options (restored to 'System Default')
+    [OK] Slider: exercised range [0.5, 2.0], restored 1.0
+    [SKIP] CTkButton ('Alt + Q'): Interactive global hotkey capture action
+    [OK] SegmentedButton: cycled ['toggle', 'hold']
+    [OK] Dropdown: cycled 99 options (restored to 'English')
+    [OK] Textbox: appended test text and fired FocusOut
+    [OK] Switch: toggled True -> False -> True
+    [OK] Switch: toggled True -> False -> True
+    [OK] Switch: toggled True -> False -> True
+    [OK] SegmentedButton: cycled ['Clipboard', 'Typing']
+
+==================================================
+Visiting Tab: 'MODELS'
+==================================================
+  [screenshot] Captured 'models' -> ui-models.png (1762x1050)
+  [cut-off] 1762px: 48 labels checked, 0 cut off
+  Discovered 18 controls in widget tree.
+    [OK] Button: invoked 'Select'
+    [OK] Button: invoked 'Select'
+    [SKIP] CTkButton ('Select'): Control is disabled
+    [SKIP] CTkButton ('↓'): Model download action
+    [SKIP] CTkButton ('Select'): Control is disabled
+    [SKIP] CTkButton ('↓'): Model download action
+    [SKIP] CTkButton ('Select'): Control is disabled
+    [SKIP] CTkButton ('↓'): Model download action
+    [SKIP] CTkButton ('Select'): Control is disabled
+    [SKIP] CTkButton ('↓'): Model download action
+    [SKIP] CTkButton ('Select'): Control is disabled
+    [SKIP] CTkButton ('↓'): Model download action
+    [SKIP] CTkButton ('Select'): Control is disabled
+    [SKIP] CTkButton ('↓'): Model download action
+    [SKIP] CTkButton ('Select'): Control is disabled
+    [SKIP] CTkButton ('↓'): Model download action
+    [OK] Dropdown: cycled 3 options (restored to 'Auto (recommended)')
+    [SKIP] CTkButton ('Open Folder'): Open storage folder dialog action
+
+==================================================
+Visiting Tab: 'HISTORY'
+==================================================
+  [screenshot] Captured 'history' -> ui-history.png (1762x1050)
+  [cut-off] 1762px: 3 labels checked, 0 cut off
+  Discovered 4 controls in widget tree.
+    [OK] Entry: typed search query and cleared
+    [OK] Dropdown: cycled 5 options (restored to 'All time')
+    [SKIP] CTkButton ('Export .txt'): Export file dialog action
+    [SKIP] CTkButton ('Clear All'): Clear All history action
+
+==================================================
+Visiting Tab: 'SETTINGS'
+==================================================
+  [screenshot] Captured 'settings' -> ui-settings.png (1762x1050)
+  [cut-off] 1762px: 62 labels checked, 0 cut off
+  Discovered 14 controls in widget tree.
+    [OK] Switch: toggled False -> True -> False
+    [OK] Switch: toggled False -> True -> False
+    [SKIP] CTkButton ('Edit…  (0)'): Modal rules/replacements editor dialog action
+    [SKIP] CTkButton ('Edit…  (0)'): Modal rules/replacements editor dialog action
+    [OK] Dropdown: cycled 5 options (restored to 'Off')
+    [SKIP] CTkSwitch (''): Start with Windows autostart toggle
+    [OK] Switch: toggled True -> False -> True
+    [OK] Switch: toggled True -> False -> True
+    [OK] Dropdown: cycled 6 options (restored to 'Bottom Center')
+    [OK] Slider: exercised range [0.3, 1.0], restored 0.6499999999999999
+    [OK] Slider: exercised range [10, 28], restored 19.0
+    [SKIP] CTkButton ('Run first-time setup again'): Setup screen is walked separately
+  [rebuild-controls] Exercising Theme switching...
+    -> Applying appearance mode: Dark
+    -> Applying appearance mode: Light
+    -> Applying appearance mode: System
+  [rebuild-controls] Exercising UI Zoom scaling...
+    -> Applying UI Zoom level: 125%
+    -> Applying UI Zoom level: 150%
+
+==================================================
+Cut-off check at a narrower window (1100 px)...
+==================================================
+    [CUT-OFF] Cut-off text on tab 'general' (1125px): 'Higher picks up quieter speech' needs 280px, got 273px
+    [CUT-OFF] Cut-off text on tab 'general' (1125px): 'Press to activate/deactivate dictation' needs 334px, got 273px
+    [CUT-OFF] Cut-off text on tab 'general' (1125px): 'Keep dictations in the History tab' needs 297px, got 273px
+  [cut-off] 1125px: 30 labels checked, 3 cut off
+  [screenshot] Captured 'general-narrow' -> ui-general-narrow.png (1125x1050)
+    [CUT-OFF] Cut-off text on tab 'models' (1125px): '✓ Ready' needs 79px, got 44px
+    [CUT-OFF] Cut-off text on tab 'models' (1125px): 'Not downloaded' needs 148px, got 108px
+    [CUT-OFF] Cut-off text on tab 'models' (1125px): 'Not downloaded' needs 148px, got 94px
+    [CUT-OFF] Cut-off text on tab 'models' (1125px): 'C:\\Users\\<user>\\AppData\\Local\\Temp\\eqho_ui_test_lkoki47f\\models' needs 478px, got 455px
+  [cut-off] 1125px: 48 labels checked, 4 cut off
+  [screenshot] Captured 'models-narrow' -> ui-models-narrow.png (1125x1050)
+  [cut-off] 1125px: 3 labels checked, 0 cut off
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): 'Display transcription text while dictating' needs 361px, got 273px
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): 'Small line that moves with your voice' needs 333px, got 273px
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): '0.8.9' needs 51px, got 18px
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): 'faster-whisper and whisper.cpp' needs 189px, got 18px
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): 'Distil Large v3' needs 142px, got 18px
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): 'Your graphics card or the processor' needs 190px, got 18px
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): 'Windows, macOS and Linux' needs 175px, got 18px
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): 'Inter (SIL Open Font License)' needs 149px, got 18px
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): 'Daniel Mevit' needs 122px, got 18px
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): 'damt.xyz' needs 91px, got 18px
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): '·  faster-whisper — Fast Whisper inference (MIT)' needs 438px, got 243px
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): '·  customtkinter — Modern tkinter widgets' needs 373px, got 243px
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): '·  Phosphor Icons — UI iconography (MIT)' needs 372px, got 243px
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): '·  pystray — System tray integration' needs 320px, got 243px
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): '·  keyboard — Global hotkey capture' needs 326px, got 243px
+    [CUT-OFF] Cut-off text on tab 'settings' (1125px): '·  pycaw — Windows audio control' needs 311px, got 243px
+  [cut-off] 1125px: 62 labels checked, 16 cut off
+
+==================================================
+Walking First-Time Setup...
+==================================================
+  [screenshot] Captured 'setup-1-welcome' -> ui-setup-1-welcome.png (1125x1050)
+    [OK] Setup page 'welcome'
+  [screenshot] Captured 'setup-2-language' -> ui-setup-2-language.png (1125x1050)
+    [OK] Setup page 'language'
+  [screenshot] Captured 'setup-3-microphone' -> ui-setup-3-microphone.png (1125x1050)
+    [OK] Setup page 'microphone'
+  [screenshot] Captured 'setup-4-model' -> ui-setup-4-model.png (1125x1050)
+  [screenshot] Captured 'setup-4-model-done' -> ui-setup-4-model-done.png (1125x1050)
+    [OK] Setup page 'model'
+  [screenshot] Captured 'setup-5-sound' -> ui-setup-5-sound.png (1125x1050)
+    [OK] Setup page 'sound'
+  [screenshot] Captured 'setup-6-try' -> ui-setup-6-try.png (1125x1050)
+    [OK] Setup page 'try'
+    [OK] Finish -> tabs shown, onboarding_done saved
+
+==================================================
+Exercising Top Bar Controls...
+==================================================
+  Invoking top bar theme toggle button...
+    [OK] Top bar theme button toggle: OK
+
+Tearing down UI test runner...
+
+================================================================
+EQHO UI INTERACTIVE TEST SUMMARY
+================================================================
+Tabs visited:       4 (general, models, history, settings)
+Controls exercised: 34
+Controls skipped:   22
+Errors encountered: 23
+Output directory:   KIT\runs2\ui
+Screenshots saved:  13
+  - ui-general.png
+  - ui-models.png
+  - ui-history.png
+  - ui-settings.png
+  - ui-general-narrow.png
+  - ui-models-narrow.png
+  - ui-setup-1-welcome.png
+  - ui-setup-2-language.png
+  - ui-setup-3-microphone.png
+  - ui-setup-4-model.png
+  - ui-setup-4-model-done.png
+  - ui-setup-5-sound.png
+  - ui-setup-6-try.png
+
+ERRORS:
+  FAILED: Cut-off text on tab 'general' (1125px): 'Higher picks up quieter speech' needs 280px, got 273px
+  FAILED: Cut-off text on tab 'general' (1125px): 'Press to activate/deactivate dictation' needs 334px, got 273px
+  FAILED: Cut-off text on tab 'general' (1125px): 'Keep dictations in the History tab' needs 297px, got 273px
+  FAILED: Cut-off text on tab 'models' (1125px): '✓ Ready' needs 79px, got 44px
+  FAILED: Cut-off text on tab 'models' (1125px): 'Not downloaded' needs 148px, got 108px
+  FAILED: Cut-off text on tab 'models' (1125px): 'Not downloaded' needs 148px, got 94px
+  FAILED: Cut-off text on tab 'models' (1125px): 'C:\\Users\\<user>\\AppData\\Local\\Temp\\eqho_ui_test_lkoki47f\\models' needs 478px, got 455px
+  FAILED: Cut-off text on tab 'settings' (1125px): 'Display transcription text while dictating' needs 361px, got 273px
+  FAILED: Cut-off text on tab 'settings' (1125px): 'Small line that moves with your voice' needs 333px, got 273px
+  FAILED: Cut-off text on tab 'settings' (1125px): '0.8.9' needs 51px, got 18px
+  FAILED: Cut-off text on tab 'settings' (1125px): 'faster-whisper and whisper.cpp' needs 189px, got 18px
+  FAILED: Cut-off text on tab 'settings' (1125px): 'Distil Large v3' needs 142px, got 18px
+  FAILED: Cut-off text on tab 'settings' (1125px): 'Your graphics card or the processor' needs 190px, got 18px
+  FAILED: Cut-off text on tab 'settings' (1125px): 'Windows, macOS and Linux' needs 175px, got 18px
+  FAILED: Cut-off text on tab 'settings' (1125px): 'Inter (SIL Open Font License)' needs 149px, got 18px
+  FAILED: Cut-off text on tab 'settings' (1125px): 'Daniel Mevit' needs 122px, got 18px
+  FAILED: Cut-off text on tab 'settings' (1125px): 'damt.xyz' needs 91px, got 18px
+  FAILED: Cut-off text on tab 'settings' (1125px): '·  faster-whisper — Fast Whisper inference (MIT)' needs 438px, got 243px
+  FAILED: Cut-off text on tab 'settings' (1125px): '·  customtkinter — Modern tkinter widgets' needs 373px, got 243px
+  FAILED: Cut-off text on tab 'settings' (1125px): '·  Phosphor Icons — UI iconography (MIT)' needs 372px, got 243px
+  FAILED: Cut-off text on tab 'settings' (1125px): '·  pystray — System tray integration' needs 320px, got 243px
+  FAILED: Cut-off text on tab 'settings' (1125px): '·  keyboard — Global hotkey capture' needs 326px, got 243px
+  FAILED: Cut-off text on tab 'settings' (1125px): '·  pycaw — Windows audio control' needs 311px, got 243px
+
+RESULT: FAILED (exit 1)
+================================================================
