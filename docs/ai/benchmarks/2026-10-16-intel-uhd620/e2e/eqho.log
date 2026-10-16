@@ -13,7 +13,7 @@
 2026-10-16 12:50:05 [INFO] eqho: Model pre-loaded and ready.
 2026-10-16 12:50:06 [INFO] eqho: Dictation activated (target window: 132078)
 2026-10-16 12:50:06 [INFO] src.transcriber: Transcription started (session 1, mic recording).
-2026-10-16 12:50:06 [INFO] src.transcriber: TEST AUDIO: feeding C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\test-audio.flac (10.4 s) in real time
+2026-10-16 12:50:06 [INFO] src.transcriber: TEST AUDIO: feeding KIT\runs\e2e\test-audio.flac (10.4 s) in real time
 2026-10-16 12:50:07 [INFO] src.transcriber: Speech detected (RMS=0.09891)
 2026-10-16 12:50:07 [INFO] eqho: Volume ducked: 100% → muted
 2026-10-16 12:50:19 [INFO] eqho: Dictation deactivated
@@ -26,7 +26,7 @@
 2026-10-16 12:51:01 [INFO] src.transcriber: Dropped result from closed session 1 (current: 2)
 2026-10-16 12:51:05 [INFO] eqho: Dictation activated (target window: 197558)
 2026-10-16 12:51:05 [INFO] src.transcriber: Transcription started (session 3, mic recording).
-2026-10-16 12:51:05 [INFO] src.transcriber: TEST AUDIO: feeding C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\test-audio.flac (10.7 s) in real time
+2026-10-16 12:51:05 [INFO] src.transcriber: TEST AUDIO: feeding KIT\runs\e2e\test-audio.flac (10.7 s) in real time
 2026-10-16 12:51:05 [INFO] src.transcriber: Speech detected (RMS=0.05118)
 2026-10-16 12:51:06 [INFO] eqho: Volume ducked: 100% → muted
 2026-10-16 12:51:18 [INFO] eqho: Dictation deactivated
@@ -39,7 +39,7 @@
 2026-10-16 12:52:00 [INFO] src.transcriber: Dropped result from closed session 3 (current: 4)
 2026-10-16 12:52:03 [INFO] eqho: Dictation activated (target window: 263150)
 2026-10-16 12:52:03 [INFO] src.transcriber: Transcription started (session 5, mic recording).
-2026-10-16 12:52:03 [INFO] src.transcriber: TEST AUDIO: feeding C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\test-audio.flac (8.5 s) in real time
+2026-10-16 12:52:03 [INFO] src.transcriber: TEST AUDIO: feeding KIT\runs\e2e\test-audio.flac (8.5 s) in real time
 2026-10-16 12:52:03 [INFO] src.transcriber: Speech detected (RMS=0.06744)
 2026-10-16 12:52:04 [INFO] eqho: Volume ducked: 100% → muted
 2026-10-16 12:52:14 [INFO] eqho: Dictation deactivated

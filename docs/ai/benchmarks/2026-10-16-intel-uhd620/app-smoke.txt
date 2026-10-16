@@ -9,6 +9,6 @@
     "transcribe_silence": "ok"
   },
   "version": "0.8.8",
-  "model_dir": "C:\\Users\\pc\\Downloads\\Eqho-Intel-test-kit\\models",
+  "model_dir": "KIT\\models",
   "silence_text": "[BLANK_AUDIO]"
 }

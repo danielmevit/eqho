@@ -7,7 +7,7 @@
 12:49:59 [INFO] eqho: Pre-loading model from cache...
 12:49:59 [INFO] src.model_host: Model host: loading distil-large-v3 (backend=whisper.cpp)
 12:50:00 [INFO] src.model_host: Model host load: downloading whisper.cpp model
-whisper_init_from_file_with_params_no_state: loading model from 'C:\Users\pc\AppData\Local\pywhispercpp\pywhispercpp\models\ggml-large-v3-turbo.bin'
+whisper_init_from_file_with_params_no_state: loading model from 'C:\Users\<user>\AppData\Local\pywhispercpp\pywhispercpp\models\ggml-large-v3-turbo.bin'
 whisper_init_with_params_no_state: use gpu    = 1
 whisper_init_with_params_no_state: flash attn = 1
 whisper_init_with_params_no_state: gpu_device = 0
@@ -50,7 +50,7 @@ whisper_init_state: compute buffer (decode) =  100.04 MB
 12:50:05 [INFO] eqho: Model pre-loaded and ready.
 12:50:06 [INFO] eqho: Dictation activated (target window: 132078)
 12:50:06 [INFO] src.transcriber: Transcription started (session 1, mic recording).
-12:50:06 [INFO] src.transcriber: TEST AUDIO: feeding C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\test-audio.flac (10.4 s) in real time
+12:50:06 [INFO] src.transcriber: TEST AUDIO: feeding KIT\runs\e2e\test-audio.flac (10.4 s) in real time
 12:50:07 [INFO] src.transcriber: Speech detected (RMS=0.09891)
 12:50:07 [INFO] eqho: Volume ducked: 100% \u2192 muted
 Progress:   0%
@@ -67,7 +67,7 @@ Progress: 100%
 12:51:01 [INFO] src.transcriber: Dropped result from closed session 1 (current: 2)
 12:51:05 [INFO] eqho: Dictation activated (target window: 197558)
 12:51:05 [INFO] src.transcriber: Transcription started (session 3, mic recording).
-12:51:05 [INFO] src.transcriber: TEST AUDIO: feeding C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\test-audio.flac (10.7 s) in real time
+12:51:05 [INFO] src.transcriber: TEST AUDIO: feeding KIT\runs\e2e\test-audio.flac (10.7 s) in real time
 12:51:05 [INFO] src.transcriber: Speech detected (RMS=0.05118)
 12:51:06 [INFO] eqho: Volume ducked: 100% \u2192 muted
 Progress:   0%
@@ -84,7 +84,7 @@ Progress: 100%
 12:52:00 [INFO] src.transcriber: Dropped result from closed session 3 (current: 4)
 12:52:03 [INFO] eqho: Dictation activated (target window: 263150)
 12:52:03 [INFO] src.transcriber: Transcription started (session 5, mic recording).
-12:52:03 [INFO] src.transcriber: TEST AUDIO: feeding C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\test-audio.flac (8.5 s) in real time
+12:52:03 [INFO] src.transcriber: TEST AUDIO: feeding KIT\runs\e2e\test-audio.flac (8.5 s) in real time
 12:52:03 [INFO] src.transcriber: Speech detected (RMS=0.06744)
 Progress:   0%
 12:52:04 [INFO] eqho: Volume ducked: 100% \u2192 muted

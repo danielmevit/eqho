@@ -1,15 +1,14 @@
 python.exe : WARNING:src.settings:Could not read settings from 
-C:\Users\pc\Downloads\Eqho-Intel-test-kit\cfg-smoke\settings.json: Unexpected UTF-8 BOM (decode using utf-8-sig): line 
+KIT\cfg-smoke\settings.json: Unexpected UTF-8 BOM (decode using utf-8-sig): line 
 1 column 1 (char 0)
-At \\wsl.localhost\Ubuntu\tmp\claude-1000\-mnt-c-Users-pc-Downloads-Eqho-Intel-test-kit\c8b70097-b97e-4066-9a5a-8058743
-85c65\scratchpad\step2d.ps1:6 char:24
+At <script-dir>\step2d.ps1:6 char:24
 + ... e-Command { & "$KIT\venv\Scripts\python.exe" run.py --smoke 2>&1 | Te ...
 +                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (WARNING:src.set...lumn 1 (char 0):String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
  
 WARNING:src.settings:Corrupted settings file moved to 
-C:\Users\pc\Downloads\Eqho-Intel-test-kit\cfg-smoke\settings.json.bad; using defaults.
+KIT\cfg-smoke\settings.json.bad; using defaults.
 
 Downloading Model tiny ...:   0%|          | 0.00/74.1M [00:00<?, ?iB/s]
 Downloading Model tiny ...:   0%|          | 98.0k/74.1M [00:00<01:17, 1.00MiB/s]
@@ -51,7 +50,7 @@ Downloading Model tiny ...:  93%|#########2| 68.6M/74.1M [00:03<00:00, 36.9MiB/s
 Downloading Model tiny ...:  98%|#########7| 72.5M/74.1M [00:03<00:00, 38.1MiB/s]
 Downloading Model tiny ...: 100%|##########| 74.1M/74.1M [00:03<00:00, 20.5MiB/s]
 whisper_init_from_file_with_params_no_state: loading model from 
-'C:\Users\pc\AppData\Local\pywhispercpp\pywhispercpp\models\ggml-tiny.bin'
+'C:\Users\<user>\AppData\Local\pywhispercpp\pywhispercpp\models\ggml-tiny.bin'
 whisper_init_with_params_no_state: use gpu    = 1
 whisper_init_with_params_no_state: flash attn = 1
 whisper_init_with_params_no_state: gpu_device = 0
@@ -102,6 +101,6 @@ Progress: 100%
     "transcribe_silence": "ok"
   },
   "version": "0.8.8",
-  "model_dir": "C:\\Users\\pc\\AppData\\Local\\Eqho\\Cache\\models",
+  "model_dir": "C:\\Users\\<user>\\AppData\\Local\\Eqho\\Cache\\models",
   "silence_text": "[BLANK_AUDIO]"
 }

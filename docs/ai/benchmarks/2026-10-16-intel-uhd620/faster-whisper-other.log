@@ -1,5 +1,5 @@
 ﻿INFO bench_asr: Dataset: 60 utterances, picked 60 (round-robin over speakers).
-INFO bench_asr: Loading model distil-large-v3 (backend=faster-whisper, dir=C:\Users\pc\Downloads\Eqho-Intel-test-kit\models)...
+INFO bench_asr: Loading model distil-large-v3 (backend=faster-whisper, dir=KIT\models)...
 INFO src.model_host: Model host: loading distil-large-v3 (backend=faster-whisper)
 INFO src.model_host: Model host load: downloading model files
 INFO src.model_host: Model host load: loading model on cpu (int8)
@@ -75,5 +75,5 @@ INFO bench_asr: All gates passed.
  WER (total)  : 4.52%  (49 errors / 1085 ref words)
  model load   : 21.1 s
  model        : distil-large-v3  backend=faster-whisper  device=cpu compute=int8
- results      : C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\faster-whisper-other\asr-results.csv
+ results      : KIT\runs\faster-whisper-other\asr-results.csv
 ----------------------------------------------------------------

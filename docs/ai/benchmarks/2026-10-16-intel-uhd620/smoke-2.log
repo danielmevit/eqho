@@ -1,4 +1,4 @@
-﻿whisper_init_from_file_with_params_no_state: loading model from 'C:\Users\pc\AppData\Local\pywhispercpp\pywhispercpp\models\ggml-tiny.bin'
+﻿whisper_init_from_file_with_params_no_state: loading model from 'C:\Users\<user>\AppData\Local\pywhispercpp\pywhispercpp\models\ggml-tiny.bin'
 whisper_init_with_params_no_state: use gpu    = 1
 whisper_init_with_params_no_state: flash attn = 1
 whisper_init_with_params_no_state: gpu_device = 0
@@ -48,6 +48,6 @@ Progress: 100%
     "transcribe_silence": "ok"
   },
   "version": "0.8.8",
-  "model_dir": "C:\\Users\\pc\\Downloads\\Eqho-Intel-test-kit\\models",
+  "model_dir": "KIT\\models",
   "silence_text": "[BLANK_AUDIO]"
 }

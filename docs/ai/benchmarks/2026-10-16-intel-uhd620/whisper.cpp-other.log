@@ -1,8 +1,8 @@
 ﻿INFO bench_asr: Dataset: 60 utterances, picked 60 (round-robin over speakers).
-INFO bench_asr: Loading model distil-large-v3 (backend=whisper.cpp, dir=C:\Users\pc\Downloads\Eqho-Intel-test-kit\models)...
+INFO bench_asr: Loading model distil-large-v3 (backend=whisper.cpp, dir=KIT\models)...
 INFO src.model_host: Model host: loading distil-large-v3 (backend=whisper.cpp)
 INFO src.model_host: Model host load: downloading whisper.cpp model
-whisper_init_from_file_with_params_no_state: loading model from 'C:\Users\pc\AppData\Local\pywhispercpp\pywhispercpp\models\ggml-large-v3-turbo.bin'
+whisper_init_from_file_with_params_no_state: loading model from 'C:\Users\<user>\AppData\Local\pywhispercpp\pywhispercpp\models\ggml-large-v3-turbo.bin'
 whisper_init_with_params_no_state: use gpu    = 1
 whisper_init_with_params_no_state: flash attn = 1
 whisper_init_with_params_no_state: gpu_device = 0
@@ -231,5 +231,5 @@ INFO bench_asr: All gates passed.
  WER (total)  : 3.41%  (37 errors / 1085 ref words)
  model load   : 4.9 s
  model        : distil-large-v3  backend=whisper.cpp  model=large-v3-turbo
- results      : C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\whisper.cpp-other\asr-results.csv
+ results      : KIT\runs\whisper.cpp-other\asr-results.csv
 ----------------------------------------------------------------

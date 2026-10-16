@@ -1,5 +1,5 @@
 ﻿INFO test_e2e: Dataset: 60 utterances, picked 3 (round-robin over speakers).
-INFO test_e2e: Test settings: model=distil-large-v3 language=en toggle mode, history off (config dir: C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\eqho-config)
+INFO test_e2e: Test settings: model=distil-large-v3 language=en toggle mode, history off (config dir: KIT\runs\e2e\eqho-config)
 INFO test_e2e: System volume at start: 100% (muted=False)
 INFO test_e2e: Waiting for Eqho to load the model (up to 300s)...
 INFO test_e2e: Eqho ready (model pre-loaded).
@@ -20,7 +20,7 @@ ERROR test_e2e: FAILED: clip 1 (1089-134686-0000): RuntimeError: no text was inj
  clips        : 3  (ok 0, empty 0, failed 3)
  WER (total)  : 0.00%  (0 errors / 0 ref words)
  volume       : restored OK
- config dir   : C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\eqho-config
- results      : C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\e2e-results.csv
- eqho log     : C:\Users\pc\Downloads\Eqho-Intel-test-kit\runs\e2e\eqho-config\eqho.log
+ config dir   : KIT\runs\e2e\eqho-config
+ results      : KIT\runs\e2e\e2e-results.csv
+ eqho log     : KIT\runs\e2e\eqho-config\eqho.log
 ----------------------------------------------------------------
