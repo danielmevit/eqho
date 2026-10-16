@@ -111,13 +111,20 @@ class LogTail:
         self._read_new()
         return sum(1 for line in self.lines if rx.search(line))
 
-    def wait_for(self, rx: re.Pattern, timeout: float,
-                 proc: subprocess.Popen = None):
-        """Poll until a NEW line matching rx appears (lines already seen
-        before this call never match). Returns (detect_time, match) or
-        (None, None) on timeout. Raises ChildDied if proc exits first."""
+    def mark(self) -> int:
+        """Line index to pass as wait_for(since=...): take it BEFORE the action
+        whose log line you wait for (the app can log within milliseconds)."""
         self._read_new()
-        start = len(self.lines)
+        return len(self.lines)
+
+    def wait_for(self, rx: re.Pattern, timeout: float,
+                 proc: subprocess.Popen = None, since: int = None):
+        """Poll until a NEW line matching rx appears (lines before `since`, or
+        already seen before this call when `since` is None, never match).
+        Returns (detect_time, match) or (None, None) on timeout. Raises
+        ChildDied if proc exits first."""
+        self._read_new()
+        start = len(self.lines) if since is None else since
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             self._read_new()
@@ -295,9 +302,10 @@ def run_clip(index: int, clip: dict, *, work: Path, swap: Path, tail: LogTail,
         ensure_foreground(hwnd)
 
         # the hotkey (start) -> "listening"
+        mark = tail.mark()
         t_alt1 = time.monotonic()
         keyboard.send(TEST_HOTKEY)
-        t_started, _ = tail.wait_for(STARTED_RE, 15.0, proc)
+        t_started, _ = tail.wait_for(STARTED_RE, 15.0, proc, since=mark)
         if t_started is None:
             raise RuntimeError("dictation did not start (no 'Transcription started' in the log)")
         row["start_latency_s"] = round(t_started - t_alt1, 3)
@@ -307,9 +315,10 @@ def run_clip(index: int, clip: dict, *, work: Path, swap: Path, tail: LogTail,
         # during the trailing silence), then the hotkey (stop) -> text appears.
         time.sleep(duration + TAIL_SILENCE_WAIT)
         ensure_foreground(hwnd)
+        mark = tail.mark()
         t_alt2 = time.monotonic()
         keyboard.send(TEST_HOTKEY)
-        t_injected, m = tail.wait_for(INJECTED_RE, 45.0, proc)
+        t_injected, m = tail.wait_for(INJECTED_RE, 45.0, proc, since=mark)
         if t_injected is None:
             raise RuntimeError("no text was injected (no 'Injected N chars' in the log)")
         row["stop_latency_s"] = round(t_injected - t_alt2, 3)
@@ -376,8 +385,9 @@ def _ensure_stopped(tail: LogTail, proc: subprocess.Popen, hwnd) -> None:
     log.warning("Dictation still active — sending the hotkey to stop it.")
     try:
         import keyboard
+        mark = tail.mark()
         keyboard.send(TEST_HOTKEY)
-        tail.wait_for(STOPPED_RE, 15.0, proc)
+        tail.wait_for(STOPPED_RE, 15.0, proc, since=mark)
     except Exception as e:
         log.error("Could not stop the leftover dictation: %s", e)
 

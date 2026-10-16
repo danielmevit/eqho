@@ -28,6 +28,10 @@ def main() -> None:
     root.geometry("520x320")
     text = tk.Text(root, font=("Segoe UI", 12), wrap="word")
     text.pack(fill="both", expand=True)
+    # Keyboard focus must be IN the text box, not just on the window: when the
+    # test brings the window to the front, Ctrl+V otherwise goes to the frame.
+    text.focus_set()
+    root.bind("<FocusIn>", lambda _e: text.focus_set())
     state = {"done": False}
 
     def save_and_exit() -> None:
