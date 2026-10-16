@@ -19,8 +19,6 @@ from .widgets import primary_button, secondary_button, ghost_button
 
 log = logging.getLogger(__name__)
 
-AUTO_LANGUAGE = "auto"
-AUTO_LANGUAGE_LABEL = "Several languages (detect automatically)"
 PAGES = ("welcome", "language", "microphone", "model", "sound", "try")
 
 MIC_BLOCKED_TEXT = ("Windows is blocking the microphone. Turn on microphone "
@@ -32,10 +30,10 @@ DOWNLOAD_FAILED_TEXT = ("The download did not finish. Check the internet "
 
 
 def language_choices() -> list[tuple[str, str]]:
-    """(label, code): English first, then by name, then automatic."""
+    """(label, code): English first, then the rest by name."""
     others = sorted((name, code) for code, name in SUPPORTED_LANGUAGES.items()
                     if code != "en")
-    return [("English", "en"), *others, (AUTO_LANGUAGE_LABEL, AUTO_LANGUAGE)]
+    return [("English", "en"), *others]
 
 
 def model_label(model_key: str) -> str:
@@ -171,9 +169,9 @@ class OnboardingScreen(TabBase):
                        corner_radius=RADIUS_SM, font=font("base"),
                        dropdown_font=font("sm"),
                        command=self._on_language).pack(anchor="w")
-        self._save_language(current_label)
 
     def _on_language(self, label: str) -> None:
+        """Only an actual pick saves; showing the page changes nothing."""
         self._save_language(label)
 
     def _save_language(self, label: str) -> None:

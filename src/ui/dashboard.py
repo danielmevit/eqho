@@ -666,8 +666,10 @@ class Dashboard(ctk.CTkToplevel):
         except Exception:
             pass
         if self._onboarding is not None:
-            self._onboarding.close()  # releases the mic
-            self._onboarding = None
+            # X during setup counts as "Skip setup": marked done, no nagging.
+            # skip() -> _end_onboarding -> _on_close again with no setup.
+            self._onboarding.skip()
+            return
         general = self._tabs.get("general")
         if general is not None and getattr(general, "_hotkey_capturing", False):
             general._stop_hotkey_capture(cancelled=True)

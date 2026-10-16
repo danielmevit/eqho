@@ -3,7 +3,11 @@
 1. Fresh install (no settings.json) -> setup needed, volume_duck "off".
 2. Existing settings.json without `onboarding_done` -> treated as done; a
    saved "mute" stays "mute"; a file without volume_duck keeps the old "mute".
-3. recommend_model: "en" -> distil-large-v3; "de" and auto -> large-v3-turbo.
+3. recommend_model: "en" -> distil-large-v3; "de" -> large-v3-turbo; no
+   "detect automatically" language choice (planned for 0.8.11).
+3b. Building the language page saves nothing (a chosen model is kept);
+   picking a language saves it + the recommended model.
+3c. Closing the window (X) during setup = "Skip setup": marked done.
 4. App.run() on first launch opens setup and does NOT preload/download; with
    setup done it preloads. Fakes for overlay/tray/hotkeys/transcriber/UI —
    no window, no mic, no downloads.
@@ -70,7 +74,53 @@ def test_settings() -> None:
 def test_recommend() -> None:
     check(recommend_model("en") == "distil-large-v3", 'recommend_model("en") -> distil-large-v3')
     check(recommend_model("de") == "large-v3-turbo", 'recommend_model("de") -> large-v3-turbo')
-    check(recommend_model("auto") == "large-v3-turbo", 'recommend_model(auto) -> large-v3-turbo')
+    from src.ui.onboarding import language_choices
+    check(all(c != "auto" for _, c in language_choices()), "no automatic-language choice")
+
+
+def test_language_page() -> None:
+    from types import SimpleNamespace
+    import src.ui.onboarding as onb
+    from src.ui.onboarding import OnboardingScreen
+    onb.font = lambda *a, **kw: None  # no Tk root in the probe
+    with tempfile.TemporaryDirectory() as td:
+        use_config(Path(td) / "settings.json")
+        Settings(language="en", model_size="distil-medium.en").save()
+        scr = OnboardingScreen.__new__(OnboardingScreen)
+        scr.ctx = SimpleNamespace(settings=Settings.load())
+        scr._body = None
+        scr._title = lambda *a, **kw: None
+        scr._string_var = lambda value="": SimpleNamespace(get=lambda: value)
+        made = {}
+        def dropdown(parent, **kw):
+            made.update(kw)
+            return SimpleNamespace(pack=lambda *a, **k: None)
+        scr._dropdown = dropdown
+        scr._build_language()
+        check(Settings.load().model_size == "distil-medium.en",
+              "language page shown: saved model_size unchanged")
+        made["command"]("German")
+        s = Settings.load()
+        check(s.language == "de" and s.model_size == "large-v3-turbo",
+              "language picked: language + recommended model saved")
+
+
+def test_close_during_setup() -> None:
+    from types import SimpleNamespace
+    from src.ui.dashboard import Dashboard
+    with tempfile.TemporaryDirectory() as td:
+        use_config(Path(td) / "settings.json")
+        Settings(onboarding_done=False).save()
+        dash = SimpleNamespace(_settings=Settings.load(), _tabs={}, _own_root=None,
+                               destroy=lambda: destroyed.append(1))
+        destroyed = []
+        dash._on_close = lambda: Dashboard._on_close(dash)
+        dash._end_onboarding = lambda sk, mc: Dashboard._end_onboarding(dash, sk, mc)
+        dash._onboarding = SimpleNamespace(
+            skip=lambda: dash._end_onboarding(True, False))
+        dash._on_close()
+        check(Settings.load().onboarding_done, "X during setup: setup marked done (= Skip)")
+        check(dash._onboarding is None and destroyed, "X during setup: window closes")
 
 
 class _Fake:
@@ -127,7 +177,8 @@ def test_first_launch() -> None:
 
 
 def main() -> int:
-    for test in (test_settings, test_recommend, test_first_launch):
+    for test in (test_settings, test_recommend, test_language_page,
+                 test_close_during_setup, test_first_launch):
         try:
             test()
         except Exception as e:
