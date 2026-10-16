@@ -5,6 +5,7 @@ import customtkinter as ctk
 from ...theme import SPACING, font
 from ...version import __version__
 from ..layout import TabBase
+from ..widgets import auto_wrap_label
 
 
 class AboutTab(TabBase):
@@ -48,9 +49,9 @@ class AboutTab(TabBase):
 
         details = [
             ("Version", __version__),
-            ("Engine", "faster-whisper (CTranslate2)"),
+            ("Engine", "faster-whisper (Whisper speech recognition)"),
             ("Default Model", "Distil Large v3"),
-            ("GPU", "CUDA (NVIDIA) with CPU fallback"),
+            ("Runs on", "NVIDIA graphics card, or the processor"),
             ("Platform", "Windows 10/11"),
             ("Font", "Inter (SIL Open Font License)"),
         ]
@@ -63,11 +64,14 @@ class AboutTab(TabBase):
                 text_color=self._colors.fg_secondary, anchor="w",
                 width=120,
             ).pack(side="left")
-            ctk.CTkLabel(
+            value_lbl = ctk.CTkLabel(
                 row, text=value,
                 font=font("sm"),
                 text_color=self._colors.fg_primary, anchor="w",
-            ).pack(side="left")
+            )
+            value_lbl.pack(side="left", fill="x", expand=True)
+            # Wrap within what's left of the row after the 120 px label column.
+            auto_wrap_label(value_lbl, row, padding=128)
 
         # Author row with clickable GitHub link
         row = ctk.CTkFrame(inner, fg_color="transparent")
