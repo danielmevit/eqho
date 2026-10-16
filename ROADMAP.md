@@ -88,7 +88,7 @@ system (docs/ai/TESTING.md: ASR benchmark, end-to-end dictation test, UI walker)
 - [x] **First-launch onboarding** (EQ-ONBOARD, on `next`; screenshots review pending) (must, same as Vecto/Laydown): welcome → **which language do you speak?** (picks the
       model) → microphone test with a level meter → model download with consent, size and progress → audio lowering
       on/off (consent) → try it ("press Alt+Q and say something") → done. Skippable, reopen from the dashboard.
-- [ ] **Automatic model choice by hardware** (moved up from 0.8.11): NVIDIA → distil-large-v3 on CUDA; graphics
+- [x] **Automatic model choice by hardware** (EQ-PICK + EQ-SLOWHINT tip; laptop numbers still to confirm) (moved up from 0.8.11): NVIDIA → distil-large-v3 on CUDA; graphics
       card → whisper.cpp; processor only → a smaller fast model. Shown and changeable in settings. Measured
       2026-10-16: distil-large-v3 on the processor takes 11–14 s per 10 s sentence (Ryzen 7 5800H) and 14–19 s per
       sentence on an Intel i7-8665U laptop — too slow. Benchmark small/base/distil-small (speed + accuracy) on both
@@ -98,7 +98,7 @@ system (docs/ai/TESTING.md: ASR benchmark, end-to-end dictation test, UI walker)
       seen 2026-10-16: on a full PC the model stopped partway)
 - [ ] (low priority) whisper.cpp: shorter audio window for short sentences (`audio_ctx`). Since Auto now uses whisper.cpp only on real graphics cards, which are already fast, this matters little; faster-whisper has no such option
 - [x] Version number in Eqho.exe's file properties (EQ-EXEVER; CI checks it)
-- [ ] Probes write into a temporary folder, never the real eqho.log
+- [x] Probes write into a temporary folder, never the real eqho.log (EQ-PROBEENV + tools/check_probe_isolation.py)
 
 ### 0.8.11 — languages (speech)
 - [ ] Non-English: multilingual model when a non-English language is chosen; offer every language Whisper supports
