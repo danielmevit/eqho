@@ -97,7 +97,8 @@ class OnboardingScreen(TabBase):
             child.destroy()
         last = self._page == len(PAGES) - 1
         self._back_btn.configure(state="normal" if self._page else "disabled")
-        self._next_btn.configure(text="Finish" if last else "Next", state="normal")
+        self._next_btn.configure(text="Finish" if last else "Next")
+        self._set_primary(self._next_btn, True)
         self._step_label.configure(text=f"Step {self._page + 1} of {len(PAGES)}")
         getattr(self, f"_build_{self.page_name}")()
 
@@ -122,6 +123,16 @@ class OnboardingScreen(TabBase):
         """Stop the mic and timers (leaving setup, or the window closing)."""
         self._leave_page()
         self._closed = True
+
+    def _set_primary(self, btn, enabled: bool) -> None:
+        """Enable/disable a primary button. Disabled = dark secondary fill with
+        dimmed but readable text (not light blue on blue)."""
+        c = self._colors
+        if enabled:
+            btn.configure(state="normal", fg_color=c.accent, border_width=0)
+        else:
+            btn.configure(state="disabled", fg_color=c.bg_tertiary, border_width=1,
+                          border_color=c.border, text_color_disabled=c.fg_muted)
 
     def _leave_page(self) -> None:
         self._close_mic_stream()
@@ -292,7 +303,7 @@ class OnboardingScreen(TabBase):
         self._text(f"Eqho needs to download its speech model once: "
                    f"{model_label(model)}, about {model_size_text(model)}. "
                    "It stays on this computer.")
-        row = ctk.CTkFrame(self._body, fg_color="transparent")
+        row = self._dl_row = ctk.CTkFrame(self._body, fg_color="transparent")
         row.pack(fill="x", pady=(SPACING["sm"], SPACING["md"]))
         self._dl_btn = primary_button(row, self._colors, text="Download now",
                                       width=150, height=34, command=self._download)
@@ -310,7 +321,7 @@ class OnboardingScreen(TabBase):
         elif self._chose_later:
             self._dl_msg.configure(text=LATER_TEXT)
         else:
-            self._next_btn.configure(state="disabled")  # pick one first
+            self._set_primary(self._next_btn, False)  # pick one first
 
     def _download(self) -> None:
         self._chose_later = False
@@ -322,9 +333,9 @@ class OnboardingScreen(TabBase):
         modelstore.start_download(self._settings, model)
 
     def _show_download_running(self) -> None:
-        self._dl_btn.configure(state="disabled")
+        self._set_primary(self._dl_btn, False)
         self._later_btn.configure(state="disabled")
-        self._next_btn.configure(state="disabled")
+        self._set_primary(self._next_btn, False)
         self._dl_bar.pack(fill="x", pady=(0, SPACING["sm"]), before=self._dl_msg)
         self._dl_msg.configure(text="Downloading…")
         self._poll_download()
@@ -337,11 +348,13 @@ class OnboardingScreen(TabBase):
             if st and st.get("done"):
                 if st.get("error"):
                     self._dl_msg.configure(text=DOWNLOAD_FAILED_TEXT)
-                    self._dl_btn.configure(state="normal")
+                    self._set_primary(self._dl_btn, True)
                     self._later_btn.configure(state="normal")
                 else:
+                    self._dl_row.pack_forget()
+                    self._dl_bar.set(1.0)
                     self._dl_msg.configure(text="Done. The speech model is ready.")
-                    self._next_btn.configure(state="normal")
+                    self._set_primary(self._next_btn, True)
                 return
         except Exception:
             return  # page was left
@@ -350,12 +363,12 @@ class OnboardingScreen(TabBase):
     def _later(self) -> None:
         self._chose_later = True
         self._dl_msg.configure(text=LATER_TEXT)
-        self._next_btn.configure(state="normal")
+        self._set_primary(self._next_btn, True)
 
     def _build_sound(self) -> None:
         self._title("Other sounds")
         self._text("Turn other sounds off while you dictate? It helps Eqho hear you.")
-        row = ctk.CTkFrame(self._body, fg_color="transparent")
+        row = self._dl_row = ctk.CTkFrame(self._body, fg_color="transparent")
         row.pack(fill="x", pady=(SPACING["sm"], 0))
         self._sound_btns = {}
         for value, label in (("mute", "Yes, turn them off"), ("off", "No, leave them")):
