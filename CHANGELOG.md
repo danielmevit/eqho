@@ -24,6 +24,10 @@ Planned as 0.8.9: reliability, a test system, and the AMD/Intel engine in the Wi
 - **Linux AppImage:** "Start with system" now points at the AppImage itself instead of a temporary folder.
 
 ### Added
+- **Opening Eqho again shows it.** Clicking the Eqho icon while it is already running now opens its window,
+  instead of a box telling you to look in the system tray.
+- **Clear microphone messages.** If Windows is blocking the microphone, Eqho says so in plain words and opens the
+  right Windows settings page; if there is no microphone, it tells you how to pick one.
 - **AMD and Intel graphics on Windows.** The Windows downloads now include the second engine (whisper.cpp with
   Vulkan). "Auto" uses it when there is no NVIDIA card and the processor supports it (AVX2); if it can't start,
   Eqho quietly uses the standard engine for that session.
@@ -35,6 +39,8 @@ Planned as 0.8.9: reliability, a test system, and the AMD/Intel engine in the Wi
 - **Steadier downloads:** release builds use the exact library versions Eqho is tested with, built on Python 3.13
   with current GitHub Actions (third-party ones pinned to exact versions). Release titles read "Eqho vX.Y.Z".
 - README and website describe the engines as they really ship.
+- **A bit faster without a graphics card:** the processor engine now uses all your processor cores (about 10%).
+- Dashboard help texts wrap instead of being cut off; the log shows how long each dictation took to transcribe.
 
 ## [0.8.8] - 2026-07-14 (continued — content restructure)
 

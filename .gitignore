@@ -39,3 +39,4 @@ site/src/env.d.ts
 
 # local test/benchmark output (tools/bench_asr.py --work, probes)
 _bench/
+_test/
