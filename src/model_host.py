@@ -15,6 +15,7 @@ The inference BACKEND inside the child is pluggable:
 
 import logging
 import multiprocessing as mp
+import sys
 import threading
 import time
 from typing import Optional
@@ -222,10 +223,26 @@ class _WhisperCppBackend:
                 for s in segments]
 
 
+def _cpu_has_avx2() -> bool:
+    """True if the CPU can run the bundled whisper.cpp build. Its CPU part
+    (ggml-cpu.dll) is compiled for AVX2 + FMA + F16C and would crash on CPUs
+    without AVX2 (e.g. Celeron / Pentium Silver), so on Windows ask the
+    kernel whether AVX2 is present (PF_AVX2_INSTRUCTIONS_AVAILABLE = 40).
+    Other OSes keep today's behaviour (no wheel is shipped there)."""
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+        return bool(ctypes.windll.kernel32.IsProcessorFeaturePresent(40))
+    except Exception:
+        return False
+
+
 def resolve_backend(setting: str) -> str:
     """Turn the engine_backend setting into a concrete backend.
     "auto": NVIDIA+CUDA -> faster-whisper (fastest there); otherwise
-    whisper.cpp if installed (AMD/Intel GPU or faster CPU), else faster-whisper."""
+    whisper.cpp if installed AND (on Windows) the CPU has AVX2 — the bundled
+    Vulkan wheel's CPU part needs that baseline; else faster-whisper."""
     if setting in ("faster-whisper", "whisper.cpp"):
         return setting
     try:
@@ -236,7 +253,8 @@ def resolve_backend(setting: str) -> str:
         pass
     try:
         import importlib.util
-        if importlib.util.find_spec("pywhispercpp") is not None:
+        if (importlib.util.find_spec("pywhispercpp") is not None
+                and _cpu_has_avx2()):
             return "whisper.cpp"
     except Exception:
         pass

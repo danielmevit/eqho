@@ -140,8 +140,14 @@ class VoiceTranscriber:
         # The model runs in a child process — switching = kill+respawn a fresh
         # child (the only reliable path; a second in-process CUDA model crashes
         # natively). The main app never loads a model. The engine backend
-        # auto-resolves (NVIDIA->faster-whisper, else->whisper.cpp if installed).
-        backend = resolve_backend(getattr(settings, "engine_backend", "auto"))
+        # auto-resolves (NVIDIA->faster-whisper, else->whisper.cpp if installed
+        # and the CPU can run it).
+        engine_setting = getattr(settings, "engine_backend", "auto")
+        backend = resolve_backend(engine_setting)
+        # "auto" may fall back to faster-whisper once if whisper.cpp fails to
+        # load; an engine picked explicitly in Settings reports the error.
+        self._auto_engine = engine_setting not in ("faster-whisper", "whisper.cpp")
+        self._auto_fallback_used = False
         log.info("Inference backend: %s", backend)
         self._host = ModelHost(backend=backend)
         oskit.get().disable_os_mic_ducking()
@@ -193,6 +199,31 @@ class VoiceTranscriber:
         err, self._mic_error = self._mic_error, None
         return err
 
+    def _load_with_auto_fallback(self, target: str) -> bool:
+        """Load `target` on the model host. If the engine was chosen by "auto"
+        and whisper.cpp fails to load (error reply, ModelHostError, or a dead
+        child), log a warning and fall back to faster-whisper ONCE for this
+        run so dictation still works. An engine picked explicitly in Settings
+        keeps today's behaviour: the failure is reported to the caller. The
+        fallback goes through the child host (set_backend kills the child; the
+        next load spawns a fresh one) — never a second model in one process."""
+        from .model_host import ModelHostError
+        try:
+            if self._host.load_model(target, self._model_dir):
+                return True
+        except ModelHostError as e:
+            if not self._auto_engine:
+                raise
+            log.warning("Model host load error on whisper.cpp: %s", e)
+        if not (self._auto_engine and not self._auto_fallback_used
+                and self._host.backend == "whisper.cpp"):
+            return False
+        self._auto_fallback_used = True
+        log.warning("whisper.cpp failed to load (engine was auto) — "
+                    "falling back to faster-whisper for this run")
+        self._host.set_backend("faster-whisper")
+        return self._host.load_model(target, self._model_dir)
+
     def _ensure_model(self) -> None:
         with self._model_lock:
             target = self._settings.model_size
@@ -202,7 +233,7 @@ class VoiceTranscriber:
                 return
             self._model_dir = self._settings.resolve_model_dir()
             phase_start = time.monotonic()
-            ok = self._host.load_model(target, self._model_dir)
+            ok = self._load_with_auto_fallback(target)
             if ok:
                 self._current_model_size = target
                 self._model_loaded = True
@@ -544,6 +575,8 @@ class VoiceTranscriber:
         change. Returns True if the backend actually changed."""
         from .model_host import resolve_backend
         new_backend = resolve_backend(engine_setting)
+        self._auto_engine = engine_setting not in ("faster-whisper", "whisper.cpp")
+        self._auto_fallback_used = False  # a fresh engine choice gets a fresh fallback
         if new_backend == self._host.backend:
             return False
         was_running = self._running

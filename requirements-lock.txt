@@ -18,6 +18,16 @@ pyperclip==1.11.0
 customtkinter==5.2.2
 Pillow==12.3.0
 
+# whisper.cpp engine (pywhispercpp) runtime deps — the Windows release installs
+# the bundled Vulkan wheel with --no-deps, so its deps must be pinned here.
+# tqdm is used by both engines (faster-whisper downloads + pywhispercpp).
+tqdm==4.68.4
+requests==2.34.2 ; sys_platform == "win32"
+urllib3==2.7.0 ; sys_platform == "win32"
+certifi==2026.6.17 ; sys_platform == "win32"
+charset-normalizer==3.4.9 ; sys_platform == "win32"
+idna==3.18 ; sys_platform == "win32"
+
 # Windows-only
 keyboard==0.13.5 ; sys_platform == "win32"
 pycaw==20251023 ; sys_platform == "win32"

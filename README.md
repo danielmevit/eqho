@@ -6,13 +6,13 @@
 
 # Eqho — free, offline voice-to-text dictation
 
-**Speak anywhere Windows lets you type.** Press a hotkey, talk, and your words appear in whatever app is focused — Word, your browser, Slack, code editors, anything. Powered by OpenAI's Whisper (via [faster-whisper](https://github.com/SYSTRAN/faster-whisper)), running **100% on your machine** — much faster with an NVIDIA graphics card, and it works on any other PC too (using the processor).
+**Speak anywhere Windows lets you type.** Press a hotkey, talk, and your words appear in whatever app is focused — Word, your browser, Slack, code editors, anything. Powered by OpenAI's Whisper (via [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and [whisper.cpp](https://github.com/ggml-org/whisper.cpp)), running **100% on your machine** — much faster with a graphics card (NVIDIA, AMD or Intel on Windows), and it works on any other PC too (using the processor).
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-informational)](#install)
 
 - 🔒 **Private by design** — no cloud, no account, no API key. Your voice never leaves your computer.
-- ⚡ **Fast on any PC** — with an NVIDIA graphics card, transcription is much faster (CUDA). On AMD and Intel PCs the downloads run on the processor (CPU); a graphics-card engine for those is coming in a later version. Real-time preview as you speak.
+- ⚡ **Fast on any PC** — on Windows, NVIDIA, AMD and Intel graphics cards all speed up transcription (CUDA / Vulkan). On Linux and macOS, AMD and Intel PCs run on the processor (CPU). Real-time preview as you speak.
 - 🆓 **Free and open source** — no subscription, no word limits, ever.
 - 🌍 **13 languages** — English-optimized by default, multilingual models one click away.
 
@@ -56,7 +56,7 @@ Toggle or hold-to-talk, your choice. The hotkey is customizable.
 - **Text replacements** — auto-correct words the model keeps missing
 - **Volume ducking** — quiets your speakers while you dictate
 - **Model picker** — from `tiny` (150 MB, fastest) to `large-v3` (3.1 GB, most accurate); `distil-large-v3` default hits the sweet spot for English
-- **Two engines** — the downloads use [faster-whisper](https://github.com/SYSTRAN/faster-whisper): NVIDIA acceleration via CUDA, with a CPU fallback. A second engine, [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with Vulkan, adds AMD and Intel graphics cards — it works when you run from source with the optional wheel and is coming to the downloads in a later version. Pick for yourself in **Settings → General → Inference Engine**
+- **Two engines** — the Windows downloads include both: [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (NVIDIA acceleration via CUDA, CPU fallback) and [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with Vulkan, which adds AMD and Intel graphics cards. macOS/Linux downloads use faster-whisper. Pick for yourself in **Settings → General → Inference Engine**
 
 ## Languages
 
@@ -74,7 +74,7 @@ Anything beyond English needs a **multilingual** model (`large-v3-turbo` or `med
 - Python 3.10+ (only when running from source)
 - Optional GPU acceleration — **auto-detected, no configuration**:
   - **NVIDIA** — [CUDA Toolkit 12.x](https://developer.nvidia.com/cuda-downloads) for ~5× faster transcription (`winget install Nvidia.CUDA`)
-  - **AMD & Intel** — nothing to install; the downloads run on the processor (CPU). A Vulkan engine (whisper.cpp) that uses AMD and Intel graphics cards works when you run from source and is coming to the downloads later
+  - **AMD & Intel** — nothing to install; on Windows the downloads use AMD and Intel graphics cards (Vulkan). On Linux and macOS those PCs run on the processor (CPU)
 
 ## Platform notes
 
@@ -88,7 +88,7 @@ Anything beyond English needs a **multilingual** model (`large-v3-turbo` or `med
 
 **Does it cost anything?** No. Free, open source, no premium tier.
 
-**Does it work on AMD or Intel GPUs?** Not in the downloads yet. Today the downloads speed up dictation only on NVIDIA graphics cards (CUDA); on AMD and Intel PCs they run on the processor (CPU), which works fine — just slower. A second engine (whisper.cpp with Vulkan) that uses AMD and Intel graphics cards works when you run Eqho from source with the optional wheel, and it will be added to the downloads in a later version.
+**Does it work on AMD or Intel GPUs?** Yes — on Windows. The downloads include a Vulkan engine (whisper.cpp) that uses AMD and Intel graphics cards, alongside faster-whisper for NVIDIA. On Linux and macOS, AMD and Intel PCs run on the processor (CPU), which works fine — just slower.
 
 **How accurate is it?** Whisper-class accuracy — state of the art for open speech recognition. Pick a bigger model for tougher audio.
 
@@ -102,9 +102,9 @@ Settings persist to `settings.json` in your config folder — everything is also
 
 For the technically curious (the [website](https://danielmevit.github.io/eqho/) stays non-technical on purpose):
 
-- **Two interchangeable inference engines**, selected automatically or in Settings → General (the downloads currently bundle only faster-whisper; whisper.cpp is optional and from source for now):
+- **Two interchangeable inference engines**, selected automatically or in Settings → General (the Windows downloads bundle both; macOS/Linux bundle faster-whisper):
   - [faster-whisper](https://github.com/SYSTRAN/faster-whisper) on **CTranslate2** — CUDA on NVIDIA, optimized INT8/FP16 on CPU
-  - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) via `pywhispercpp` — **Vulkan** acceleration on AMD Radeon, Intel Arc/Iris *and* NVIDIA, from one wheel (built by `tools/mkwheel.py`; not in the downloads yet)
+  - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) via `pywhispercpp` — **Vulkan** acceleration on AMD Radeon, Intel Arc/Iris *and* NVIDIA, from one wheel (built by `tools/mkwheel.py`, bundled from `packaging/windows/wheels/`)
 - **Subprocess model host** — the model runs in a separate process (`src/model_host.py`), so engine/model switches never freeze or crash the UI, and VRAM is released cleanly
 - **Adaptive VAD** with a self-calibrating noise floor and user sensitivity; audio is captured with `sounddevice`/PortAudio at 16 kHz mono
 - **Deterministic text pipeline** (`src/textproc.py`) — casing/spacing cleanup, voice commands, user replacements; never rephrases what you said (no LLM touches your words)
