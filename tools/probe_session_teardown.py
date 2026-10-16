@@ -33,6 +33,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import _probe_env  # noqa: F401,E402  isolated EQHO_CONFIG_DIR before any src import
 
 import numpy as np
 

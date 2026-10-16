@@ -24,6 +24,7 @@ from types import ModuleType
 
 # Ensure repo root is on sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import _probe_env  # noqa: F401,E402  isolated EQHO_CONFIG_DIR before any src import
 
 # If running in a minimal Python environment without pynput / pyperclip installed,
 # provide stub modules so src.injector can be imported and tested.

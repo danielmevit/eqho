@@ -4,6 +4,8 @@ Beyond the `--smoke` gate (`run.py --smoke`, must pass before every commit),
 Eqho has targeted benchmarks. This file explains how to run them and what the
 numbers mean.
 
+The `tools/probe_*.py` scripts run in a temporary config folder (`tools/_probe_env.py` sets `EQHO_CONFIG_DIR`), so they never touch the real eqho.log, settings or history; `tools/check_probe_isolation.py` verifies this.
+
 ## ASR benchmark — `tools/bench_asr.py` (EQ-TESTASR)
 
 Measures transcription **accuracy and speed on real speech with known text**:
