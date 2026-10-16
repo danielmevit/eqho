@@ -470,15 +470,13 @@ def _start_instance_listener(sock, on_show) -> None:
     slots = threading.BoundedSemaphore(4)
 
     def _handle(conn):
+        show = False
         try:
             conn.settimeout(0.5)  # a real second launch sends at once
             data = conn.recv(64)
             if data == b"show":
                 conn.sendall(b"ok")  # the asker waits for this (an old Eqho never replies)
-                try:
-                    on_show()  # reuses an open dashboard window, never stacks them
-                except Exception:
-                    log.debug("Single-instance 'show' callback failed", exc_info=True)
+                show = True
             else:
                 log.debug("Single-instance: ignored message %r", data)
         except Exception:
@@ -488,7 +486,12 @@ def _start_instance_listener(sock, on_show) -> None:
                 conn.close()
             except Exception:
                 pass
-            slots.release()
+            slots.release()  # free the slot BEFORE on_show: a stuck callback can't starve the listener
+        if show:
+            try:
+                on_show()  # reuses an open dashboard window, never stacks them
+            except Exception:
+                log.debug("Single-instance 'show' callback failed", exc_info=True)
 
     def _serve():
         while True:
@@ -501,8 +504,15 @@ def _start_instance_listener(sock, on_show) -> None:
             if not slots.acquire(timeout=1.0):
                 conn.close()
                 continue
-            threading.Thread(target=_handle, args=(conn,), daemon=True,
-                             name="single-instance-conn").start()
+            try:
+                threading.Thread(target=_handle, args=(conn,), daemon=True,
+                                 name="single-instance-conn").start()
+            except Exception:  # can't start a thread: give the slot back
+                slots.release()
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     threading.Thread(target=_serve, daemon=True, name="single-instance").start()
 
