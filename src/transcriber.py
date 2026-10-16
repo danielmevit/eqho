@@ -212,8 +212,9 @@ class VoiceTranscriber:
             if self._host.load_model(target, self._model_dir):
                 return True
         except ModelHostError as e:
-            if not self._auto_engine:
-                raise
+            if not (self._auto_engine and not self._auto_fallback_used
+                    and self._host.backend == "whisper.cpp"):
+                raise  # keep the real error (e.g. a failed download) for the caller
             log.warning("Model host load error on whisper.cpp: %s", e)
         if not (self._auto_engine and not self._auto_fallback_used
                 and self._host.backend == "whisper.cpp"):
