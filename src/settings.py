@@ -30,9 +30,8 @@ def _resolve_config_dir() -> Path:
 CONFIG_DIR = _resolve_config_dir()
 CONFIG_FILE = CONFIG_DIR / "settings.json"
 
-# Pre-0.3.3 installs cached models to a hardcoded D:\EqhoModels. If that
-# directory exists, Settings.load() pins it into `model_dir` so the cache
-# keeps working; fresh installs use the platform cache dir instead.
+# Models live in the platform cache folder unless the user picks a folder
+# (`model_dir`).
 DEFAULT_MODEL_DIR = Path(platformdirs.user_cache_dir("Eqho", appauthor=False)) / "models"
 
 WHISPER_MODELS = {
