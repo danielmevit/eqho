@@ -6,7 +6,9 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
-Planned as 0.8.9: reliability, a test system, and the AMD/Intel engine in the Windows downloads.
+## [0.8.9] - 2026-10-16
+
+Reliability, slow PCs, a test system, and the AMD/Intel engine in the Windows downloads.
 
 ### Fixed
 - **Sound never stays muted.** If the speech model fails to load or a dictation goes wrong, Eqho now always turns

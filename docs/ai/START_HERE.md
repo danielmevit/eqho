@@ -2,7 +2,7 @@
 
 Always-on voice-to-text dictation app. System tray, **Alt+Q**, speak, text lands in the focused app. 100% local: faster-whisper (CTranslate2) + CUDA. Windows primary; Linux X11 + macOS core dictation since v0.6.0.
 
-- **Version:** `src/version.py` only. Current **public** release: **0.8.8** (tag `v0.8.8`). `dev` is finishing **0.8.9**.
+- **Version:** `src/version.py` only. Current **public** release: **0.8.9** (tag `v0.8.9`, 2026-10-16). `next` holds 0.8.10 work until it is merged into `dev`.
 - **Repo:** `origin` = github.com/danielmevit/eqho (PUBLIC; `dev` = all work, `main` = releases). One repo since 2026-10-16; danielmevit/Eqho-private is archived. Merge dev→main ONLY on Daniel's explicit release request. ⚠ Daniel sometimes edits `main` via the GitHub web UI — if a push bounces, `git pull origin main`, merge, NEVER force-push, then merge main back into dev.
 - **Landing page:** `site/` (Astro) → GitHub Pages at danielmevit.github.io/eqho via `.github/workflows/deploy.yml` (builds `./site` on every main push). Exists for SEO + AI-scraper reach (`site/public/llms.txt`).
 
