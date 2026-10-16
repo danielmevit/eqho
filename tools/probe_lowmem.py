@@ -24,13 +24,14 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import src.model_host as model_host_mod
+_RealModelHost = model_host_mod.ModelHost
 import src.oskit as oskit_mod
 import src.transcriber as transcriber_mod
 
 _real_get = oskit_mod.get
 
-# Keep log output quiet but enabled: the transcriber reads the model host's
-# "load failed" log line, as in the app (which logs at INFO).
+# Keep log output quiet. The transcriber reads the host's last_load_error,
+# never its log lines.
 logging.basicConfig(level=logging.INFO, handlers=[logging.NullHandler()])
 sys.stdout.reconfigure(errors="backslashreplace")
 
@@ -66,6 +67,8 @@ class FakeHost:
         self.mode = "ok"
         self.error = ""
         self.info = {}
+        self.last_load_error = ""
+        self.log_line = True
         self._ready = None
 
     def is_ready(self, model_size):
@@ -79,8 +82,11 @@ class FakeHost:
         if self.mode == "raise":
             raise model_host_mod.ModelHostError(self.error)
         if self.mode == "reply":
-            model_host_mod.log.error("Model host load failed: %s", self.error)
+            self.last_load_error = self.error
+            if self.log_line:
+                model_host_mod.log.error("Model host load failed: %s", self.error)
             return False
+        self.last_load_error = ""
         self._ready = model_size
         return True
 
@@ -146,6 +152,18 @@ tr, kit, notices, aborts = make(free_mb=8000)
 tr._host.mode, tr._host.error = "raise", "MKL_MALLOC: Failed to allocate memory"
 reason = abort_reason(tr, aborts)
 check("mkl_malloc raised -> plain message", reason == plain, repr(reason))
+
+# 4c. The host logs nothing at all -> plain message still appears (the
+#     result can't depend on the wording of a log line).
+tr, kit, notices, aborts = make(free_mb=8000)
+tr._host.mode, tr._host.error = "reply", "RuntimeError: mkl_malloc: failed to allocate memory"
+tr._host.log_line = False
+reason = abort_reason(tr, aborts)
+check("no host log line -> plain message", reason == plain, repr(reason))
+
+# 4d. The real ModelHost starts with an empty last_load_error.
+check("ModelHost.last_load_error starts empty",
+      _RealModelHost().last_load_error == "")
 
 # 5. Any other error -> unchanged behaviour.
 tr, kit, notices, aborts = make(free_mb=8000)

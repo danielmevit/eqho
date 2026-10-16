@@ -412,6 +412,9 @@ class ModelHost:
         self._current: Optional[str] = None
         self._info: dict = {}
         self._io = threading.Lock()
+        # The child's error text from the last failed load ("" after a
+        # successful load or before any load).
+        self.last_load_error: str = ""
 
     def _spawn(self) -> None:
         self._to = self._ctx.Queue()
@@ -471,7 +474,9 @@ class ModelHost:
         `_LOAD_INACTIVITY_TIMEOUT` seconds with no progress message."""
         with self._io:
             if self._current == model_size and self._proc and self._proc.is_alive():
+                self.last_load_error = ""
                 return True
+            self.last_load_error = ""
             self._kill()  # fresh process per model = the reliable path
             self._spawn()
             log.info("Model host: loading %s (backend=%s)", model_size, self._backend)
@@ -482,6 +487,7 @@ class ModelHost:
                 self._info = payload
                 log.info("Model host ready: %s %s", model_size, payload)
                 return True
+            self.last_load_error = str(payload) or "load failed"
             log.error("Model host load failed: %s", payload)
             self._kill()
             return False

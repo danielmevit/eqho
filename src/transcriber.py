@@ -65,22 +65,6 @@ class LowMemoryLoadError(RuntimeError):
         super().__init__(LOW_MEMORY_LOAD_TEXT)
 
 
-class _LoadFailureCapture(logging.Handler):
-    """Collects the model host's "load failed" log lines (the child's error
-    text only reaches the main process through that log line)."""
-
-    def __init__(self):
-        super().__init__(logging.DEBUG)
-        self.texts: list[str] = []
-
-    def emit(self, record):
-        try:
-            msg = record.getMessage()
-            if msg.startswith("Model host load failed"):
-                self.texts.append(msg)
-        except Exception:
-            pass
-
 # Hallucination gating: Whisper invents text on (near-)silence. Buffers whose
 # peak RMS never rose meaningfully above the VAD threshold are skipped, low
 # confidence segments are dropped, and short utterances matching the known
@@ -285,10 +269,6 @@ class VoiceTranscriber:
             self._model_dir = self._settings.resolve_model_dir()
             self._check_free_memory(target)
             phase_start = time.monotonic()
-            capture = _LoadFailureCapture()
-            from . import model_host
-            host_log = model_host.log
-            host_log.addHandler(capture)
             try:
                 ok = self._load_with_auto_fallback(target)
             except Exception as e:
@@ -297,8 +277,6 @@ class VoiceTranscriber:
                     self._model_loaded = False
                     raise LowMemoryLoadError() from e
                 raise
-            finally:
-                host_log.removeHandler(capture)
             if ok:
                 self._current_model_size = target
                 self._model_loaded = True
@@ -306,7 +284,7 @@ class VoiceTranscriber:
                          time.monotonic() - phase_start)
             else:
                 self._model_loaded = False
-                if any(looks_like_memory_error(t) for t in capture.texts):
+                if looks_like_memory_error(getattr(self._host, "last_load_error", "")):
                     raise LowMemoryLoadError()
                 raise RuntimeError(f"Model host failed to load {target}")
 
