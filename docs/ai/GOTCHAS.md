@@ -54,3 +54,4 @@ Things that silently break or waste time. Update the moment a new trap is discov
 - Unsigned binaries trigger SmartScreen "unknown publisher" ("More info" → "Run anyway") — expected until code signing (backlog).
 - The installer is per-user (no UAC); its "start when you sign in" checkbox writes the same HKCU Run value ("Eqho") as the in-app toggle, so they stay in sync and uninstall removes it.
 - CI (`release.yml`) builds portable zip + installer on `v*` tags; `workflow_dispatch` for dry runs. The smoke gate runs first — a red smoke fails the release.
+- **Simulated Alt+<key> never reaches the hotkey (Windows, `keyboard` backend).** The `keyboard` library drops INJECTED key events that carry the Alt-down flag (`_winkeyboard.py`, `fake_alt`). A physical Alt+Q works; Alt+Q sent by SendInput (tests, AutoHotkey remaps, some remote-desktop tools) does not. `tools/test_e2e.py` therefore uses Ctrl+Shift+F9 as its test hotkey.
