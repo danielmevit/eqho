@@ -49,10 +49,10 @@ class AboutTab(TabBase):
 
         details = [
             ("Version", __version__),
-            ("Engine", "faster-whisper (Whisper speech recognition)"),
+            ("Engine", "faster-whisper and whisper.cpp"),
             ("Default Model", "Distil Large v3"),
-            ("Runs on", "NVIDIA graphics card, or the processor"),
-            ("Platform", "Windows 10/11"),
+            ("Runs on", "Your graphics card or the processor"),
+            ("Platform", "Windows, macOS and Linux"),
             ("Font", "Inter (SIL Open Font License)"),
         ]
         for label, value in details:
