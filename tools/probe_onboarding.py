@@ -253,11 +253,29 @@ def test_window_fit() -> None:
     check((w, h) == (WIN_W, WIN_H), "big screen: never larger than the default size")
 
 
+def test_col_count() -> None:
+    from types import SimpleNamespace
+    from src.ui.dashboard import Dashboard, col_count
+    for logical, want in ((559, 1), (560, 2), (600, 2), (899, 2), (900, 3), (1200, 3)):
+        check(col_count(logical) == want, f"col_count({logical}) == {want}")
+    for dpi in (1.0, 1.25, 1.5, 2.0):
+        for zoom in (1.0, 1.25, 1.5):
+            scale = dpi * zoom
+            got = {}
+            for logical in (559, 600, 899, 900):
+                fake = SimpleNamespace(
+                    _content=SimpleNamespace(winfo_width=lambda w=round(logical * scale): w),
+                    _get_widget_scaling=lambda s=scale: s, _ui_scale=zoom)
+                got[logical] = Dashboard._get_col_count(fake)
+            check(got == {559: 1, 600: 2, 899: 2, 900: 3},
+                  f"columns at DPI {dpi} x zoom {zoom}: {got}")
+
+
 def main() -> int:
     for test in (test_settings, test_recommend, test_language_page,
                  test_fresh_install_model,
                  test_close_during_setup, test_first_launch,
-                 test_window_fit):
+                 test_window_fit, test_col_count):
         try:
             test()
         except Exception as e:

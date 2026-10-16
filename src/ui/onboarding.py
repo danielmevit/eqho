@@ -124,6 +124,7 @@ class OnboardingScreen(TabBase):
         except Exception:
             pass
         self.frame.after_idle(self._fit_scroll)
+        self.frame.after(120, self._fit_scroll)  # after images/wraps settle
 
     def _fit_scroll(self, _event=None) -> None:
         """Show the scrollbar (and allow scrolling) only when the page is
@@ -131,12 +132,19 @@ class OnboardingScreen(TabBase):
         try:
             canvas = self._scroll._parent_canvas
             bar = self._scroll._scrollbar
-            fits = self._body.winfo_reqheight() <= canvas.winfo_height()
-            if fits:
+            view = canvas.winfo_height()
+            if view <= 1:  # not laid out yet; <Configure> calls again
+                return
+            # The inner frame holds the body plus its padding.
+            need = max(self._scroll.winfo_reqheight(), self._body.winfo_reqheight())
+            # winfo_manager, not winfo_ismapped: while the window is still
+            # hidden nothing is "mapped", which left the bar gridded forever.
+            shown = bool(bar.winfo_manager())
+            if need <= view:
                 canvas.yview_moveto(0)
-                if bar.winfo_ismapped():
+                if shown:
                     bar.grid_remove()
-            elif not bar.winfo_ismapped():
+            elif not shown:
                 bar.grid()
         except Exception:
             pass

@@ -35,6 +35,16 @@ TOPBAR_H = 64
 BP_2COL = 560   # 2 columns when content >= 560px
 BP_3COL = 900   # 3 columns when content >= 900px
 
+
+def col_count(logical_width: float) -> int:
+    """Column count for a content width in LOGICAL px (Windows DPI and Eqho's
+    zoom already divided out), so every scaling picks the same layout."""
+    if logical_width >= BP_3COL:
+        return 3
+    if logical_width >= BP_2COL:
+        return 2
+    return 1
+
 # Old tab keys that folded into the Settings view (gear icon, top right).
 TAB_ALIASES = {"overlay": "settings", "about": "settings"}
 
@@ -611,18 +621,18 @@ class Dashboard(ctk.CTkToplevel):
     # -- Responsive grid helpers -----------------------------------------------
 
     def _get_col_count(self) -> int:
-        """Column count from content width (breakpoints scale with UI zoom —
-        a zoomed column needs proportionally more real pixels)."""
+        """Column count from the LOGICAL content width: physical px divided by
+        the total scaling CTk applies (Windows DPI x UI zoom)."""
         try:
             w = self._content.winfo_width()
         except Exception:
-            w = WIN_W
-        scale = getattr(self, "_ui_scale", 1.0)
-        if w >= BP_3COL * scale:
-            return 3
-        elif w >= BP_2COL * scale:
-            return 2
-        return 1
+            return col_count(WIN_W)
+        try:
+            scale = float(self._get_widget_scaling())
+        except Exception:
+            scale = getattr(self, "_ui_scale", 1.0)
+        # +0.5: physical widths are whole px, so 900 logical can land on 899.8
+        return col_count((w + 0.5) / max(scale, 0.1))
 
     def set_ui_scale(self, scale: float) -> None:
         """Apply a new UI zoom factor and rebuild (called from the General tab)."""
