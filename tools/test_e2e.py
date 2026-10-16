@@ -4,10 +4,10 @@
 Starts Eqho (run.py) with EQHO_TEST_AUDIO (a recording instead of the
 microphone) and EQHO_CONFIG_DIR (an isolated config dir), plus its own tiny
 Tk target window (tools/e2e_target.py). Then it brings the target window to
-the front, sends the real Alt+Q hotkey, waits for the clip to play out, stops
+the front, sends the hotkey (TEST_HOTKEY, see below), waits for the clip to play out, stops
 dictation, and checks that the transcript landed in the target window.
 
-WARNING: this test uses the REAL desktop. It sends real Alt+Q keypresses and
+WARNING: this test uses the REAL desktop. It sends real hotkey keypresses and
 brings its own window to the foreground — do not touch the machine, and do
 not run it while another Eqho instance is running (the single-instance lock
 would make the test instance exit). Before every keypress it verifies that
@@ -46,6 +46,10 @@ log = logging.getLogger("test_e2e")
 
 SAMPLE_RATE = 16000
 TARGET_TITLE = "Eqho E2E Target"
+# Not Alt+Q: the `keyboard` library drops INJECTED key events that carry the
+# Alt-down flag (_winkeyboard.py "fake_alt"), so a simulated Alt+Q never reaches
+# Eqho. A real, physical Alt+Q is unaffected. The test uses an Alt-free hotkey.
+TEST_HOTKEY = "ctrl+shift+f9"
 READY_MARKER = "Model pre-loaded and ready."
 LOAD_FAIL_MARKER = "Failed to pre-load model"
 ALREADY_RUNNING_MARKER = "Eqho is already running"
@@ -290,9 +294,9 @@ def run_clip(index: int, clip: dict, *, work: Path, swap: Path, tail: LogTail,
             raise SafetyAbort("target window never appeared — aborting")
         ensure_foreground(hwnd)
 
-        # Alt+Q (start) -> "listening"
+        # the hotkey (start) -> "listening"
         t_alt1 = time.monotonic()
-        keyboard.send("alt+q")
+        keyboard.send(TEST_HOTKEY)
         t_started, _ = tail.wait_for(STARTED_RE, 15.0, proc)
         if t_started is None:
             raise RuntimeError("dictation did not start (no 'Transcription started' in the log)")
@@ -300,11 +304,11 @@ def run_clip(index: int, clip: dict, *, work: Path, swap: Path, tail: LogTail,
         log.info("[clip %d] start latency: %.2fs", index, t_started - t_alt1)
 
         # Let the clip play out in real time (the VAD completes the phrase
-        # during the trailing silence), then Alt+Q (stop) -> text appears.
+        # during the trailing silence), then the hotkey (stop) -> text appears.
         time.sleep(duration + TAIL_SILENCE_WAIT)
         ensure_foreground(hwnd)
         t_alt2 = time.monotonic()
-        keyboard.send("alt+q")
+        keyboard.send(TEST_HOTKEY)
         t_injected, m = tail.wait_for(INJECTED_RE, 45.0, proc)
         if t_injected is None:
             raise RuntimeError("no text was injected (no 'Injected N chars' in the log)")
@@ -361,18 +365,18 @@ def _ensure_stopped(tail: LogTail, proc: subprocess.Popen, hwnd) -> None:
         return
     if hwnd is None:
         log.error("Dictation still active but the target window is gone — "
-                  "NOT sending Alt+Q (shutdown will kill the session).")
+                  "NOT sending the hotkey (shutdown will kill the session).")
         return
     try:
         ensure_foreground(hwnd)
     except SafetyAbort as e:
-        log.error("Dictation still active but %s — NOT sending Alt+Q "
+        log.error("Dictation still active but %s — NOT sending the hotkey "
                   "(shutdown will kill the session).", e)
         return
-    log.warning("Dictation still active — sending Alt+Q to stop it.")
+    log.warning("Dictation still active — sending the hotkey to stop it.")
     try:
         import keyboard
-        keyboard.send("alt+q")
+        keyboard.send(TEST_HOTKEY)
         tail.wait_for(STOPPED_RE, 15.0, proc)
     except Exception as e:
         log.error("Could not stop the leftover dictation: %s", e)
@@ -382,12 +386,13 @@ def _ensure_stopped(tail: LogTail, proc: subprocess.Popen, hwnd) -> None:
 
 def write_test_settings(cfg_dir: Path, model: str, language: str) -> None:
     """settings.json for the test run: the owner's real settings (so the
-    model cache resolves), but toggle mode, Alt+Q, and history off."""
+    model cache resolves), but toggle mode, TEST_HOTKEY, start-with-Windows off, history off."""
     from src.settings import Settings
     owner = Settings.load()
     data = {k: getattr(owner, k) for k in owner.__dataclass_fields__
             if k != "_listeners"}
-    data.update(hotkey="alt+q", hotkey_mode="toggle", history_enabled=False,
+    data.update(hotkey=TEST_HOTKEY, hotkey_mode="toggle", history_enabled=False,
+                start_with_windows=False,
                 model_size=model, language=language)
     cfg_dir.mkdir(parents=True, exist_ok=True)
     (cfg_dir / "settings.json").write_text(
@@ -459,7 +464,7 @@ def main() -> None:
                         format="%(levelname)s %(name)s: %(message)s")
 
     if sys.platform != "win32":
-        log.error("The e2e test drives the Windows desktop (Alt+Q, foreground "
+        log.error("The e2e test drives the Windows desktop (the hotkey, foreground "
                   "windows, pycaw) — run it with the owner's Windows venv.")
         sys.exit(2)
 
@@ -555,7 +560,7 @@ def main() -> None:
     print(" WER (total)  : %.2f%%  (%d errors / %d ref words)"
           % (wer_total * 100, err_total, ref_total))
     if lat_start:
-        print(" latency      : start %.2fs avg, stop %.2fs avg (Alt+Q -> "
+        print(" latency      : start %.2fs avg, stop %.2fs avg (hotkey -> "
               "listening / stop -> text appears)"
               % (sum(lat_start) / len(lat_start),
                  sum(lat_stop) / len(lat_stop) if lat_stop else 0.0))

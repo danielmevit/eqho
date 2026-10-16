@@ -78,12 +78,12 @@ or post-processing changes.
 ## End-to-end dictation test — `tools/test_e2e.py` (EQ-TESTE2E)
 
 Drives the **whole app like a user**: starts Eqho (`run.py`) with a recording
-instead of the microphone, presses the real Alt+Q hotkey, and checks that
+instead of the microphone, presses the hotkey (Ctrl+Shift+F9 in its test settings — a simulated Ctrl+Shift+F9 never reaches the `keyboard` library; a real Ctrl+Shift+F9 works), and checks that
 the transcript lands in a target window. Covers everything the ASR benchmark
 cannot: hotkey, VAD, overlay, volume duck/restore, focus handling, text
 injection, teardown.
 
-**WARNING: this test uses the real desktop.** It sends real Alt+Q keypresses
+**WARNING: this test uses the real desktop.** It sends real Ctrl+Shift+F9 keypresses
 and brings its own target window to the foreground. Do not touch the machine
 while it runs. Before every keypress it verifies that its own target window
 is the foreground window and aborts without pressing anything if it is not —
@@ -101,12 +101,12 @@ lock would make the test instance exit immediately).
   folder instead of `%APPDATA%\Eqho`, so the run never touches the owner's
   real settings or history. Zero effect when unset.
 - The test writes its own `settings.json` (the owner's model and language,
-  but toggle mode, Alt+Q, history off), starts `tools/e2e_target.py` (a Tk
+  but toggle mode, Ctrl+Shift+F9, history off), starts `tools/e2e_target.py` (a Tk
   text box that writes its content to a file when told to close), waits for
   Eqho's log to say the model is pre-loaded, then per clip: foreground the
-  target, Alt+Q (start), wait out the clip, Alt+Q (stop), read the target's
+  target, Ctrl+Shift+F9 (start), wait out the clip, Ctrl+Shift+F9 (stop), read the target's
   text, compute WER (same normalizer/Levenshtein as the ASR benchmark), and
-  measure latency from Eqho's log (Alt+Q → "Transcription started",
+  measure latency from Eqho's log (Ctrl+Shift+F9 → "Transcription started",
   stop → "Injected N chars"). System volume is checked after every clip
   (pycaw) and restored by the test if Eqho left it ducked.
 - Shutdown kills the Eqho process tree (`taskkill /T /F`) — the app has no
