@@ -183,6 +183,32 @@ class ModelsTab(TabBase):
                   padx=SPACING["md"], pady=SPACING["xs"])
         self._fill_model_card(card, model_key, is_selected)
 
+    @staticmethod
+    def _stack_when_narrow(row, name_label, status_label) -> None:
+        """Keep the status beside the title while both fit; otherwise move it
+        under the title (narrow cards) so the two never overlap."""
+        state = {"stacked": False}
+
+        def _check(_event=None):
+            try:
+                need = name_label.winfo_reqwidth() + status_label.winfo_reqwidth() + 8
+                narrow = row.winfo_width() > 1 and need > row.winfo_width()
+                if narrow == state["stacked"]:
+                    return
+                state["stacked"] = narrow
+                status_label.pack_forget()
+                if narrow:
+                    status_label.pack(side="top", anchor="w")
+                    name_label.pack_configure(side="top", anchor="w")
+                else:
+                    name_label.pack_configure(side="left", anchor="center")
+                    status_label.pack(side="right")
+            except Exception:
+                pass
+
+        row.bind("<Configure>", _check, add="+")
+        row.after_idle(_check)
+
     def _fill_model_card(self, card, model_key: str, is_selected: bool) -> None:
         info = MODEL_INFO.get(model_key, {})
         cached = self._is_model_cached(model_key)
@@ -212,6 +238,7 @@ class ModelsTab(TabBase):
             top, text=status_text, font=font("xs"), text_color=status_color,
         )
         status_label.pack(side="right")
+        self._stack_when_narrow(top, name_label, status_label)
 
         detail = detail_text(info, hardware_class())
         detail_lbl = ctk.CTkLabel(

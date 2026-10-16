@@ -12,7 +12,10 @@
    "Run setup again" leaves the model alone (EQ-PICK).
 3c. Closing the window (X) during setup = "Skip setup": marked done.
 4. App.run() on first launch opens setup and does NOT preload/download; with
-   setup done it preloads. Fakes for overlay/tray/hotkeys/transcriber/UI —
+   setup done it preloads.
+5. Window fit (EQ-FIT): the dashboard's starting size fits the work area
+   (above the taskbar) at common screen/scaling pairs, never below the
+   minimum, centred in the work area (fake work-area numbers, no window). Fakes for overlay/tray/hotkeys/transcriber/UI —
    no window, no mic, no downloads.
 
 One line per check. Exit 0 on success, 1 on failure:
@@ -126,8 +129,10 @@ def test_fresh_install_model() -> None:
                 use_config(Path(td) / "settings.json")
                 Settings(language="de", model_size="medium", onboarding_done=done).save()
                 ctx = SimpleNamespace(settings=Settings.load(), colors=SimpleNamespace(
-                    bg_primary="#000", fg_secondary="#fff"))
-                onb.ctk = SimpleNamespace(CTkFrame=_Fake, CTkLabel=_Fake)
+                    bg_primary="#000", fg_secondary="#fff",
+                    bg_tertiary="#111", bg_hover="#222"))
+                onb.ctk = SimpleNamespace(CTkFrame=_Fake, CTkLabel=_Fake,
+                                          CTkScrollableFrame=_Fake)
                 for name in ("ghost_button", "primary_button", "secondary_button"):
                     setattr(onb, name, _Fake)
                 OnboardingScreen.show_page = lambda self, i: None
@@ -216,10 +221,43 @@ def test_first_launch() -> None:
     check(not any(kw.get("onboarding") for kw in setups), "setup done: no setup screen")
 
 
+def test_window_fit() -> None:
+    from src.ui.dashboard import MIN_H, MIN_W, WIN_H, WIN_W
+    from src.ui.layout import fit_window
+    zoom = 1.25
+    # (label, screen w, h, Windows scaling, taskbar px, monitor left offset)
+    cases = [("1920x1080 at 150 %", 1920, 1080, 1.5, 72, 0),
+             ("1366x768 at 100 %", 1366, 768, 1.0, 48, 0),
+             ("2560x1440 at 125 %", 2560, 1440, 1.25, 60, 0),
+             ("3840x2160 at 200 %", 3840, 2160, 2.0, 96, 0),
+             ("1920x1080 at 150 %, second monitor", 1920, 1080, 1.5, 72, 2560)]
+    for label, sw, sh, dpi, bar, off in cases:
+        scale = dpi * zoom
+        area = (off, 0, off + sw, sh - bar)
+        cw, ch = round(16 * dpi), round(39 * dpi)
+        w, h, x, y = fit_window(WIN_W, WIN_H, MIN_W, MIN_H, scale, area, cw, ch)
+        outer = (x, y, x + round(w * scale) + cw, y + round(h * scale) + ch)
+        inside = (outer[0] >= area[0] and outer[1] >= area[1]
+                  and outer[2] <= area[2] and outer[3] <= area[3])
+        check(inside and MIN_W <= w <= WIN_W and MIN_H <= h <= WIN_H,
+              f"window fit {label}: {w}x{h} logical, outer {outer} inside {area}")
+        centred = (abs((outer[0] - area[0]) - (area[2] - outer[2])) <= 1
+                   and abs((outer[1] - area[1]) - (area[3] - outer[3])) <= 1)
+        check(centred, f"window fit {label}: centred in the work area")
+    w, h, x, y = fit_window(WIN_W, WIN_H, MIN_W, MIN_H, 1.875, (0, 0, 1920, 1008), 24, 59)
+    check(h < WIN_H, f"laptop case shrinks the height ({h} < {WIN_H})")
+    w, h, x, y = fit_window(WIN_W, WIN_H, MIN_W, MIN_H, 3.0, (0, 0, 1024, 700), 0, 0)
+    check((w, h, x, y) == (MIN_W, MIN_H, 0, 0),
+          "work area smaller than the minimum: minimum size at the top-left")
+    w, h, x, y = fit_window(WIN_W, WIN_H, MIN_W, MIN_H, 1.0, (0, 0, 3000, 2000), 0, 0)
+    check((w, h) == (WIN_W, WIN_H), "big screen: never larger than the default size")
+
+
 def main() -> int:
     for test in (test_settings, test_recommend, test_language_page,
                  test_fresh_install_model,
-                 test_close_during_setup, test_first_launch):
+                 test_close_during_setup, test_first_launch,
+                 test_window_fit):
         try:
             test()
         except Exception as e:

@@ -9,7 +9,7 @@ import customtkinter as ctk
 from ...history import TranscriptHistory
 from ...theme import SPACING, RADIUS_SM, font
 from ..layout import TabBase
-from ..widgets import ghost_button, secondary_button
+from ..widgets import auto_wrap_label, ghost_button, secondary_button
 
 log = logging.getLogger(__name__)
 
@@ -152,6 +152,15 @@ class HistoryTab(TabBase):
         row = ctk.CTkFrame(card, fg_color="transparent")
         row.pack(fill="x", padx=SPACING["md"], pady=SPACING["sm"])
 
+        # Buttons first so a narrow window squeezes the text, never them.
+        right = ctk.CTkFrame(row, fg_color="transparent")
+        right.pack(side="right")
+        ghost_button(right, self._colors, text="Copy", width=52,
+                     command=lambda t=entry.get("text", ""): self._copy(t)).pack(side="left", padx=(0, 4))
+        ghost_button(right, self._colors, text="✕", width=30,
+                     text_color=self._colors.danger,
+                     command=lambda ts=entry.get("ts"): self._delete(ts)).pack(side="left")
+
         left = ctk.CTkFrame(row, fg_color="transparent")
         left.pack(side="left", fill="x", expand=True)
 
@@ -160,17 +169,11 @@ class HistoryTab(TabBase):
         meta = "  ·  ".join(p for p in meta_parts if p)
         ctk.CTkLabel(left, text=meta, font=font("xs"),
                      text_color=self._colors.fg_muted, anchor="w").pack(anchor="w")
-        ctk.CTkLabel(left, text=entry.get("text", ""), font=font("sm"),
-                     text_color=self._colors.fg_primary, anchor="w",
-                     wraplength=420, justify="left").pack(anchor="w")
-
-        right = ctk.CTkFrame(row, fg_color="transparent")
-        right.pack(side="right")
-        ghost_button(right, self._colors, text="Copy", width=52,
-                     command=lambda t=entry.get("text", ""): self._copy(t)).pack(side="left", padx=(0, 4))
-        ghost_button(right, self._colors, text="✕", width=30,
-                     text_color=self._colors.danger,
-                     command=lambda ts=entry.get("ts"): self._delete(ts)).pack(side="left")
+        text_lbl = ctk.CTkLabel(left, text=entry.get("text", ""), font=font("sm"),
+                                text_color=self._colors.fg_primary, anchor="w",
+                                wraplength=420, justify="left")
+        text_lbl.pack(anchor="w", fill="x")
+        auto_wrap_label(text_lbl, left, padding=4)
 
     # -- Actions -------------------------------------------------------------------
 

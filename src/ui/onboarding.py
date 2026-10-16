@@ -15,7 +15,8 @@ from ..modelpick import recommend_model
 from ..settings import SUPPORTED_LANGUAGES, WHISPER_MODELS
 from ..theme import SPACING, RADIUS_SM, font
 from .layout import TabBase
-from .widgets import primary_button, secondary_button, ghost_button
+from .widgets import (primary_button, secondary_button, ghost_button,
+                      auto_wrap_label)
 
 log = logging.getLogger(__name__)
 
@@ -70,11 +71,23 @@ class OnboardingScreen(TabBase):
 
         self.frame = ctk.CTkFrame(parent, fg_color=self._colors.bg_primary,
                                   corner_radius=0)
-        self._body = ctk.CTkFrame(self.frame, fg_color="transparent")
-        self._body.pack(side="top", fill="both", expand=True,
-                        padx=SPACING["2xl"], pady=(SPACING["xl"], 0))
+        # The nav row is packed BEFORE the body so it keeps its space at any
+        # window height; the body scrolls when a page doesn't fit.
         nav = ctk.CTkFrame(self.frame, fg_color="transparent")
         nav.pack(side="bottom", fill="x", padx=SPACING["2xl"], pady=SPACING["lg"])
+        self._scroll = ctk.CTkScrollableFrame(
+            self.frame, fg_color="transparent", corner_radius=0,
+            scrollbar_button_color=self._colors.bg_tertiary,
+            scrollbar_button_hover_color=self._colors.bg_hover)
+        self._scroll.pack(side="top", fill="both", expand=True,
+                          padx=(SPACING["2xl"], 0), pady=(SPACING["xl"], 0))
+        self._body = ctk.CTkFrame(self._scroll, fg_color="transparent")
+        self._body.pack(fill="both", expand=True, padx=(0, SPACING["2xl"]))
+        try:  # CTkScrollableFrame keeps its canvas private
+            self._scroll._parent_canvas.bind("<Configure>", self._fit_scroll, add="+")
+        except Exception:
+            pass
+        self._body.bind("<Configure>", self._fit_scroll, add="+")
         self._skip_btn = ghost_button(nav, self._colors, text="Skip setup",
                                       width=110, command=self.skip)
         self._skip_btn.pack(side="left")
@@ -106,6 +119,27 @@ class OnboardingScreen(TabBase):
         self._set_primary(self._next_btn, True)
         self._step_label.configure(text=f"Step {self._page + 1} of {len(PAGES)}")
         getattr(self, f"_build_{self.page_name}")()
+        try:
+            self._scroll._parent_canvas.yview_moveto(0)
+        except Exception:
+            pass
+        self.frame.after_idle(self._fit_scroll)
+
+    def _fit_scroll(self, _event=None) -> None:
+        """Show the scrollbar (and allow scrolling) only when the page is
+        taller than the space above the nav row."""
+        try:
+            canvas = self._scroll._parent_canvas
+            bar = self._scroll._scrollbar
+            fits = self._body.winfo_reqheight() <= canvas.winfo_height()
+            if fits:
+                canvas.yview_moveto(0)
+                if bar.winfo_ismapped():
+                    bar.grid_remove()
+            elif not bar.winfo_ismapped():
+                bar.grid()
+        except Exception:
+            pass
 
     def next(self) -> None:
         if self._page == len(PAGES) - 1:
@@ -160,8 +194,9 @@ class OnboardingScreen(TabBase):
     def _text(self, text: str, parent=None, color=None) -> ctk.CTkLabel:
         lbl = ctk.CTkLabel(parent or self._body, text=text, font=font("lg"),
                            text_color=color or self._colors.fg_primary,
-                           anchor="w", justify="left", wraplength=620)
+                           anchor="w", justify="left")
         lbl.pack(fill="x", pady=(0, SPACING["sm"]))
+        auto_wrap_label(lbl, parent or self._body, padding=4)
         return lbl
 
     # -- pages ------------------------------------------------------------------------

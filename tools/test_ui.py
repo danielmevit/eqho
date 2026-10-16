@@ -515,22 +515,22 @@ class UITestRunner:
                 settings_tab._on_zoom_changed(orig_zoom)
                 self._pump(count=8, step_delay=0.03)
 
-    def _check_cutoff(self, tab_name: str, where: str) -> None:
+    def _check_cutoff(self, tab_name: str, where: str, root: Any = None) -> None:
         """Fail on any visible CTkLabel whose text does not fit the width it got.
 
         A freshly built tab can still be mid-layout, so offenders are only
         reported if they persist after the event loop has settled.
         """
         for attempt in range(3):
-            found = self._find_cutoff(tab_name, where, report=(attempt == 2))
+            found = self._find_cutoff(tab_name, where, report=(attempt == 2), root=root)
             if not found:
                 return
             self._pump(count=20, step_delay=0.05)
 
-    def _find_cutoff(self, tab_name: str, where: str, report: bool) -> int:
+    def _find_cutoff(self, tab_name: str, where: str, report: bool, root: Any = None) -> int:
         import customtkinter as ctk
 
-        frame = self.dash._tab_frames.get(tab_name)
+        frame = root if root is not None else self.dash._tab_frames.get(tab_name)
         if not frame:
             return 0
         self._pump(count=6, step_delay=0.02)
@@ -578,6 +578,7 @@ class UITestRunner:
         try:
             self._setup_isolation()
             self._build_dashboard()
+            self._check_fits_screen("start size")
 
             # The 4 primary dashboard tabs
             tabs_to_test = ["general", "models", "history", "settings"]
@@ -633,21 +634,29 @@ class UITestRunner:
                 if tab_name == "settings":
                     self._exercise_rebuilding_settings()
 
-            # Re-check every tab at a narrower window to prove wrapping follows resizes
+            # Re-check every tab at the MINIMUM window width (logical px, so
+            # the same layout is tested at every Windows scaling)
+            self._narrow_pass("zoom as saved")
+            self._walk_onboarding()
+
+            # Second pass at Eqho zoom 1.5: on a 125 % Windows PC that is the
+            # 14" laptop's 1.875x total (1920x1080 at 150 %, zoom 1.25)
             print(f"\n==================================================")
-            print("Cut-off check at a narrower window (1100 px)...")
+            print("Second pass at dashboard zoom 1.5...")
             print(f"==================================================")
-            # geometry() takes logical px; the walker reports physical px
-            scale = self.dash._get_window_scaling()
-            self.dash.geometry(f"{int(1100 / scale)}x{int(self.dash.winfo_height() / scale)}")
+            orig_zoom = self.settings.ui_scale
+            self.dash.set_ui_scale(1.5)
             self._pump(count=10, step_delay=0.03)
+            self._check_fits_screen("zoom 1.5, start size")
             for tab_name in tabs_to_test:
                 self.dash._show_tab(tab_name)
                 self._pump(count=6, step_delay=0.03)
-                self._check_cutoff(tab_name, f"{self.dash.winfo_width()}px")
-                if tab_name in ("general", "models"):
-                    self._capture_tab_screenshot(f"{tab_name}-narrow")
-            self._walk_onboarding()
+                self._check_cutoff(tab_name, f"zoom 1.5, {self.dash.winfo_width()}px")
+                self._capture_tab_screenshot(f"{tab_name}-zoom150")
+            self._narrow_pass("zoom 1.5")
+            self._walk_onboarding(tag="zoom150")
+            self.dash.set_ui_scale(orig_zoom)
+            self._pump(count=10, step_delay=0.03)
 
             # Test top bar actions
             print(f"\n==================================================")
@@ -671,7 +680,67 @@ class UITestRunner:
 
         return self._print_summary()
 
-    def _walk_onboarding(self) -> None:
+    def _narrow_pass(self, label: str) -> None:
+        """Every tab at the minimum window width (logical px)."""
+        from src.ui.dashboard import MIN_W
+        print(f"\n==================================================")
+        print(f"Cut-off check at the minimum width ({MIN_W} logical px, {label})...")
+        print(f"==================================================")
+        scale = self.dash._get_window_scaling()
+        self.dash.geometry(f"{MIN_W}x{round(self.dash.winfo_height() / scale)}")
+        self._pump(count=10, step_delay=0.03)
+        for tab_name in ("general", "models", "history", "settings"):
+            self.dash._show_tab(tab_name)
+            self._pump(count=6, step_delay=0.03)
+            self._check_cutoff(tab_name, f"{label}, {self.dash.winfo_width()}px")
+            self._capture_tab_screenshot(f"{tab_name}-narrow-{label.replace(' ', '')}")
+
+    def _work_area(self) -> Tuple[int, int, int, int]:
+        from src import oskit
+        cx = self.dash.winfo_rootx() + self.dash.winfo_width() // 2
+        cy = self.dash.winfo_rooty() + self.dash.winfo_height() // 2
+        area = oskit.get().work_area((cx, cy))
+        return area or (0, 0, self.dash.winfo_screenwidth(), self.dash.winfo_screenheight())
+
+    def _check_fits_screen(self, where: str, buttons: Tuple[Any, ...] = ()) -> None:
+        """The window's outer rectangle (title bar + borders included) lies
+        inside the monitor work area, and so does every given button."""
+        self._pump(count=6, step_delay=0.02)
+        left, top, right, bottom = self._work_area()
+        d = self.dash
+        border = max(0, d.winfo_rootx() - d.winfo_x())
+        outer = (d.winfo_x(), d.winfo_y(),
+                 d.winfo_rootx() + d.winfo_width() + border,
+                 d.winfo_rooty() + d.winfo_height() + border)
+        # Windows 10/11 count an invisible ~7 px resize border in the frame.
+        slack = 8
+        ok = (outer[0] >= left - slack and outer[1] >= top - slack
+              and outer[2] <= right + slack and outer[3] <= bottom + slack)
+        msg = f"window {outer} vs work area {(left, top, right, bottom)}"
+        if ok:
+            print(f"  [fits] {where}: {msg}")
+        else:
+            print(f"    [OFF-SCREEN] {where}: {msg}")
+            self.errors.append(f"Window does not fit the screen ({where}): {msg}")
+        for b in buttons:
+            try:
+                if not b.winfo_ismapped():
+                    self.errors.append(f"Setup button {b.cget('text')!r} not shown ({where})")
+                    continue
+                bx, by = b.winfo_rootx(), b.winfo_rooty()
+                br, bb = bx + b.winfo_width(), by + b.winfo_height()
+                inside = (bx >= max(left, d.winfo_rootx()) and by >= max(top, d.winfo_rooty())
+                          and br <= min(right, d.winfo_rootx() + d.winfo_width())
+                          and bb <= min(bottom, d.winfo_rooty() + d.winfo_height()))
+                if not inside:
+                    m = (f"Setup button {b.cget('text')!r} outside the visible area ({where}): "
+                         f"{(bx, by, br, bb)}")
+                    print(f"    [OFF-SCREEN] {m}")
+                    self.errors.append(m)
+            except Exception as e:
+                self.errors.append(f"Setup button check failed ({where}): {e}")
+
+    def _walk_onboarding(self, tag: str = "") -> None:
         """Show the first-time setup screen and walk every page. No mic
         stream (the level meter is fed a fake value) and no download (the
         modelstore entry is marked done instantly)."""
@@ -702,11 +771,15 @@ class UITestRunner:
             if screen.page_name != page:
                 self.errors.append(f"Setup: expected page '{page}', got '{screen.page_name}'")
                 return
-            self._capture_tab_screenshot(f"setup-{n}-{page}")
+            suffix = f"-{tag}" if tag else ""
+            self._capture_tab_screenshot(f"setup-{n}-{page}{suffix}")
+            where = f"setup '{page}'{(' ' + tag) if tag else ''}, {self.dash.winfo_width()}px"
+            self._check_cutoff("onboarding", where, root=screen.frame)
+            self._check_fits_screen(where, (screen._skip_btn, screen._back_btn, screen._next_btn))
             if page == "model" and hasattr(screen, "_dl_btn"):
                 screen._dl_btn.invoke()
                 self._pump(count=30, step_delay=0.03)
-                self._capture_tab_screenshot(f"setup-{n}-{page}-done")
+                self._capture_tab_screenshot(f"setup-{n}-{page}-done{suffix}")
             if page == "sound":
                 screen._sound_btns["mute"].invoke()
                 screen._sound_btns["off"].invoke()

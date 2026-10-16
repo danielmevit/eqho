@@ -1,0 +1,1 @@
+- The dashboard and first-time setup now fit the screen above the taskbar at any Windows scaling and zoom; setup's Skip / Back / Next always stay visible, and texts wrap instead of being cut at narrow sizes (EQ-FIT).

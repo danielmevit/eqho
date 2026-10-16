@@ -54,9 +54,10 @@ class OsKit:
         pass
 
     # -- Screen geometry -----------------------------------------------------------
-    def work_area(self):
+    def work_area(self, point=None):
         """(left, top, right, bottom) of the desktop excluding taskbar/dock,
-        or None when unknown (callers fall back to the full screen)."""
+        or None when unknown (callers fall back to the full screen). With
+        `point` (x, y): the work area of the monitor showing that point."""
         return None
 
     # -- Theme detection ---------------------------------------------------------

@@ -20,7 +20,9 @@ class AboutTab(TabBase):
 
         cols = self._get_col_count()
 
-        if cols >= 2:
+        # Side by side only in the wide layout: at two columns the details
+        # card is too narrow for its label column plus the values.
+        if cols >= 3:
             grid = self._make_grid_container(tab)
 
             col0 = ctk.CTkFrame(grid, fg_color="transparent")
@@ -136,11 +138,13 @@ class AboutTab(TabBase):
             "pycaw — Windows audio control",
         ]
         for t in techs:
-            ctk.CTkLabel(
+            lbl = ctk.CTkLabel(
                 inner, text=f"·  {t}",
                 font=font("xs"),
                 text_color=self._colors.fg_secondary, anchor="w",
-            ).pack(anchor="w", pady=1)
+            )
+            lbl.pack(anchor="w", fill="x", pady=1)
+            auto_wrap_label(lbl, inner, padding=4)
 
     @staticmethod
     def _open_url(url: str) -> None:

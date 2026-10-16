@@ -20,6 +20,7 @@ from ..theme import (
 )
 from .context import DashboardContext
 from .icons import icon, icon_font
+from .layout import fit_window
 from .tabs import TAB_CLASSES
 from .widgets import ghost_button, primary_button
 from .win32 import apply_dark_title_bar
@@ -28,6 +29,7 @@ log = logging.getLogger(__name__)
 
 # Window dimensions (wider default since the top bar now hosts nav + status)
 WIN_W, WIN_H = 940, 560
+MIN_W, MIN_H = 600, 420
 TOPBAR_H = 64
 # Responsive breakpoints (content area width — full window now, no sidebar)
 BP_2COL = 560   # 2 columns when content >= 560px
@@ -264,7 +266,7 @@ class Dashboard(ctk.CTkToplevel):
 
         self._refresh_topbar_status()  # title = "Eqho Dashboard — <global settings>"
         self.geometry(f"{WIN_W}x{WIN_H}")
-        self.minsize(600, 420)
+        self.minsize(MIN_W, MIN_H)
         self.resizable(True, True)
         self.attributes("-topmost", False)
 
@@ -281,13 +283,40 @@ class Dashboard(ctk.CTkToplevel):
         self.configure(fg_color=self._colors.bg_primary)
         apply_dark_title_bar(self, mode == "dark")
 
-        # Center on screen (geometry sizes get multiplied by window scaling)
+        self._fit_to_screen()
+
+    def _fit_to_screen(self) -> None:
+        """Size the window to fit the work area (above the taskbar) of the
+        monitor it is on, at any Windows scaling and Eqho zoom, and centre it
+        there. Sizes passed to geometry() get multiplied by window scaling."""
         self.update_idletasks()
-        sw = self.winfo_screenwidth()
-        sh = self.winfo_screenheight()
-        x = max(0, (sw - int(WIN_W * self._ui_scale)) // 2)
-        y = max(0, (sh - int(WIN_H * self._ui_scale)) // 2)
-        self.geometry(f"{WIN_W}x{WIN_H}+{x}+{y}")
+        try:
+            scale = float(self._get_window_scaling())
+        except Exception:
+            scale = self._ui_scale
+        dpi = max(1.0, scale / self._ui_scale)
+        # Title bar + borders: measured once Windows has drawn the frame,
+        # otherwise a safe estimate (31 px title + 8 px borders at 100 %).
+        chrome_w = max(0, self.winfo_rootx() - self.winfo_x()) * 2
+        chrome_h = max(0, self.winfo_rooty() - self.winfo_y()) + chrome_w // 2
+        if chrome_h <= chrome_w // 2:
+            chrome_w, chrome_h = round(16 * dpi), round(39 * dpi)
+        cx = self.winfo_rootx() + self.winfo_width() // 2
+        cy = self.winfo_rooty() + self.winfo_height() // 2
+        area = None
+        try:
+            from .. import oskit
+            area = oskit.get().work_area((cx, cy))
+        except Exception:
+            log.debug("work_area failed", exc_info=True)
+        if not area:
+            # Other OSes: the screen minus a margin for panels/docks
+            margin = round(48 * dpi)
+            area = (0, margin, self.winfo_screenwidth(),
+                    self.winfo_screenheight() - margin)
+        w, h, x, y = fit_window(WIN_W, WIN_H, MIN_W, MIN_H, scale, area,
+                                chrome_w, chrome_h)
+        self.geometry(f"{w}x{h}+{x}+{y}")
 
     def _set_window_icon(self) -> None:
         """Set the title-bar icon, theme-matched.
@@ -604,6 +633,7 @@ class Dashboard(ctk.CTkToplevel):
         ctk.set_widget_scaling(scale)
         ctk.set_window_scaling(scale)
         self._rebuild_ui()
+        self._fit_to_screen()
 
     def _on_content_resize(self, event=None) -> None:
         """Rebuild the current tab if column count changed — debounced, so a

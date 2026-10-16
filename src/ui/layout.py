@@ -17,7 +17,7 @@ from ..theme import (
     MODEL_INFO, SPACING, RADIUS_SM, RADIUS_LG, font,
 )
 from .context import DashboardContext
-from .widgets import ThemedDropdown
+from .widgets import ThemedDropdown, auto_wrap_label
 
 
 
@@ -28,6 +28,29 @@ def status_summary(settings) -> str:
     hotkey = "+".join(p.strip().title() for p in settings.hotkey.split("+"))
     lang = settings.language.upper()
     return f"{model_name} · {hotkey} · {lang} · {settings.hotkey_mode}"
+
+
+def fit_window(want_w: int, want_h: int, min_w: int, min_h: int,
+               scale: float, area: tuple, chrome_w: int = 0,
+               chrome_h: int = 0) -> tuple:
+    """Starting size and position that fit the work area (pure maths).
+
+    want/min sizes are logical px; `scale` is the total window scaling
+    (Windows scaling x Eqho zoom); `area` = (left, top, right, bottom) of the
+    work area and chrome_w/chrome_h = title bar + borders, all physical px.
+    Returns (w, h, x, y): logical client size (shrunk to fit, never below
+    the minimum) and the physical top-left of the outer frame, centred in
+    the work area (clamped to its top-left when even the minimum is bigger).
+    """
+    left, top, right, bottom = area
+    area_w, area_h = right - left, bottom - top
+    w = max(min_w, min(want_w, int((area_w - chrome_w) / scale)))
+    h = max(min_h, min(want_h, int((area_h - chrome_h) / scale)))
+    outer_w = round(w * scale) + chrome_w
+    outer_h = round(h * scale) + chrome_h
+    x = left + max(0, (area_w - outer_w) // 2)
+    y = top + max(0, (area_h - outer_h) // 2)
+    return w, h, x, y
 
 
 class TabBase:
@@ -183,20 +206,24 @@ class TabBase:
         row = ctk.CTkFrame(parent, fg_color="transparent")
         row.pack(fill="x", padx=SPACING["md"], pady=SPACING["sm"])
 
-        ctk.CTkLabel(
+        title = ctk.CTkLabel(
             row, text=label,
             font=font("base"),
             text_color=self._colors.fg_primary,
             anchor="w",
-        ).pack(anchor="w", fill="x")
+        )
+        title.pack(anchor="w", fill="x")
+        auto_wrap_label(title, row, padding=4)
 
         if description:
-            ctk.CTkLabel(
+            desc = ctk.CTkLabel(
                 row, text=description,
                 font=font("xs"),
                 text_color=self._colors.fg_muted,
                 anchor="w",
-            ).pack(anchor="w", fill="x")
+            )
+            desc.pack(anchor="w", fill="x")
+            auto_wrap_label(desc, row, padding=4)
 
         control = ctk.CTkFrame(row, fg_color="transparent")
         control.pack(anchor="w", pady=(3, 0))

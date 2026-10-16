@@ -162,10 +162,26 @@ class WindowsOsKit(OsKit):
 
     # -- screen geometry ------------------------------------------------------------
 
-    def work_area(self):
+    def work_area(self, point=None):
         try:
             import ctypes
             from ctypes import byref, wintypes
+            if point is not None:
+                class MONITORINFO(ctypes.Structure):
+                    _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
+                                ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
+                user32 = ctypes.windll.user32
+                user32.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
+                user32.MonitorFromPoint.restype = wintypes.HMONITOR
+                user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.c_void_p]
+                MONITOR_DEFAULTTONEAREST = 2
+                mon = user32.MonitorFromPoint(
+                    wintypes.POINT(int(point[0]), int(point[1])), MONITOR_DEFAULTTONEAREST)
+                info = MONITORINFO()
+                info.cbSize = ctypes.sizeof(MONITORINFO)
+                if mon and user32.GetMonitorInfoW(mon, byref(info)):
+                    r = info.rcWork
+                    return (r.left, r.top, r.right, r.bottom)
             rect = wintypes.RECT()
             SPI_GETWORKAREA = 0x0030
             if ctypes.windll.user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, byref(rect), 0):
