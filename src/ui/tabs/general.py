@@ -210,7 +210,7 @@ class GeneralTab(TabBase):
             font=font("base"), text_color=self._colors.fg_primary, anchor="w",
         ).pack(anchor="w")
         help_lbl = ctk.CTkLabel(
-            row, text="Names and jargon Whisper should expect (used as its prompt)",
+            row, text="Names and special words Eqho should know",
             font=font("xs"), text_color=self._colors.fg_muted, anchor="w",
         )
         help_lbl.pack(anchor="w", fill="x")
