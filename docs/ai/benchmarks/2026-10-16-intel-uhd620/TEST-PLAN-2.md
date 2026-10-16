@@ -35,7 +35,8 @@ $SRC = (Get-ChildItem "$KIT\src2" -Directory | Select-Object -First 1).FullName
 cd $SRC; & "$KIT\venv\Scripts\python.exe" run.py --smoke
 ```
 Record the commit (GitHub stores it as the zip comment):
-`Add-Type -A System.IO.Compression.FileSystem; ([IO.Compression.ZipFile]::OpenRead("$KIT\eqho-dev.zip")).Comment`.
+`& "$KIT\venv\Scripts\python.exe" -c "import zipfile,sys; print(zipfile.ZipFile(sys.argv[1]).comment.decode())" "$KIT\eqho-dev.zip"`
+(Windows PowerShell 5.1's ZipArchive has no Comment property).
 Smoke must print `"ok": true`.
 
 ### 2. What does Eqho pick on this laptop?

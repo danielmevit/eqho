@@ -88,7 +88,7 @@ Anything beyond English needs a **multilingual** model (`large-v3-turbo` or `med
 
 **Does it cost anything?** No. Free, open source, no premium tier.
 
-**Does it work on AMD or Intel GPUs?** Yes — on Windows. The downloads include a Vulkan engine (whisper.cpp) for AMD and Intel graphics cards, alongside faster-whisper for NVIDIA. Built-in laptop graphics (like Intel UHD) were slower than the processor in our tests, so Eqho uses the processor there. Without a graphics card, a sentence takes about 15–20 seconds with the default model on an older laptop (Intel Core i7-8665U); a smaller model is much quicker. On Linux and macOS, AMD and Intel PCs run on the processor (CPU).
+**Does it work on AMD or Intel GPUs?** Yes — on Windows. The downloads include a Vulkan engine (whisper.cpp) for AMD and Intel graphics cards, alongside faster-whisper for NVIDIA. Built-in laptop graphics (like Intel UHD) were slower than the processor in our tests, so Eqho uses the processor there. Without a graphics card, Eqho picks a small, fast speech model: on an older 4-core laptop your words appear about 3 seconds after you stop (the big model needs about 14). Laptops run up to twice as slow on battery, so plug in for full speed. On Linux and macOS, AMD and Intel PCs run on the processor (CPU).
 
 **How accurate is it?** Whisper-class accuracy — state of the art for open speech recognition. Pick a bigger model for tougher audio.
 

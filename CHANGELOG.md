@@ -18,8 +18,9 @@ Planned as 0.8.10: first launch, and speed on every PC.
   says exactly that instead of a technical error.
 - **The right speech model for your PC.** A new install picks a model that is fast on the computer it runs on: with
   a suitable graphics card the accurate large model, without one a small fast model (Distil Small EN for English,
-  Small for other languages). On an 8-core processor that is about 2.5 seconds per sentence instead of about 10, with
-  slightly more mistakes. The Models tab marks the model recommended for your PC and says, in one line at the top,
+  Small for other languages). On an older 4-core laptop your words appear about 3 seconds after you stop instead of
+  about 14 (about 2.5 instead of 10 on an 8-core processor), with slightly more mistakes. Laptops are up to twice as
+  slow on battery — plug in for full speed. The Models tab marks the model recommended for your PC and says, in one line at the top,
   whether models run on your graphics card or on the processor.
 - **A tip when your model is slow.** If the model you use takes more than 6 seconds per sentence and a faster one
   suits your PC better, Eqho tells you once (per model) where to switch. It never changes your model by itself.

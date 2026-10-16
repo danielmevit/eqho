@@ -88,7 +88,7 @@ system (docs/ai/TESTING.md: ASR benchmark, end-to-end dictation test, UI walker)
 - [x] **First-launch onboarding** (EQ-ONBOARD, on `next`; screenshots review pending) (must, same as Vecto/Laydown): welcome → **which language do you speak?** (picks the
       model) → microphone test with a level meter → model download with consent, size and progress → audio lowering
       on/off (consent) → try it ("press Alt+Q and say something") → done. Skippable, reopen from the dashboard.
-- [x] **Automatic model choice by hardware** (EQ-PICK + EQ-SLOWHINT tip; laptop numbers still to confirm) (moved up from 0.8.11): NVIDIA → distil-large-v3 on CUDA; graphics
+- [x] **Automatic model choice by hardware** (EQ-PICK + EQ-SLOWHINT tip; confirmed on the Intel laptop 2026-10-16: distil-small.en types ~2.9 s after stop vs 13.6 s) (moved up from 0.8.11): NVIDIA → distil-large-v3 on CUDA; graphics
       card → whisper.cpp; processor only → a smaller fast model. Shown and changeable in settings. Measured
       2026-10-16: distil-large-v3 on the processor takes 11–14 s per 10 s sentence (Ryzen 7 5800H) and 14–19 s per
       sentence on an Intel i7-8665U laptop — too slow. Benchmark small/base/distil-small (speed + accuracy) on both
