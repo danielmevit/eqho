@@ -18,6 +18,9 @@ Everything uses recorded public audio files (LibriSpeech, CC BY 4.0). Nothing is
 - Keep the laptop on AC power and awake (as in run 1).
 - If a step fails, write down the exact error, try one sensible fix, then move on.
 - One short line to Daniel per step.
+- **Privacy (results are published):** never record the computer name, the Windows user name, IP or network
+  details, serial numbers / service tag, or product keys. Write paths as `KIT\...`, not `C:\Users\...`. Hardware
+  model, Windows version and driver version are fine.
 
 ## Steps
 
