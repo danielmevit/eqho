@@ -13,6 +13,8 @@ log = logging.getLogger(__name__)
 _FR_PRIVATE = 0x10
 _RUN_KEY = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
 _THEME_KEY = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+_MIC_CONSENT_KEY = (r"SOFTWARE\Microsoft\Windows\CurrentVersion"
+                    r"\CapabilityAccessManager\ConsentStore\microphone")
 
 
 class WindowsOsKit(OsKit):
@@ -171,6 +173,44 @@ class WindowsOsKit(OsKit):
 
     def taskbar_theme(self) -> str:
         return self._theme_value("SystemUsesLightTheme")
+
+    # -- microphone privacy (read-only registry check) ----------------------------
+
+    def _consent_value(self, root, subkey: str) -> Optional[str]:
+        """Read a ConsentStore key's 'Value' ('Allow'/'Deny'), or None when
+        the key or value can't be read. Never writes."""
+        try:
+            import winreg
+            with winreg.OpenKey(root, subkey, 0, winreg.KEY_READ) as key:
+                value, _ = winreg.QueryValueEx(key, "Value")
+                return str(value)
+        except Exception:
+            return None
+
+    def mic_access_blocked(self) -> Optional[bool]:
+        """The Windows microphone privacy switch. 'Deny' for the user, for
+        desktop apps (NonPackaged) or machine-wide means apps can't open
+        the mic; user AND desktop apps both readable 'Allow' means fine;
+        anything else (unreadable, partial) is unknown."""
+        import winreg
+        user = self._consent_value(winreg.HKEY_CURRENT_USER, _MIC_CONSENT_KEY)
+        non_packaged = self._consent_value(
+            winreg.HKEY_CURRENT_USER, _MIC_CONSENT_KEY + r"\NonPackaged")
+        machine = self._consent_value(winreg.HKEY_LOCAL_MACHINE, _MIC_CONSENT_KEY)
+        if "Deny" in (user, non_packaged, machine):
+            return True
+        if user == "Allow" and non_packaged == "Allow":
+            return False
+        return None
+
+    def open_mic_privacy_settings(self) -> bool:
+        try:
+            import os
+            os.startfile("ms-settings:privacy-microphone")
+            return True
+        except Exception as e:
+            log.debug("Could not open microphone privacy settings: %s", e)
+            return False
 
     # -- misc ------------------------------------------------------------------------------
 

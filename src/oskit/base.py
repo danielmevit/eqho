@@ -73,6 +73,18 @@ class OsKit:
         """The modifier key used for pasting text ('ctrl' or 'cmd')."""
         return "ctrl"
 
+    # -- Microphone privacy ------------------------------------------------------
+
+    def mic_access_blocked(self) -> Optional[bool]:
+        """True when the OS blocks microphone access for apps (e.g. the
+        Windows privacy switch), False when clearly allowed, None when
+        unknown. Read-only — never changes any setting."""
+        return None
+
+    def open_mic_privacy_settings(self) -> bool:
+        """Open the OS microphone privacy settings page. True on success."""
+        return False
+
     # -- Misc OS behaviors ---------------------------------------------------------
     def disable_os_mic_ducking(self) -> None:
         """Stop the OS from auto-ducking other audio while the mic is open."""

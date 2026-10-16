@@ -65,6 +65,7 @@ class App:
         self._dictation_start: float = 0.0
         self._last_injected: str = ""  # for the "delete that" voice command
         self._settings_apply_lock = threading.Lock()  # serialize settings applies
+        self._mic_settings_opened = False  # privacy page opened once per run
 
         self.transcriber.set_callbacks(
             on_partial=self._on_partial,
@@ -139,6 +140,29 @@ class App:
         self._teardown_session(session, error=reason)
 
     # -- Activation control ----------------------------------------------------
+
+    def _mic_unavailable_message(self) -> str:
+        """Plain-words tray message for a mic that can't open (owner rule:
+        no error codes). When Windows is blocking the microphone, also
+        opens the privacy settings page — once per run, not on every
+        hotkey press. The technical error stays in the log only."""
+        kit = oskit.get()
+        blocked = None
+        try:
+            blocked = kit.mic_access_blocked()
+        except Exception:
+            log.debug("Mic privacy check failed", exc_info=True)
+        if blocked:
+            if not self._mic_settings_opened:
+                self._mic_settings_opened = True
+                if kit.open_mic_privacy_settings():
+                    log.info("Opened the Windows microphone privacy settings page.")
+                else:
+                    log.debug("Could not open the microphone privacy settings page.")
+            return ("Windows is blocking the microphone. Turn on microphone "
+                    "access for desktop apps — the settings page is opening now.")
+        return ("No microphone found. Plug one in, or choose another one in "
+                "Eqho → General → Microphone.")
 
     def _teardown_session(self, session: Optional[int],
                           error: Optional[str] = None) -> None:
@@ -220,8 +244,8 @@ class App:
             mic_error = self.transcriber.consume_mic_error()
             if mic_error:
                 if not self.transcriber.is_running():
-                    self._teardown_session(
-                        None, error=f"No microphone available: {mic_error}")
+                    log.error("No microphone available: %s", mic_error)
+                    self._teardown_session(None, error=self._mic_unavailable_message())
                 else:
                     self.tray.notify("Selected mic unavailable, using default microphone.")
 
@@ -343,6 +367,15 @@ class App:
         except Exception as e:
             log.error("Startup dashboard open failed: %s", e)
 
+    def open_dashboard(self) -> None:
+        """Open the dashboard — the same call the tray menu makes; also the
+        action when a second launch asks this instance to show itself."""
+        try:
+            from .ui import open_dashboard
+            open_dashboard(self.settings, self._on_settings_changed)
+        except Exception as e:
+            log.error("Opening the dashboard failed: %s", e)
+
     def _model_is_cached(self) -> bool:
         """Check if the current model has already been downloaded."""
         from .settings import is_model_cached
@@ -408,9 +441,10 @@ def _suppress_tk_variable_del() -> None:
 
 
 _single_instance_socket = None
+SINGLE_INSTANCE_PORT = 48317
 
 
-def _acquire_single_instance() -> bool:
+def _acquire_single_instance(port: int = SINGLE_INSTANCE_PORT) -> bool:
     """One Eqho per machine. Two instances both hook the hotkey, fight over
     the mic, and stack models into VRAM until CUDA loads hang (the model-
     switch 'freeze'). A bound localhost port is the cross-platform lock."""
@@ -418,9 +452,56 @@ def _acquire_single_instance() -> bool:
     import socket
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.bind(("127.0.0.1", 48317))
+        s.bind(("127.0.0.1", port))
         s.listen(1)
         _single_instance_socket = s  # held for the process lifetime
+        return True
+    except OSError:
+        return False
+
+
+def _start_instance_listener(sock, on_show) -> None:
+    """Serve the single-instance lock socket on a daemon thread. A second
+    launch sends 'show' to ask the running Eqho to open its dashboard;
+    anything else is ignored. Nothing in this thread may ever crash the
+    app — errors are logged at debug level."""
+    def _serve():
+        while True:
+            try:
+                conn, _addr = sock.accept()
+            except OSError:
+                return  # socket closed (shutdown)
+            try:
+                conn.settimeout(2.0)
+                data = conn.recv(64)
+                if data == b"show":
+                    try:
+                        on_show()
+                    except Exception:
+                        log.debug("Single-instance 'show' callback failed",
+                                  exc_info=True)
+                else:
+                    log.debug("Single-instance: ignored message %r", data)
+            except Exception:
+                log.debug("Single-instance connection error", exc_info=True)
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    threading.Thread(target=_serve, daemon=True, name="single-instance").start()
+
+
+def _request_show(port: int = SINGLE_INSTANCE_PORT,
+                  timeout: float = 2.0) -> bool:
+    """Second instance: ask the running Eqho to show its dashboard. True
+    when the message was delivered; False when nobody answers (old or
+    frozen instance) within `timeout` seconds."""
+    import socket
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=timeout) as s:
+            s.sendall(b"show")
         return True
     except OSError:
         return False
@@ -444,15 +525,21 @@ def _log_unhandled_exceptions() -> None:
 
 def main() -> None:
     if not _acquire_single_instance():
-        log.error("Eqho is already running — this instance exits. "
-                  "Check the system tray (and Task Manager for frozen instances).")
+        # Eqho is already running: ask it to show itself, then exit quietly.
+        if _request_show():
+            log.info("Eqho is already running — asked it to open its window; "
+                     "this instance exits.")
+            return
+        log.error("Eqho is already running and did not answer — this instance "
+                  "exits. Check the system tray (and Task Manager for frozen "
+                  "instances).")
         try:
             import tkinter as tk
             from tkinter import messagebox
             root = tk.Tk()
             root.withdraw()
             messagebox.showinfo(
-                "Eqho", "Eqho is already running — check the system tray.")
+                "Eqho", "Eqho is already running. Look for its icon near the clock.")
             root.destroy()
         except Exception:
             pass
@@ -464,6 +551,9 @@ def main() -> None:
     _suppress_tk_variable_del()
 
     app = App()
+    # A second launch sends 'show' on the lock socket — open the dashboard.
+    if _single_instance_socket is not None:
+        _start_instance_listener(_single_instance_socket, app.open_dashboard)
     try:
         app.run()
     except KeyboardInterrupt:
