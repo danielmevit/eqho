@@ -463,33 +463,46 @@ def _acquire_single_instance(port: int = SINGLE_INSTANCE_PORT) -> bool:
 def _start_instance_listener(sock, on_show) -> None:
     """Serve the single-instance lock socket on a daemon thread. A second
     launch sends 'show' to ask the running Eqho to open its dashboard;
-    anything else is ignored. Nothing in this thread may ever crash the
-    app — errors are logged at debug level."""
+    anything else is ignored. Each connection is handled on its own short-
+    lived thread (at most 4 at once, 0.5 s to speak), so a silent local
+    client can't hold up a real second launch. Nothing here may ever crash
+    the app — errors are logged at debug level."""
+    slots = threading.BoundedSemaphore(4)
+
+    def _handle(conn):
+        try:
+            conn.settimeout(0.5)  # a real second launch sends at once
+            data = conn.recv(64)
+            if data == b"show":
+                conn.sendall(b"ok")  # the asker waits for this (an old Eqho never replies)
+                try:
+                    on_show()  # reuses an open dashboard window, never stacks them
+                except Exception:
+                    log.debug("Single-instance 'show' callback failed", exc_info=True)
+            else:
+                log.debug("Single-instance: ignored message %r", data)
+        except Exception:
+            log.debug("Single-instance connection error", exc_info=True)
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            slots.release()
+
     def _serve():
         while True:
             try:
                 conn, _addr = sock.accept()
             except OSError:
                 return  # socket closed (shutdown)
-            try:
-                conn.settimeout(2.0)
-                data = conn.recv(64)
-                if data == b"show":
-                    conn.sendall(b"ok")  # the asker waits for this (an old Eqho never replies)
-                    try:
-                        on_show()
-                    except Exception:
-                        log.debug("Single-instance 'show' callback failed",
-                                  exc_info=True)
-                else:
-                    log.debug("Single-instance: ignored message %r", data)
-            except Exception:
-                log.debug("Single-instance connection error", exc_info=True)
-            finally:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+            # Busy: wait for a slot (silent clients are cut off after 0.5 s);
+            # only drop after 1 s, so a real second launch still gets through.
+            if not slots.acquire(timeout=1.0):
+                conn.close()
+                continue
+            threading.Thread(target=_handle, args=(conn,), daemon=True,
+                             name="single-instance-conn").start()
 
     threading.Thread(target=_serve, daemon=True, name="single-instance").start()
 
