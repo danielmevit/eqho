@@ -84,6 +84,7 @@ class App:
             on_status=self._on_status,
             on_level=self._on_level,
             on_abort=self._on_abort,
+            on_notice=lambda msg: self.tray.notify(msg),
         )
 
         self.hotkey = HotkeyManager(
@@ -472,7 +473,9 @@ class App:
                 self.tray.notify("Model downloaded and ready!")
         except Exception as e:
             log.error("Failed to pre-load model: %s", e)
-            self.tray.notify(f"Failed to load model: {e}")
+            from .transcriber import LowMemoryLoadError
+            self.tray.notify(str(e) if isinstance(e, LowMemoryLoadError)
+                             else f"Failed to load model: {e}")
 
     def quit(self) -> None:
         log.info("Shutting down...")

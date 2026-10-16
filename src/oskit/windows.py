@@ -214,6 +214,31 @@ class WindowsOsKit(OsKit):
 
     # -- misc ------------------------------------------------------------------------------
 
+    def free_memory_mb(self) -> Optional[int]:
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class _MemStatus(ctypes.Structure):
+                _fields_ = [("dwLength", wintypes.DWORD),
+                            ("dwMemoryLoad", wintypes.DWORD),
+                            ("ullTotalPhys", ctypes.c_ulonglong),
+                            ("ullAvailPhys", ctypes.c_ulonglong),
+                            ("ullTotalPageFile", ctypes.c_ulonglong),
+                            ("ullAvailPageFile", ctypes.c_ulonglong),
+                            ("ullTotalVirtual", ctypes.c_ulonglong),
+                            ("ullAvailVirtual", ctypes.c_ulonglong),
+                            ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+            status = _MemStatus()
+            status.dwLength = ctypes.sizeof(_MemStatus)
+            if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                return None
+            return int(status.ullAvailPhys // (1024 * 1024))
+        except Exception:
+            log.debug("GlobalMemoryStatusEx failed", exc_info=True)
+            return None
+
     def disable_os_mic_ducking(self) -> None:
         """Set Windows Communications Activity to "Do nothing" so it stops
         adjusting other apps' volume when the mic opens."""
