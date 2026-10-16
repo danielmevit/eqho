@@ -12,7 +12,7 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-informational)](#install)
 
 - 🔒 **Private by design** — no cloud, no account, no API key. Your voice never leaves your computer.
-- ⚡ **Fast on any PC** — on Windows, NVIDIA, AMD and Intel graphics cards all speed up transcription (CUDA / Vulkan). On Linux and macOS, AMD and Intel PCs run on the processor (CPU). Real-time preview as you speak.
+- ⚡ **Works on any PC** — on Windows, NVIDIA cards (CUDA) and AMD or Intel graphics cards (Vulkan) make transcription fast. Laptops with only built-in graphics, and AMD/Intel PCs on Linux and macOS, run on the processor (CPU): it works, just slower — a smaller model is quicker. Live preview as you speak on PCs fast enough for it.
 - 🆓 **Free and open source** — no subscription, no word limits, ever.
 - 🌍 **13 languages** — English-optimized by default, multilingual models one click away.
 
@@ -74,7 +74,7 @@ Anything beyond English needs a **multilingual** model (`large-v3-turbo` or `med
 - Python 3.10+ (only when running from source)
 - Optional GPU acceleration — **auto-detected, no configuration**:
   - **NVIDIA** — [CUDA Toolkit 12.x](https://developer.nvidia.com/cuda-downloads) for ~5× faster transcription (`winget install Nvidia.CUDA`)
-  - **AMD & Intel** — nothing to install; on Windows the downloads use AMD and Intel graphics cards (Vulkan). On Linux and macOS those PCs run on the processor (CPU)
+  - **AMD & Intel** — nothing to install; on Windows the downloads use AMD and Intel graphics cards that have their own memory (Vulkan). Laptops with only built-in graphics run on the processor, which was faster in our tests. On Linux and macOS those PCs run on the processor (CPU)
 
 ## Platform notes
 
@@ -88,7 +88,7 @@ Anything beyond English needs a **multilingual** model (`large-v3-turbo` or `med
 
 **Does it cost anything?** No. Free, open source, no premium tier.
 
-**Does it work on AMD or Intel GPUs?** Yes — on Windows. The downloads include a Vulkan engine (whisper.cpp) that uses AMD and Intel graphics cards, alongside faster-whisper for NVIDIA. On Linux and macOS, AMD and Intel PCs run on the processor (CPU), which works fine — just slower.
+**Does it work on AMD or Intel GPUs?** Yes — on Windows. The downloads include a Vulkan engine (whisper.cpp) for AMD and Intel graphics cards, alongside faster-whisper for NVIDIA. Built-in laptop graphics (like Intel UHD) were slower than the processor in our tests, so Eqho uses the processor there. Without a graphics card, a sentence takes about 15–20 seconds with the default model on an older laptop (Intel Core i7-8665U); a smaller model is much quicker. On Linux and macOS, AMD and Intel PCs run on the processor (CPU).
 
 **How accurate is it?** Whisper-class accuracy — state of the art for open speech recognition. Pick a bigger model for tougher audio.
 
