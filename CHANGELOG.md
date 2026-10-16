@@ -19,12 +19,18 @@ Planned as 0.8.10: first launch, and speed on every PC.
 - **The right speech model for your PC.** A new install picks a model that is fast on the computer it runs on: with
   a suitable graphics card the accurate large model, without one a small fast model (Distil Small EN for English,
   Small for other languages). On an 8-core processor that is about 2.5 seconds per sentence instead of about 10, with
-  slightly more mistakes. The Models tab marks the model recommended for your PC and says on each card whether it
-  runs on your graphics card or on the processor.
+  slightly more mistakes. The Models tab marks the model recommended for your PC and says, in one line at the top,
+  whether models run on your graphics card or on the processor.
 - **A tip when your model is slow.** If the model you use takes more than 6 seconds per sentence and a faster one
   suits your PC better, Eqho tells you once (per model) where to switch. It never changes your model by itself.
 - **Version details in Eqho.exe.** Right-click → Properties → Details shows Eqho's name and version, like any normal
   Windows program.
+
+### Fixed
+- **Dictations no longer go missing now and then.** Before pasting, Eqho sent "key released" signals for keys that
+  weren't pressed — including Alt, which can make a window jump to its menu and swallow the paste. On a busy desktop
+  about 1 in 7 dictations typed nothing (measured 2026-10-16, also in 0.8.9 and earlier). Eqho now only releases keys
+  that are really held down: 40 of 40 test dictations pasted.
 
 ### Changed
 - **Other sounds are no longer muted unless you say so.** New installs ask during setup; your current choice stays.
