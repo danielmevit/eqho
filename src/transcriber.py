@@ -32,6 +32,7 @@ SILENCE_TIMEOUT = 1.2
 MIN_PHRASE_DURATION = 0.4
 PARTIAL_INTERVAL = 1.0  # send a partial transcription every N seconds of active speech
 PARTIAL_TAIL_SECONDS = 10.0  # partials re-transcribe at most this much recent audio
+SLOW_HINT_S = 6.0  # a final model call slower than this may show the slow-model tip
 STOP_JOIN_TIMEOUT = 5.0  # stop() waits this long for the final flush; anything
                          # slower is dropped (the session is closed) rather than
                          # leaking into the next dictation. The app's normal stop
@@ -639,8 +640,36 @@ class VoiceTranscriber:
                 log.info("Complete transcript: %d chars (%.1fs audio, transcribed in %.2fs)",
                          len(text), duration, infer_dur)
                 self._deliver(session, self._on_complete, text)
+                self._maybe_slow_hint(infer_dur)
         except Exception as e:
             log.error("Transcription error: %s", e)
+
+    def _maybe_slow_hint(self, infer_dur: float) -> None:
+        """One tray tip per model, ever, when the model call was slow and a
+        better-suited model exists. Never changes the model itself."""
+        if infer_dur <= SLOW_HINT_S:
+            return
+        current = self._settings.model_size
+        if getattr(self._settings, "slow_hint_shown_for", "") == current:
+            return
+        from .modelpick import recommend_model
+        from .settings import WHISPER_MODELS
+        recommended = recommend_model(self._settings.language)
+        if recommended == current:
+            return
+
+        def label(key: str) -> str:
+            return WHISPER_MODELS.get(key, key).split(" (")[0]
+
+        self._settings.slow_hint_shown_for = current
+        self._settings.save()
+        log.info("Slow-model tip shown: %s took %.2fs (suggested %s)",
+                 current, infer_dur, recommended)
+        if self._on_notice:
+            self._on_notice(
+                f"Eqho is slow on this PC with {label(current)}. "
+                f"{label(recommended)} is much faster — you can switch "
+                "in Eqho → Models.")
 
     def stop(self) -> None:
         if not self._running:

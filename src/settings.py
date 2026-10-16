@@ -322,6 +322,7 @@ class Settings:
     vad_sensitivity: float = 1.0     # mic sensitivity 0.5 (needs louder) .. 2.0 (picks up quiet)
     paste_rules: dict = field(default_factory=dict)  # exe name (lower) -> "clipboard"|"typing"
     onboarding_done: bool = False    # first-time setup finished or skipped (EQ-ONBOARD)
+    slow_hint_shown_for: str = ""    # model key the "slow on this PC" tip was shown for (EQ-SLOWHINT)
 
     # runtime-only (not persisted)
     _listeners: list = field(default_factory=list, repr=False)
