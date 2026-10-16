@@ -273,8 +273,11 @@ def run_clip(index: int, clip: dict, *, work: Path, swap: Path, tail: LogTail,
     duration = clip_duration(clip["path"], durations)
     log.info("[clip %d] %s: %.1fs audio", index, clip["utt"], duration)
 
+    # A Windows venv's python.exe is a launcher that runs the base interpreter
+    # as a CHILD process, so the window's pid would never equal target.pid.
+    # The target needs only the stdlib (tkinter), so start the base interpreter.
     target = subprocess.Popen(
-        [sys.executable, str(TOOLS_DIR / "e2e_target.py"),
+        [getattr(sys, "_base_executable", sys.executable), str(TOOLS_DIR / "e2e_target.py"),
          "--out", str(out_txt), "--stopfile", str(stopfile),
          "--title", TARGET_TITLE])
     row = {"clip": index, "utt": clip["utt"], "audio_s": round(duration, 3),
