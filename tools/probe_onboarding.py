@@ -3,10 +3,13 @@
 1. Fresh install (no settings.json) -> setup needed, volume_duck "off".
 2. Existing settings.json without `onboarding_done` -> treated as done; a
    saved "mute" stays "mute"; a file without volume_duck keeps the old "mute".
-3. recommend_model: "en" -> distil-large-v3; "de" -> large-v3-turbo; no
+3. recommend_model (graphics card faked): "en" -> distil-large-v3; "de" ->
+   large-v3-turbo; no
    "detect automatically" language choice (planned for 0.8.11).
 3b. Building the language page saves nothing (a chosen model is kept);
    picking a language saves it + the recommended model.
+3d. Setup on a fresh install saves the model recommended for this PC;
+   "Run setup again" leaves the model alone (EQ-PICK).
 3c. Closing the window (X) during setup = "Skip setup": marked done.
 4. App.run() on first launch opens setup and does NOT preload/download; with
    setup done it preloads. Fakes for overlay/tray/hotkeys/transcriber/UI —
@@ -29,7 +32,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import src.settings as settings_mod
 from src.settings import Settings
+import src.modelpick as modelpick
 from src.modelpick import recommend_model
+
+modelpick._hw_class = "gpu"  # fake hardware: the checks below must not depend on this PC
 
 failures = []
 
@@ -105,6 +111,39 @@ def test_language_page() -> None:
               "language picked: language + recommended model saved")
 
 
+def test_fresh_install_model() -> None:
+    from types import SimpleNamespace
+    import src.ui.onboarding as onb
+    from src.ui.onboarding import OnboardingScreen
+    names = ("recommend_model", "ctk", "ghost_button", "primary_button", "secondary_button")
+    saved = {n: getattr(onb, n) for n in names}
+    saved_show = OnboardingScreen.show_page
+    onb.recommend_model = lambda lang: f"pick-{lang}"
+    try:
+        for done, label in ((False, "fresh install"), (True, "Run setup again")):
+            with tempfile.TemporaryDirectory() as td:
+                use_config(Path(td) / "settings.json")
+                Settings(language="de", model_size="medium", onboarding_done=done).save()
+                ctx = SimpleNamespace(settings=Settings.load(), colors=SimpleNamespace(
+                    bg_primary="#000", fg_secondary="#fff"))
+                onb.ctk = SimpleNamespace(CTkFrame=_Fake, CTkLabel=_Fake)
+                for name in ("ghost_button", "primary_button", "secondary_button"):
+                    setattr(onb, name, _Fake)
+                OnboardingScreen.show_page = lambda self, i: None
+                try:
+                    OnboardingScreen(ctx, None, on_done=lambda *a: None)
+                except Exception as e:
+                    check(False, f"{label}: setup screen built ({e})")
+                    continue
+                want = "pick-de" if not done else "medium"
+                got = Settings.load().model_size
+                check(got == want, f"{label}: model_size {got!r} (want {want!r})")
+    finally:
+        for n, v in saved.items():
+            setattr(onb, n, v)
+        OnboardingScreen.show_page = saved_show
+
+
 def test_close_during_setup() -> None:
     from types import SimpleNamespace
     from src.ui.dashboard import Dashboard
@@ -178,6 +217,7 @@ def test_first_launch() -> None:
 
 def main() -> int:
     for test in (test_settings, test_recommend, test_language_page,
+                 test_fresh_install_model,
                  test_close_during_setup, test_first_launch):
         try:
             test()

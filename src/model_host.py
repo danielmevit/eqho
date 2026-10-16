@@ -353,12 +353,23 @@ def _gpu_adapters() -> list:
     return _adapters_cache
 
 
+_cuda_cache = None   # (ctranslate2 module, result)
+
+
 def _cuda_available() -> bool:
+    """NVIDIA+CUDA usable? Checked once per process (hardware doesn't change);
+    re-checked only if a different ctranslate2 module is loaded (probes)."""
+    global _cuda_cache
+    mod = sys.modules.get("ctranslate2")
+    if _cuda_cache is not None and mod is not None and _cuda_cache[0] is mod:
+        return _cuda_cache[1]
     try:
         import ctranslate2
-        return "int8_float16" in ctranslate2.get_supported_compute_types("cuda")
+        ok = "int8_float16" in ctranslate2.get_supported_compute_types("cuda")
     except Exception:
-        return False
+        ctranslate2, ok = None, False
+    _cuda_cache = (ctranslate2, ok)
+    return ok
 
 
 _auto_logged = False

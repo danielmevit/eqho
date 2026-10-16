@@ -6,6 +6,7 @@ card widgets IN PLACE — never a tab rebuild, which flashed the whole view.
 
 import customtkinter as ctk
 
+from ...modelpick import hardware_class, recommend_model
 from ...modelstore import is_downloading, start_download, status as download_status
 from ...theme import MODEL_INFO, SPACING, RADIUS_LG, RADIUS_SM, font
 from ..layout import TabBase
@@ -191,7 +192,10 @@ class ModelsTab(TabBase):
         )
         status_label.pack(side="right")
 
-        detail = f"{info.get('lang', '')} · {info.get('size', '')} · {info.get('device', '')}"
+        device = info.get("device") or (
+            "Runs on your graphics card" if hardware_class() == "gpu"
+            else "Runs on the processor")
+        detail = f"{info.get('lang', '')} · {info.get('size', '')} · {device}"
         detail_lbl = ctk.CTkLabel(
             inner, text=detail,
             font=font("xs"),
@@ -201,6 +205,8 @@ class ModelsTab(TabBase):
         auto_wrap_label(detail_lbl, card)
 
         rec = info.get("rec", "")
+        if model_key == recommend_model(self._settings.language):
+            rec = "Recommended for this PC"
         if rec:
             rec_lbl = ctk.CTkLabel(
                 inner, text=rec,

@@ -55,6 +55,11 @@ class OnboardingScreen(TabBase):
         super().__init__(ctx)
         self._on_done = on_done
         self._start_model = self._settings.model_size
+        if not self._settings.onboarding_done:
+            # Fresh install: offer the model that is fast on this PC. "Run
+            # setup again" keeps the model unless a language is picked.
+            self._settings.model_size = recommend_model(self._settings.language)
+            self._settings.save()
         self._page = 0
         self._stream = None
         self._level = 0.0
