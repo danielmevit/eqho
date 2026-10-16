@@ -31,7 +31,7 @@ jobs:
       - name: Verify + install pywhispercpp wheel (whisper.cpp Vulkan engine)
         run: |
           $wheel = "packaging\windows\wheels\pywhispercpp-0.0.0-cp313-cp313-win_amd64.whl"
-          $expected = (((Get-Content "packaging\windows\wheels\SHA256SUMS") -match "pywhispercpp-0\.0\.0-cp313-cp313-win_amd64\.whl") | Select-Object -First 1) -split "\s+" | Select-Object -First 1
+          $expected = ((@(Get-Content "packaging\windows\wheels\SHA256SUMS") -match "pywhispercpp-0\.0\.0-cp313-cp313-win_amd64\.whl") | Select-Object -First 1) -split "\s+" | Select-Object -First 1
           $actual = (Get-FileHash -Algorithm SHA256 $wheel).Hash.ToLower()
           if ($actual -ne $expected) {
             Write-Host "::error::pywhispercpp wheel SHA256 mismatch (expected $expected, got $actual)"
