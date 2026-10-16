@@ -273,8 +273,13 @@ class VoiceTranscriber:
         stream.start()
         return stream
 
-    def _close_stream(self) -> None:
+    def _close_stream(self, only=None) -> None:
+        """Close the mic stream. With `only`, close it only if it is still
+        that stream — a finished session's worker must never close the mic
+        of a newer session."""
         with self._stream_lock:
+            if only is not None and self._stream is not only:
+                return
             if self._stream:
                 try:
                     self._stream.stop()
@@ -318,7 +323,8 @@ class VoiceTranscriber:
             # hotkey-callback thread never blocks; audio recorded while the
             # model loads queues up and is processed once it is ready.
             self._worker = threading.Thread(
-                target=self._transcription_loop, args=(session,), daemon=True)
+                target=self._transcription_loop, args=(session, self._stream),
+                daemon=True)
             self._worker.start()
             log.info("Transcription started (session %d, mic recording).", session)
 
@@ -327,7 +333,7 @@ class VoiceTranscriber:
             log.warning("Audio callback status: %s", status)
         self._audio_q.put(indata[:, 0].copy())
 
-    def _transcription_loop(self, session: int) -> None:
+    def _transcription_loop(self, session: int, stream=None) -> None:
         """Worker thread body: load the model if needed, then accumulate
         audio, detect speech/silence and transcribe phrases. Results are
         delivered through _deliver, which drops anything whose session is
@@ -442,6 +448,9 @@ class VoiceTranscriber:
                     utterance_peak = max(utterance_peak, float(np.sqrt(np.mean(chunk ** 2))))
                 except queue.Empty:
                     break
+            # The user has stopped: turn the mic off now, not after the final
+            # transcription (that can take a minute on a slow PC).
+            self._close_stream(stream)
 
             # Flush all remaining audio on stop (don't require is_speaking —
             # the user releasing the hold key IS the stop signal)
@@ -457,7 +466,7 @@ class VoiceTranscriber:
             with self._lock:
                 was_running = self._running
                 self._running = False
-            self._close_stream()
+            self._close_stream(stream)
             if was_running and self._on_abort is not None:
                 # The session ended on its own while the app still thought it
                 # was live. The session id lets the app ignore aborts that

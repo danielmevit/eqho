@@ -1,1 +1,0 @@
-- Slow PCs no longer lose dictations: after you stop, Eqho shows "Writing it down…" and types the text into your window when it's ready. Live preview turns itself off when the engine is slow.

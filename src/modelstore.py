@@ -52,13 +52,15 @@ def model_files(settings, model_key: str) -> list:
         from .model_host import whispercpp_model_path
         path = whispercpp_model_path(model_dir, model_key)
         return [path] if path.exists() else []
-    found = []
-    for root in (model_dir, model_dir / "huggingface"):
-        if root.exists():
-            found.extend(root.glob(f"models--*{model_key}*"))
-    if (model_dir / model_key).exists():
-        found.append(model_dir / model_key)
-    return found
+    # Exact repo names: a glob on the key would make "small.en" also match
+    # "distil-small.en" (and delete_model would remove both).
+    names = (model_key,
+             f"models--Systran--faster-whisper-{model_key}",
+             f"models--Systran--faster-distil-whisper-{model_key.removeprefix('distil-')}")
+    if not model_key.startswith("distil-"):
+        names = names[:2]
+    return [root / n for root in (model_dir, model_dir / "huggingface")
+            for n in names if (root / n).exists()]
 
 
 def model_size_mb(settings, model_key: str) -> float:
