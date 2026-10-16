@@ -85,7 +85,7 @@ system (docs/ai/TESTING.md: ASR benchmark, end-to-end dictation test, UI walker)
 - [ ] Desktop test with a slow engine on the main PC, then a short re-run on the Latitude (fix + small/base models)
 
 ### 0.8.10 — first launch + speed on every PC
-- [ ] **First-launch onboarding** (must, same as Vecto/Laydown): welcome → **which language do you speak?** (picks the
+- [x] **First-launch onboarding** (EQ-ONBOARD, on `next`; screenshots review pending) (must, same as Vecto/Laydown): welcome → **which language do you speak?** (picks the
       model) → microphone test with a level meter → model download with consent, size and progress → audio lowering
       on/off (consent) → try it ("press Alt+Q and say something") → done. Skippable, reopen from the dashboard.
 - [ ] **Automatic model choice by hardware** (moved up from 0.8.11): NVIDIA → distil-large-v3 on CUDA; graphics
@@ -93,11 +93,12 @@ system (docs/ai/TESTING.md: ASR benchmark, end-to-end dictation test, UI walker)
       2026-10-16: distil-large-v3 on the processor takes 11–14 s per 10 s sentence (Ryzen 7 5800H) and 14–19 s per
       sentence on an Intel i7-8665U laptop — too slow. Benchmark small/base/distil-small (speed + accuracy) on both
       with tools/bench_asr.py first, then pick.
-- [ ] Keep the model ready after start (no wait on the first Alt+Q) (moved up from 0.8.11)
-- [ ] Low free memory: warn in plain words before loading the model on the processor (needs about 1.5–2 GB free;
+- [x] Keep the model ready after start — already true: the model preloads at startup (ready ~17 s after launch on NVIDIA) and is never unloaded
+- [x] Low free memory (EQ-LOWMEM): warn in plain words before loading the model on the processor (needs about 1.5–2 GB free;
       seen 2026-10-16: on a full PC the model stopped partway)
 - [ ] whisper.cpp: try a shorter audio window for short sentences (`audio_ctx`) — keep only if accuracy holds
-- [ ] Version number in Eqho.exe's file properties
+- [x] Version number in Eqho.exe's file properties (EQ-EXEVER; CI checks it)
+- [ ] Probes write into a temporary folder, never the real eqho.log
 
 ### 0.8.11 — languages (speech)
 - [ ] Non-English: multilingual model when a non-English language is chosen; offer every language Whisper supports
