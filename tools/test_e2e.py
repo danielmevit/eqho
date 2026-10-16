@@ -299,10 +299,10 @@ def run_clip(index: int, clip: dict, *, work: Path, swap: Path, tail: LogTail,
         hwnd = find_window(TARGET_TITLE, expected_pid=target.pid)
         if not hwnd:
             raise SafetyAbort("target window never appeared — aborting")
+        mark = tail.mark()  # BEFORE the foreground check: nothing between check and keypress
         ensure_foreground(hwnd)
 
         # the hotkey (start) -> "listening"
-        mark = tail.mark()
         t_alt1 = time.monotonic()
         keyboard.send(TEST_HOTKEY)
         t_started, _ = tail.wait_for(STARTED_RE, 15.0, proc, since=mark)
@@ -314,8 +314,8 @@ def run_clip(index: int, clip: dict, *, work: Path, swap: Path, tail: LogTail,
         # Let the clip play out in real time (the VAD completes the phrase
         # during the trailing silence), then the hotkey (stop) -> text appears.
         time.sleep(duration + TAIL_SILENCE_WAIT)
+        mark = tail.mark()  # BEFORE the foreground check: nothing between check and keypress
         ensure_foreground(hwnd)
-        mark = tail.mark()
         t_alt2 = time.monotonic()
         keyboard.send(TEST_HOTKEY)
         t_injected, m = tail.wait_for(INJECTED_RE, 45.0, proc, since=mark)
@@ -376,16 +376,21 @@ def _ensure_stopped(tail: LogTail, proc: subprocess.Popen, hwnd) -> None:
         log.error("Dictation still active but the target window is gone — "
                   "NOT sending the hotkey (shutdown will kill the session).")
         return
+    import keyboard
+    # Everything slow happens BEFORE the foreground check, so nothing sits
+    # between the check and the keypress; re-check "still active" last (the
+    # app may have stopped on its own meanwhile — a press would then START one).
+    mark = tail.mark()
+    if tail.count(ACTIVATED_RE) <= tail.count(ENDED_RE):
+        return
+    log.warning("Dictation still active — sending the hotkey to stop it.")
     try:
         ensure_foreground(hwnd)
     except SafetyAbort as e:
         log.error("Dictation still active but %s — NOT sending the hotkey "
                   "(shutdown will kill the session).", e)
         return
-    log.warning("Dictation still active — sending the hotkey to stop it.")
     try:
-        import keyboard
-        mark = tail.mark()
         keyboard.send(TEST_HOTKEY)
         tail.wait_for(STOPPED_RE, 15.0, proc, since=mark)
     except Exception as e:
