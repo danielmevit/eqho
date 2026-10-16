@@ -73,6 +73,24 @@ class WindowsOsKit(OsKit):
         if handle:
             ctypes.windll.user32.SetForegroundWindow(handle)
 
+    # -- injection ----------------------------------------------------------------
+
+    _MODIFIER_VKS = {
+        "ctrl_l": 0xA2, "ctrl_r": 0xA3,
+        "shift_l": 0xA0, "shift_r": 0xA1,
+        "alt_l": 0xA4, "alt_r": 0xA5,
+        "cmd_l": 0x5B, "cmd_r": 0x5C,
+    }
+
+    def held_modifiers(self) -> Optional[set]:
+        try:
+            import ctypes
+            state = ctypes.windll.user32.GetAsyncKeyState
+            return {name for name, vk in self._MODIFIER_VKS.items() if state(vk) & 0x8000}
+        except Exception as e:
+            log.debug("held_modifiers failed: %s", e)
+            return None
+
     def get_window_process_name(self, handle) -> Optional[str]:
         if not handle:
             return None

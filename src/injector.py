@@ -58,17 +58,7 @@ def _paste_via_clipboard(text: str) -> None:
         except Exception:
             old = None
 
-        # Ensure all modifier keys are released before pasting
-        for key in (
-            Key.ctrl, Key.ctrl_l, Key.ctrl_r,
-            Key.shift, Key.shift_l, Key.shift_r,
-            Key.alt, Key.alt_l, Key.alt_r,
-            Key.cmd, Key.cmd_l, Key.cmd_r,
-        ):
-            try:
-                _kb.release(key)
-            except Exception:
-                pass
+        _release_held_modifiers()
         time.sleep(0.05)
 
         try:
@@ -102,6 +92,38 @@ def _paste_via_clipboard(text: str) -> None:
                     pyperclip.copy(old)
                 except Exception:
                     pass
+
+
+_ALL_MODIFIERS = (
+    Key.ctrl, Key.ctrl_l, Key.ctrl_r,
+    Key.shift, Key.shift_l, Key.shift_r,
+    Key.alt, Key.alt_l, Key.alt_r,
+    Key.cmd, Key.cmd_l, Key.cmd_r,
+)
+
+
+def _release_held_modifiers() -> None:
+    """Release modifiers still held from the hotkey so Ctrl+V isn't mangled.
+
+    Only keys that are really down get a key-up: a stray Alt key-up puts some
+    windows (Notepad-style) into menu mode and the following Ctrl+V is lost.
+    Where the OS can't tell what's held, release every modifier as before.
+    """
+    try:
+        held = getattr(oskit.get(), "held_modifiers", lambda: None)()
+    except Exception:
+        held = None
+    if held is None:
+        keys = _ALL_MODIFIERS
+    else:
+        keys = tuple(getattr(Key, name) for name in sorted(held) if hasattr(Key, name))
+        if keys:
+            log.debug("Releasing held modifiers before paste: %s", ", ".join(sorted(held)))
+    for key in keys:
+        try:
+            _kb.release(key)
+        except Exception:
+            pass
 
 
 def _type_chars(text: str) -> None:

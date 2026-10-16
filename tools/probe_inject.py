@@ -488,6 +488,44 @@ def test_paste_lock():
         oskit.get = orig_get
 
 
+class HeldOsKit(FakeOsKit):
+    """Fake OsKit that reports a fixed set of held modifiers (None = unknown)."""
+
+    def __init__(self, held):
+        super().__init__("ctrl")
+        self._held = held
+
+    def held_modifiers(self):
+        return self._held
+
+
+def _releases_before_paste(held):
+    fake_kb = FakeController()
+    fake_clip = FakeClipboard("")
+    orig = (injector._kb, injector.pyperclip.copy, injector.pyperclip.paste, injector.time.sleep, oskit.get)
+    try:
+        injector._kb = fake_kb
+        injector.pyperclip.copy = fake_clip.copy
+        injector.pyperclip.paste = fake_clip.paste
+        injector.time.sleep = lambda d: None
+        oskit.get = lambda: HeldOsKit(held)
+        injector.type_text("held test")
+    finally:
+        (injector._kb, injector.pyperclip.copy, injector.pyperclip.paste,
+         injector.time.sleep, oskit.get) = orig
+    first_press = next(i for i, ev in enumerate(fake_kb.events) if ev[0] == "press")
+    return [ev[1] for ev in fake_kb.events[:first_press] if ev[0] == "release"]
+
+
+def test_only_held_modifiers_released():
+    """Nothing held -> no key-ups; ctrl_l+alt_r held -> exactly those; None -> full list."""
+    assert _releases_before_paste(set()) == [], "No modifier held must send no key-ups"
+    got = _releases_before_paste({"ctrl_l", "alt_r"})
+    assert got == [Key.alt_r, Key.ctrl_l], f"Expected ctrl_l+alt_r released, got {got}"
+    got = _releases_before_paste(None)
+    assert got == list(injector._ALL_MODIFIERS), f"Unknown state must release all modifiers, got {got}"
+
+
 def main():
     print("Running probe_inject (EQ-INJECT)...")
     checks = [
@@ -504,6 +542,7 @@ def main():
             test_autostart_command_appimage,
         ),
         ("Threading lock guards paste sequence and serializes execution", test_paste_lock),
+        ("Only modifiers that are really held get a key-up (None = all)", test_only_held_modifiers_released),
     ]
 
     for idx, (desc, test_fn) in enumerate(checks, 1):

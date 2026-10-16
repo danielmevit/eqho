@@ -73,6 +73,11 @@ class OsKit:
         """The modifier key used for pasting text ('ctrl' or 'cmd')."""
         return "ctrl"
 
+    def held_modifiers(self) -> Optional[set]:
+        """Names of the modifier keys physically held right now (e.g.
+        {"ctrl_l", "alt_r"}), or None when the OS can't tell."""
+        return None
+
     # -- Microphone privacy ------------------------------------------------------
 
     def mic_access_blocked(self) -> Optional[bool]:
