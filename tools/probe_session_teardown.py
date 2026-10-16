@@ -6,10 +6,16 @@ src/transcriber.py:
 (a) model-load failure in toggle mode -> the app's single teardown path
     restores system volume (unducks/unmutes), hides the overlay, resets the
     tray and notifies the user — audio never stays muted.
-(b) a final transcription slower than stop()'s flush window -> its text is
-    dropped (the session is closed) and can NOT land in the next dictation;
-    the next session's own text IS delivered and injected.
+(b) a slow final transcription (7 s, a slow PC) -> stop returns at once,
+    volume/tray reset, the overlay says "Writing it down…"; a hotkey press
+    meanwhile starts nothing and shows "Still writing"; the text is then
+    injected into its own dictation exactly once, and the next dictation
+    gets only its own text (F2 still holds).
 (c) no transcript text appears in captured log output — only lengths.
+(d) an engine that never returns -> after the (shrunk) cap nothing is
+    injected, the "took too long" notice is shown, volume/overlay/tray reset.
+(e) live preview is skipped after a slow measured call, runs after a fast
+    one, and before any measurement only on a CUDA host.
 
 The real App and VoiceTranscriber run unmodified; the model host, mic
 stream, overlay, tray, hotkeys, injector and OS volume kit are fakes.
@@ -36,6 +42,8 @@ import src.transcriber as transcriber_mod
 
 SENTINEL_LATE = "LATE TEXT FROM SESSION ONE"
 SENTINEL_FRESH = "SECOND SESSION TEXT"
+SENTINEL_STUCK = "STUCK ENGINE TEXT"
+SLOW_FINAL_S = 7.0
 
 
 # -- Fakes --------------------------------------------------------------------
@@ -264,54 +272,171 @@ def scenario_model_load_failure(app, kit, failures):
            "(a) transcriber no longer running")
 
 
-def scenario_slow_final_flush(app, kit, failures, capture):
-    """(b) a final transcription slower than stop()'s flush window is dropped
-    and never lands in the next dictation; the next session's own text is
-    delivered and injected."""
+def _wait_finished(app, timeout):
+    deadline = time.monotonic() + timeout
+    while app._finishing and time.monotonic() < deadline:
+        time.sleep(0.05)
+    return not app._finishing
+
+
+def _check_reset(app, kit, failures, tag):
+    _check(failures, not kit.muted and kit.volume == 0.8,
+           f"({tag}) volume restored, not muted")
+    _check(failures, not app.overlay.visible, f"({tag}) overlay hidden")
+    _check(failures, app.tray.active is False, f"({tag}) tray reset")
+
+
+def scenario_slow_final_flush(app, kit, failures, capture, injected):
+    """(b) a slow final transcription is still typed into its own dictation;
+    a press meanwhile starts nothing; the next dictation gets only its own
+    text."""
+    import src.main as main_mod
     host = app.transcriber._host
     host.ready = True
     host.load_ok = True
 
-    # Session 1: the final flush blocks past the (shrunk) join window.
-    late_gate = threading.Event()
-
     def _slow_transcribe():
-        late_gate.wait(timeout=30)
+        time.sleep(SLOW_FINAL_S)
         return SENTINEL_LATE
 
     host.set_responses([_slow_transcribe])
     app.activate()
     _push_audio(app.transcriber)
     time.sleep(0.3)  # let the worker consume the chunk
-    worker = app.transcriber._worker
-    app.deactivate()  # flush window times out -> session closed
-    _check(failures, app._pending_text == [],
-           "(b) nothing pending right after the timed-out stop")
+    t0 = time.monotonic()
+    app.deactivate()
+    _check(failures, time.monotonic() - t0 < 1.0,
+           "(b) stop returns at once (no wait on the hotkey thread)")
+    _check(failures, not kit.muted and app.tray.active is False,
+           "(b) volume and tray reset right after stop")
+    _check(failures, app.overlay.visible and app.overlay.text == main_mod.WRITING_TEXT,
+           "(b) overlay shows 'Writing it down…' while waiting")
 
-    late_gate.set()  # the slow transcription finally completes...
-    worker.join(timeout=10)
-    time.sleep(0.1)
-    _check(failures, app._pending_text == [],
-           "(b) late session-1 text NOT delivered to the app")
-    _check(failures, any("Dropped result from closed session" in m
-                         for m in capture.messages),
-           "(b) late result dropped by the session check")
+    time.sleep(0.5)
+    app.toggle()  # toggle-mode press while still writing
+    _check(failures, not app.transcriber.is_running(),
+           "(b) toggle press while writing starts no dictation")
+    app.activate()  # hold-mode press while still writing
+    app.deactivate()  # ...and its release
+    _check(failures, not app.transcriber.is_running(),
+           "(b) hold press while writing starts no dictation")
+    _check(failures, app.overlay.text == main_mod.STILL_WRITING_TEXT
+           and main_mod.STILL_WRITING_TEXT in app.tray.notifications,
+           "(b) 'Still writing' note shown")
+    _check(failures, injected == [], "(b) nothing typed before the text is ready")
 
-    # Session 2: its own text must arrive normally.
+    _check(failures, _wait_finished(app, SLOW_FINAL_S + 10),
+           "(b) slow dictation finished")
+    _check(failures, injected == [SENTINEL_LATE],
+           f"(b) slow final text injected once into its own dictation (got {injected!r})")
+    _check_reset(app, kit, failures, "b")
+
+    # Session 2: its own text only.
     host.set_responses([SENTINEL_FRESH])
     app.activate()
+    _check(failures, app.transcriber.is_running(),
+           "(b) next dictation starts once writing is done")
     _push_audio(app.transcriber)
     time.sleep(0.3)
-    app.deactivate()  # flush completes within the window -> delivered
+    app.deactivate()
+    _check(failures, _wait_finished(app, 10), "(b) session 2 finished")
+    _check(failures, injected == [SENTINEL_LATE, SENTINEL_FRESH],
+           f"(b) next session injected only its own text (got {injected!r})")
     _check(failures, app._pending_text == [],
-           "(b) session-2 pending list drained after injection")
+           "(b) pending list drained after injection")
+    _check_reset(app, kit, failures, "b")
+
+
+def scenario_stuck_engine(app, kit, failures, capture, injected):
+    """(d) a final transcription that never returns -> dropped after the cap,
+    user told, everything reset."""
+    import src.main as main_mod
+    host = app.transcriber._host
+    gate = threading.Event()
+
+    def _stuck():
+        gate.wait(timeout=60)
+        return SENTINEL_STUCK
+
+    saved_cap = main_mod.FINISH_TIMEOUT
+    main_mod.FINISH_TIMEOUT = 1.0  # shrink the safety cap
+    before = list(injected)
+    try:
+        host.set_responses([_stuck])
+        app.activate()
+        _push_audio(app.transcriber)
+        time.sleep(0.3)
+        worker = app.transcriber._worker
+        app.deactivate()
+        _check(failures, _wait_finished(app, 10), "(d) gave up after the cap")
+        _check(failures, injected == before, "(d) nothing injected")
+        _check(failures, main_mod.TOO_SLOW_TEXT in app.tray.notifications,
+               "(d) 'took too long' notice shown")
+        _check_reset(app, kit, failures, "d")
+        gate.set()  # the stuck call finally returns...
+        worker.join(timeout=10)
+        time.sleep(0.1)
+        _check(failures, injected == before and app._pending_text == [],
+               "(d) late stuck result never delivered")
+        _check(failures, any("Dropped result from closed session" in m
+                             for m in capture.messages),
+               "(d) late result dropped by the session check")
+    finally:
+        gate.set()
+        main_mod.FINISH_TIMEOUT = saved_cap
+
+
+def scenario_partials(app, failures, capture):
+    """(e) live preview runs only while the engine is measured fast."""
+    tr = app.transcriber
+    host = tr._host
+    saved_interval = transcriber_mod.PARTIAL_INTERVAL
+    transcriber_mod.PARTIAL_INTERVAL = 0.0
+    calls = []
+    real_partial = tr._do_partial
+
+    def _counting(audio, session):
+        calls.append(session)
+        real_partial(audio, session)
+
+    tr._do_partial = _counting
+    try:
+        def run(last):
+            calls.clear()
+            tr._last_infer_s = last
+            host.set_responses([])
+            app.activate()
+            for _ in range(4):
+                _push_audio(tr)
+            time.sleep(0.5)
+            app.deactivate()
+            _wait_finished(app, 10)
+            return len(calls)
+
+        _check(failures, run(3.0) == 0, "(e) partials skipped after a slow measured call")
+        _check(failures, any("Live preview off: last transcription took 3.0s" in m
+                             for m in capture.messages),
+               "(e) 'Live preview off' logged")
+        _check(failures, run(0.2) > 0, "(e) partials run after a fast measured call")
+        tr._last_infer_s = None
+        host.info = {"backend": "fake"}
+        _check(failures, not tr._partials_allowed(-1),
+               "(e) no partials before a measurement on a non-CUDA host")
+        host.info = {"backend": "faster-whisper", "device": "cuda"}
+        _check(failures, tr._partials_allowed(-2),
+               "(e) partials before a measurement on a CUDA host")
+    finally:
+        del tr._do_partial
+        transcriber_mod.PARTIAL_INTERVAL = saved_interval
+        host.info = {"backend": "fake"}
 
 
 def scenario_no_transcripts_in_logs(failures, capture, injected):
     """(c) captured log output contains lengths only, never transcript text."""
     joined = "\n".join(capture.messages)
     for sentinel, label in ((SENTINEL_LATE, "session-1 late text"),
-                            (SENTINEL_FRESH, "session-2 text")):
+                            (SENTINEL_FRESH, "session-2 text"),
+                            (SENTINEL_STUCK, "stuck-engine text")):
         _check(failures, sentinel not in joined,
                f"(c) transcript text ({label}) absent from captured logs")
     _check(failures, any("Complete transcript:" in m and "chars" in m
@@ -336,14 +461,9 @@ def main() -> int:
     failures = []
 
     scenario_model_load_failure(app, kit, failures)
-    scenario_slow_final_flush(app, kit, failures, capture)
-
-    # (b) continued: the next session received ONLY its own text.
-    _check(failures, injected == [SENTINEL_FRESH],
-           f"(b) next session injected only its own text (got {injected!r})")
-    _check(failures, SENTINEL_LATE not in injected,
-           "(b) late session-1 text never injected")
-
+    scenario_slow_final_flush(app, kit, failures, capture, injected)
+    scenario_stuck_engine(app, kit, failures, capture, injected)
+    scenario_partials(app, failures, capture)
     scenario_no_transcripts_in_logs(failures, capture, injected)
 
     print()

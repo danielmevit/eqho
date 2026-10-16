@@ -34,7 +34,9 @@ PARTIAL_INTERVAL = 1.0  # send a partial transcription every N seconds of active
 PARTIAL_TAIL_SECONDS = 10.0  # partials re-transcribe at most this much recent audio
 STOP_JOIN_TIMEOUT = 5.0  # stop() waits this long for the final flush; anything
                          # slower is dropped (the session is closed) rather than
-                         # leaking into the next dictation
+                         # leaking into the next dictation. The app's normal stop
+                         # uses request_stop()/finish_stop() with a much longer cap.
+PARTIAL_MAX_INFER_S = 1.5  # live preview only while one model call is faster than this
 
 # Hallucination gating: Whisper invents text on (near-)silence. Buffers whose
 # peak RMS never rose meaningfully above the VAD threshold are skipped, low
@@ -169,6 +171,8 @@ class VoiceTranscriber:
         self._current_model_size: Optional[str] = None
         self._mic_error: Optional[str] = None
         self._vad_threshold: float = SILENCE_THRESHOLD  # live adaptive value (diagnostics)
+        self._last_infer_s: Optional[float] = None  # last measured model-call time
+        self._partials_off_logged = 0  # session that already logged "preview off"
         self._model_dir = settings.resolve_model_dir()
         os.environ["HF_HUB_CACHE"] = str(self._model_dir / "huggingface")
 
@@ -407,6 +411,8 @@ class VoiceTranscriber:
                     buf_duration = total_samples / SAMPLE_RATE
                     if buf_duration > 1.0 and (now - last_partial_time) >= PARTIAL_INTERVAL:
                         last_partial_time = now
+                        if not self._partials_allowed(session):
+                            continue
                         # Bounded tail keeps partial latency flat on long phrases;
                         # the final transcription still sees the full buffer.
                         tail = max(1, int(PARTIAL_TAIL_SECONDS / CHUNK_DURATION))
@@ -477,11 +483,30 @@ class VoiceTranscriber:
             if callback is not None:
                 callback(*args)
 
+    def _partials_allowed(self, session: int) -> bool:
+        """Live preview only when the engine is fast. On a slow PC one partial
+        costs as much as the final transcription, so the user would wait for
+        both. Before any measurement, trust only a CUDA model host."""
+        last = self._last_infer_s
+        if last is None:
+            allowed = self._host.info.get("device") == "cuda"
+        else:
+            allowed = last <= PARTIAL_MAX_INFER_S
+        if not allowed and self._partials_off_logged != session:
+            self._partials_off_logged = session
+            if last is None:
+                log.info("Live preview off: engine not on CUDA and not measured yet")
+            else:
+                log.info("Live preview off: last transcription took %.1fs", last)
+        return allowed
+
     def _do_partial(self, audio: np.ndarray, session: int) -> None:
         try:
+            t0 = time.perf_counter()
             segments = self._host.transcribe(
                 audio, self._settings.language, 1,
                 self._settings.initial_prompt or "")
+            self._last_infer_s = time.perf_counter() - t0
             text = " ".join(s["text"].strip() for s in segments if s["text"].strip())
             if text:
                 # Log the length, never the content — transcripts are
@@ -504,6 +529,7 @@ class VoiceTranscriber:
                 audio, self._settings.language, 5,
                 self._settings.initial_prompt or "")
             infer_dur = time.perf_counter() - t0
+            self._last_infer_s = infer_dur
             kept = []
             for s in segments:
                 t = s["text"].strip()
@@ -532,19 +558,32 @@ class VoiceTranscriber:
             log.error("Transcription error: %s", e)
 
     def stop(self) -> None:
+        if not self._running:
+            return
+        self.finish_stop(self.request_stop(), STOP_JOIN_TIMEOUT)
+
+    def request_stop(self) -> Optional[threading.Thread]:
+        """Tell the worker to stop listening and run its final flush. Returns
+        at once with the worker (None if nothing was running); the caller
+        then MUST call finish_stop() to close the session."""
         with self._lock:
             if not self._running:
-                return
+                return None
             self._running = False
+            worker, self._worker = self._worker, None
+        return worker
 
-        # Give the worker a moment to finish its final flush (the last
-        # phrase the user spoke). If it can't finish within the window, the
-        # session is closed below and the in-flight result is dropped by
-        # the session check in _deliver — it can never leak into the next
-        # dictation (F2).
-        if self._worker:
-            self._worker.join(timeout=STOP_JOIN_TIMEOUT)
-            self._worker = None
+    def finish_stop(self, worker: Optional[threading.Thread],
+                    timeout: float) -> bool:
+        """Wait up to `timeout` s for the worker's final flush (the last
+        phrase the user spoke), then close the session. Results that still
+        arrive afterwards are dropped by the session check in _deliver — they
+        can never leak into the next dictation (F2). Returns True when the
+        worker finished in time."""
+        finished = True
+        if worker is not None:
+            worker.join(timeout=timeout)
+            finished = not worker.is_alive()
 
         with self._lock:
             self._session_id += 1  # close the session: late results are dropped
@@ -553,6 +592,7 @@ class VoiceTranscriber:
         self._close_stream()
 
         log.info("Transcription stopped.")
+        return finished
 
     def is_running(self) -> bool:
         return self._running

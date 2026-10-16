@@ -17,6 +17,7 @@ from .transcriber import VoiceTranscriber
 from .overlay import TranscriptionOverlay
 from .hotkey import HotkeyManager
 from .injector import type_text, get_foreground_window, set_foreground_window, send_backspaces
+from .model_host import _TRANSCRIBE_TIMEOUT
 from .tray import TrayApp
 
 _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -47,6 +48,15 @@ warnings.filterwarnings("ignore", message=".*HF_TOKEN.*")
 warnings.filterwarnings("ignore", message=".*unauthenticated.*")
 log = logging.getLogger("eqho")
 
+# After stop, wait this long for the final transcription before giving up.
+# Only a truly stuck engine hits it: ModelHost.transcribe itself fails after
+# _TRANSCRIBE_TIMEOUT, so a slow PC (5-60 s per call) still gets its text.
+FINISH_TIMEOUT = _TRANSCRIBE_TIMEOUT + 15.0
+WRITING_TEXT = "Writing it down…"
+STILL_WRITING_TEXT = "Still writing your last dictation — one moment."
+TOO_SLOW_TEXT = ("That dictation took too long and was lost. A smaller model "
+                 "in Eqho → Models is faster on this PC.")
+
 
 class App:
     """Top-level application controller."""
@@ -66,6 +76,7 @@ class App:
         self._last_injected: str = ""  # for the "delete that" voice command
         self._settings_apply_lock = threading.Lock()  # serialize settings applies
         self._mic_settings_opened = False  # privacy page opened once per run
+        self._finishing = False  # a stopped dictation is still being written down
 
         self.transcriber.set_callbacks(
             on_partial=self._on_partial,
@@ -92,6 +103,8 @@ class App:
     # -- Transcription callbacks -----------------------------------------------
 
     def _on_partial(self, text: str) -> None:
+        if self._finishing:
+            return  # keep "Writing it down…" up until the text is typed
         self.overlay.update_text(text)
 
     def _on_complete(self, text: str) -> None:
@@ -105,7 +118,8 @@ class App:
         with self._lock:
             self._pending_text.append(text)
             full_so_far = textproc.smart_join(self._pending_text)
-        self.overlay.update_text(full_so_far)
+        if not self._finishing:
+            self.overlay.update_text(full_so_far)
 
     def _handle_delete_command(self) -> None:
         """'Delete that': drop the previous utterance — the pending one if
@@ -165,13 +179,16 @@ class App:
                 "Eqho → General → Microphone.")
 
     def _teardown_session(self, session: Optional[int],
-                          error: Optional[str] = None) -> None:
+                          error: Optional[str] = None,
+                          hide_overlay: bool = True) -> None:
         """The ONE path that ends a dictation session. ALWAYS restores system
         volume, hides the overlay and resets the tray — on normal stop, mic
         failure, model-load failure or a worker crash. `session` is the
         transcriber session this teardown belongs to (None = unconditional);
         teardowns for an older session are skipped so an abort can never
-        un-duck or hide a NEWER session's UI."""
+        un-duck or hide a NEWER session's UI. A normal stop passes
+        hide_overlay=False: the overlay then shows "Writing it down…" and the
+        finish thread hides it once the text is typed (_end_finishing)."""
         with self._session_lock:
             with self._lock:
                 if session is not None and session != self._session:
@@ -182,7 +199,8 @@ class App:
             if error:
                 log.error("Dictation session aborted: %s", error)
             self._restore_volume()
-            self.overlay.hide()
+            if hide_overlay:
+                self.overlay.hide()
             self.tray.set_active(False)
             if error:
                 self.tray.notify(error)
@@ -218,8 +236,18 @@ class App:
                 self._saved_volume = None
             log.info("Volume restored to %.0f%%.", saved * 100)
 
+    def _note_still_writing(self) -> None:
+        """A hotkey press while the last dictation is still being written:
+        never start a second, overlapping dictation (keeps F2 impossible)."""
+        log.info("Hotkey ignored: last dictation still being written")
+        self.overlay.update_text(STILL_WRITING_TEXT)
+        self.tray.notify(STILL_WRITING_TEXT)
+
     def activate(self) -> None:
         with self._session_lock:
+            if self._finishing:
+                self._note_still_writing()
+                return
             hwnd = get_foreground_window()
             with self._lock:
                 self._target_hwnd = hwnd
@@ -250,12 +278,58 @@ class App:
                     self.tray.notify("Selected mic unavailable, using default microphone.")
 
     def deactivate(self) -> None:
-        log.info("Dictation deactivated")
-        self.transcriber.stop()
-        self._teardown_session(None)
+        with self._session_lock:
+            if self._finishing:
+                return  # e.g. hold-key release after a refused press
+            log.info("Dictation deactivated")
+            worker = self.transcriber.request_stop()
+            # Volume and tray reset now; the overlay stays up until the text
+            # is typed (a slow PC needs 5-60 s for the final transcription).
+            self._teardown_session(None, hide_overlay=False)
+            self._finishing = True
+            self.overlay.update_text(WRITING_TEXT)
         if self.settings.sound_feedback:
             chime.play_stop()  # after restore, so it's audible
+        # Wait + inject on a daemon thread, never on the hotkey thread (a
+        # blocked hotkey thread queues key presses that fire later).
+        try:
+            threading.Thread(target=self._finish_dictation, args=(worker,),
+                             name="finish-dictation", daemon=True).start()
+        except Exception:
+            log.exception("Could not start the finish thread")
+            self._finish_dictation(worker, timeout=0.0)
 
+    def _finish_dictation(self, worker, timeout: Optional[float] = None) -> None:
+        """Wait for the worker's final flush, then type the text into the
+        window the user dictated into. A stuck engine closes the session
+        (its late result is dropped) and tells the user. Always ends with the
+        overlay hidden and the finishing flag cleared."""
+        error = None
+        try:
+            done = self.transcriber.finish_stop(
+                worker, FINISH_TIMEOUT if timeout is None else timeout)
+            if done:
+                self._inject_pending()
+            else:
+                log.warning("Final transcription still running after %.0fs — dropped",
+                            FINISH_TIMEOUT if timeout is None else timeout)
+                error = TOO_SLOW_TEXT
+        except Exception:
+            log.exception("Finishing the dictation failed")
+            error = "Something went wrong while writing that dictation down."
+        finally:
+            self._end_finishing(error)
+
+    def _end_finishing(self, error: Optional[str]) -> None:
+        with self._session_lock:
+            with self._lock:
+                self._pending_text.clear()
+            self.overlay.hide()
+            self._finishing = False
+        if error:
+            self.tray.notify(error)
+
+    def _inject_pending(self) -> None:
         with self._lock:
             full_text = textproc.smart_join(self._pending_text)
             self._pending_text.clear()
@@ -294,6 +368,9 @@ class App:
                 )
 
     def toggle(self) -> None:
+        if self._finishing:
+            self._note_still_writing()
+            return
         if self.transcriber.is_running():
             self.deactivate()
         else:
