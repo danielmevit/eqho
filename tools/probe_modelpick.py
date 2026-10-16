@@ -70,6 +70,16 @@ def main() -> int:
         check(model_host._cuda_available() == first, "_cuda_available() result cached")
     finally:
         ctranslate2.get_supported_compute_types = saved
+    from src.theme import MODEL_INFO
+    from src.ui.tabs.models import detail_text, runs_on_text
+    check("graphics card" in runs_on_text("gpu") and "processor" in runs_on_text("cpu"),
+          "top line names where models run")
+    lines = [detail_text(MODEL_INFO[k], "gpu") for k in MODEL_INFO if k != "large-v3"]
+    check(all("Runs on" not in t and t.count(" · ") == 1 for t in lines),
+          "card detail lines are languages + size only")
+    check("CPU only" in detail_text(MODEL_INFO["large-v3"], "gpu")
+          and "CPU only" not in detail_text(MODEL_INFO["large-v3"], "cpu"),
+          "Large v3 CPU-only note on gpu PCs only")
     modelpick._hw_class = None
     print(f"[INFO] this PC: hardware_class={modelpick.hardware_class()}, "
           f"en -> {modelpick.recommend_model('en')}, de -> {modelpick.recommend_model('de')}")

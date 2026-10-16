@@ -16,6 +16,22 @@ _EN_MODELS = ["distil-large-v3", "distil-medium.en", "distil-small.en"]
 _ML_MODELS = ["large-v3-turbo", "medium", "small", "base", "tiny", "large-v3"]
 
 
+def runs_on_text(hw: str) -> str:
+    """The one line at the top of the tab saying where models run."""
+    if hw == "gpu":
+        return "On this PC, speech models run on your graphics card."
+    return ("On this PC, speech models run on the processor — "
+            "the smaller models are much faster here.")
+
+
+def detail_text(info: dict, hw: str) -> str:
+    """Card detail line: "<languages> · <size>" (+ device note on gpu PCs)."""
+    parts = [info.get("lang", ""), info.get("size", "")]
+    if hw == "gpu" and info.get("device"):
+        parts.append(info["device"])
+    return " · ".join(parts)
+
+
 class ModelsTab(TabBase):
     KEY = "models"
 
@@ -33,6 +49,11 @@ class ModelsTab(TabBase):
         self._selected_key = self._settings.model_size
 
         cols = self._get_col_count()
+
+        ctk.CTkLabel(
+            tab, text=runs_on_text(hardware_class()),
+            font=font("xs"), text_color=self._colors.fg_muted, anchor="w",
+        ).pack(fill="x", padx=SPACING["md"], pady=(SPACING["sm"], 0))
 
         if cols >= 2:
             self._section_label(tab, "ENGLISH OPTIMIZED")
@@ -192,10 +213,7 @@ class ModelsTab(TabBase):
         )
         status_label.pack(side="right")
 
-        device = info.get("device") or (
-            "Runs on your graphics card" if hardware_class() == "gpu"
-            else "Runs on the processor")
-        detail = f"{info.get('lang', '')} · {info.get('size', '')} · {device}"
+        detail = detail_text(info, hardware_class())
         detail_lbl = ctk.CTkLabel(
             inner, text=detail,
             font=font("xs"),
