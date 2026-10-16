@@ -33,7 +33,6 @@ CONFIG_FILE = CONFIG_DIR / "settings.json"
 # Pre-0.3.3 installs cached models to a hardcoded D:\EqhoModels. If that
 # directory exists, Settings.load() pins it into `model_dir` so the cache
 # keeps working; fresh installs use the platform cache dir instead.
-LEGACY_MODEL_DIR = Path("D:/EqhoModels")
 DEFAULT_MODEL_DIR = Path(platformdirs.user_cache_dir("Eqho", appauthor=False)) / "models"
 
 WHISPER_MODELS = {
@@ -300,7 +299,7 @@ class Settings:
     hotkey_mode: str = "toggle"  # "toggle" or "hold"
     hotkey_backend: str = "auto"  # "auto" (keyboard on Windows, pynput elsewhere), "keyboard", "pynput"
     model_size: str = "distil-large-v3"
-    model_dir: str = ""  # empty = resolve_model_dir() picks legacy dir or platform cache
+    model_dir: str = ""  # empty = resolve_model_dir() uses the platform cache
     audio_device: Optional[int] = None  # None = system default input device
     auto_paste: bool = True  # paste via clipboard vs simulated keystrokes
     overlay_enabled: bool = True
@@ -347,8 +346,6 @@ class Settings:
         """Directory Whisper models are cached in."""
         if self.model_dir:
             return Path(self.model_dir)
-        if LEGACY_MODEL_DIR.exists():
-            return LEGACY_MODEL_DIR
         return DEFAULT_MODEL_DIR
 
     def save(self) -> None:
@@ -449,15 +446,6 @@ class Settings:
         if settings is None:
             settings = cls()
 
-        # One-time migration: pin a pre-0.3.3 legacy model cache explicitly so
-        # it survives even if the drive layout changes later.
-        if not settings.model_dir and LEGACY_MODEL_DIR.exists():
-            settings.model_dir = str(LEGACY_MODEL_DIR)
-            try:
-                settings.save()
-                log.info("Pinned legacy model cache %s into settings.", LEGACY_MODEL_DIR)
-            except Exception as e:
-                log.debug("Could not persist model_dir migration: %s", e)
         return settings
 
     def add_listener(self, callback) -> None:

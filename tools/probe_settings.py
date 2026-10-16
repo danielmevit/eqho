@@ -36,7 +36,6 @@ def test_corrupt_files():
         test_file = Path(td) / "settings.json"
         bad_file = Path(td) / "settings.json.bad"
         settings_mod.CONFIG_FILE = test_file
-        settings_mod.LEGACY_MODEL_DIR = Path(test_file).parent / "no-legacy-model-cache"  # isolate from the real machine
 
         # Scenario 1: Truncated JSON syntax
         test_file.write_text('{"language": "fr", "auto_paste":', encoding="utf-8")
@@ -91,7 +90,6 @@ def test_bom_file_loads():
     with tempfile.TemporaryDirectory() as td:
         test_file = Path(td) / "settings.json"
         settings_mod.CONFIG_FILE = test_file
-        settings_mod.LEGACY_MODEL_DIR = Path(td) / "no-legacy-model-cache"
         test_file.write_bytes(b"\xef\xbb\xbf" + b'{"language": "fr"}')
         s = Settings.load()
         assert s.language == "fr", f"Expected 'fr' from BOM file, got {s.language}"
@@ -106,7 +104,6 @@ def test_type_coercion_and_unknown_keys():
         test_file = Path(td) / "settings.json"
         bad_file = Path(td) / "settings.json.bad"
         settings_mod.CONFIG_FILE = test_file
-        settings_mod.LEGACY_MODEL_DIR = Path(test_file).parent / "no-legacy-model-cache"  # isolate from the real machine
 
         data = {
             # Coercible bools
@@ -170,7 +167,6 @@ def test_concurrent_saves():
     with tempfile.TemporaryDirectory() as td:
         test_file = Path(td) / "settings.json"
         settings_mod.CONFIG_FILE = test_file
-        settings_mod.LEGACY_MODEL_DIR = Path(test_file).parent / "no-legacy-model-cache"  # isolate from the real machine
 
         s = Settings()
         assert hasattr(s, "_lock"), "Settings object must have a _lock"
@@ -218,7 +214,6 @@ def test_save_is_atomic():
     with tempfile.TemporaryDirectory() as td:
         test_file = Path(td) / "settings.json"
         settings_mod.CONFIG_FILE = test_file
-        settings_mod.LEGACY_MODEL_DIR = Path(test_file).parent / "no-legacy-model-cache"  # isolate from the real machine
 
         s = Settings()
         stop_event = threading.Event()
@@ -284,7 +279,6 @@ def test_save_reader_holds_file():
     with tempfile.TemporaryDirectory() as td:
         test_file = Path(td) / "settings.json"
         settings_mod.CONFIG_FILE = test_file
-        settings_mod.LEGACY_MODEL_DIR = Path(test_file).parent / "no-legacy-model-cache"
 
         s = Settings(hotkey="alt+q", overlay_font_size=14)
         s.save()
@@ -336,7 +330,6 @@ def test_save_retries_and_degrades_gracefully():
     with tempfile.TemporaryDirectory() as td:
         test_file = Path(td) / "settings.json"
         settings_mod.CONFIG_FILE = test_file
-        settings_mod.LEGACY_MODEL_DIR = Path(test_file).parent / "no-legacy-model-cache"
 
         s = Settings(hotkey="alt+q", overlay_font_size=14)
         s.save()
