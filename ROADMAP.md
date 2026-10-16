@@ -61,46 +61,47 @@ Core dictation on Linux + macOS with graceful degradation.
 - [x] CI build matrix (windows/ubuntu/macos) with headless `--smoke`
 
 ## Next versions (owner plan 2026-10-16) — stay in 0.8.x while in beta
-Order: fix what we have → onboarding + Store readiness → speed & languages → interface languages → competitor research
-and new features. Every change is checked with the test system (docs/ai/TESTING.md: ASR benchmark, end-to-end
-dictation test, UI walker) before release.
+Order: fix what we have → first launch + speed on every PC → languages → interface languages → competitor research
+and new features. The Microsoft Store comes after that, once the app is as good as we can make it (owner
+2026-10-16: "lets first get it as optimized as we can and than launch"). Every change is checked with the test
+system (docs/ai/TESTING.md: ASR benchmark, end-to-end dictation test, UI walker) before release.
 
-### 0.8.9 — reliability + test system (in progress, on dev)
+### 0.8.9 — reliability + test system + AMD/Intel engine (finishing, on dev)
 - [x] Model host: no stale replies after a timeout; first-run download can't time out (EQ-HOST)
 - [x] Model change no longer crashes (EQ-DASH)
 - [x] Sessions always clean up: audio never stays muted, no text leaks into the next dictation, transcripts kept out
       of the log (EQ-SESSION)
 - [x] Settings saved safely, survive a locked or corrupt file (EQ-SETTINGS)
 - [x] Test system: ASR accuracy/speed benchmark, end-to-end dictation test, UI walker (EQ-TESTASR/E2E/UI)
-- [ ] Run the end-to-end + UI tests on the desktop; fix what they find
-- [ ] Bigger accuracy run (100+ clips, harder speakers/noise, CPU-only speed) before any accuracy claims
-- [ ] Pinned release dependencies (customtkinter 5.2.2), CI Python 3.13; macOS Cmd+V paste; docs/site truth
-      (AMD/Vulkan engine not in public builds yet)
+- [x] End-to-end + UI tests on the desktop (10/10, WER 1.05%; 28 controls, 0 errors)
+- [x] Bigger accuracy run (GPU 200+200 clips, CPU-only 60+60) — numbers in CHANGELOG/LOG, no public claims yet
+- [x] Pinned release dependencies, CI Python 3.13, macOS Cmd+V paste, safer clipboard restore (EQ-CI, EQ-INJECT)
+- [x] whisper.cpp/Vulkan engine in the Windows downloads (EQ-AMD)
+- [x] Second launch opens the running Eqho; plain microphone messages (EQ-OPEN); wrapped help texts, all CPU
+      cores, timing in the log (EQ-POLISH)
+- [ ] **Slow PCs (Intel laptop test, 2026-10-16):** never lose the last sentence, no live preview when slow
+      (EQ-FINISH); Auto uses the processor on built-in graphics, whisper.cpp models in Eqho's folder, Custom
+      Vocabulary on whisper.cpp, settings with a BOM (EQ-SLOWPC)
+- [ ] Desktop test with a slow engine on the main PC, then a short re-run on the Latitude (fix + small/base models)
 
-### 0.8.10 — onboarding + Microsoft Store readiness
+### 0.8.10 — first launch + speed on every PC
 - [ ] **First-launch onboarding** (must, same as Vecto/Laydown): welcome → **which language do you speak?** (picks the
-      model: English → distil-large-v3, other/several → multilingual model + auto-detect) → microphone test with a level
-      meter → model download with consent, size and progress → audio lowering on/off (consent) → try it ("press Alt+Q
-      and say something") → done. Skippable, reopen from the dashboard.
-- [ ] Microphone turned off in Windows privacy settings: clear message + link, no crash
-- [ ] UI polish from the 2026-10-16 button walk: clipped help text (General → Custom Vocabulary; Models → Large v3 card)
+      model) → microphone test with a level meter → model download with consent, size and progress → audio lowering
+      on/off (consent) → try it ("press Alt+Q and say something") → done. Skippable, reopen from the dashboard.
+- [ ] **Automatic model choice by hardware** (moved up from 0.8.11): NVIDIA → distil-large-v3 on CUDA; graphics
+      card → whisper.cpp; processor only → a smaller fast model. Shown and changeable in settings. Measured
+      2026-10-16: distil-large-v3 on the processor takes 11–14 s per 10 s sentence (Ryzen 7 5800H) and 14–19 s per
+      sentence on an Intel i7-8665U laptop — too slow. Benchmark small/base/distil-small (speed + accuracy) on both
+      with tools/bench_asr.py first, then pick.
+- [ ] Keep the model ready after start (no wait on the first Alt+Q) (moved up from 0.8.11)
 - [ ] Low free memory: warn in plain words before loading the model on the processor (needs about 1.5–2 GB free;
       seen 2026-10-16: on a full PC the model stopped partway)
-- [ ] Privacy page on the site (Store requirement); AI disclosure in the listing
-- [ ] One window only (single instance), like Vecto/Laydown
-- [ ] Store package (MSIX, microphone capability) + listing text; pricing decision (one-time, like Vecto/Laydown)
+- [ ] whisper.cpp: try a shorter audio window for short sentences (`audio_ctx`) — keep only if accuracy holds
+- [ ] Version number in Eqho.exe's file properties
 
-### 0.8.11 — speed and languages
-- [ ] Automatic model choice by hardware (NVIDIA → faster-whisper CUDA; AMD/Intel GPU → whisper.cpp Vulkan; CPU-only →
-      a smaller fast model), shown and changeable in settings. **Why it matters (measured 2026-10-16, Ryzen 7 5800H,
-      no GPU):** distil-large-v3 on the processor is SLOWER than real time (0.7–0.9x, a 10 s sentence takes 11–14 s);
-      8 threads instead of the default 4 gives only ~10%, skipping MKL ~5% more. The big encoder is the cost, so
-      CPU-only PCs need a smaller model (measure small/base/distil-small speed + accuracy with tools/bench_asr.py).
-      Intel iGPU via Vulkan vs CPU: see the Dell Latitude 5400 test (Intel-test kit).
-- [x] Ship the whisper.cpp Vulkan engine in the Windows downloads (moved into 0.8.9, EQ-AMD)
+### 0.8.11 — languages (speech)
 - [ ] Non-English: multilingual model when a non-English language is chosen; offer every language Whisper supports
       (~99), not only 13
-- [ ] Keep the model ready after start (no wait on the first Alt+Q)
 
 ### 0.8.12 — the app in many languages (interface)
 - [ ] Move all UI text (dashboard, onboarding, tray, overlay, messages) into translation files
@@ -116,6 +117,12 @@ dictation test, UI walker) before release.
 - [ ] Voice commands and clean-up: "new line", "full stop", "comma"; remove "um/uh"; capitalisation
 - [ ] Friendly "words to know" list (names, products, jargon) + fixed replacements (today: hidden initial_prompt)
 - [ ] Demo GIF + README/Store screenshots
+
+### Microsoft Store — after the app is as good as we can make it
+- [ ] Store package (MSIX, microphone capability) + listing text (no competitor names, no unverifiable claims)
+- [ ] Privacy page on the site; AI disclosure in the listing
+- [ ] Pricing decision (one-time, like Vecto/Laydown)
+- [ ] Code signing
 
 ## Phase 7 -- Public Launch (→ v1.0)
 - [x] Relocate internal docs (now root AGENTS/SOUL/TODO + docs/ai/)
