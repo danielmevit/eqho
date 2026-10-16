@@ -11,13 +11,18 @@ Planned as 0.8.9: reliability, a test system, and the AMD/Intel engine in the Wi
 ### Fixed
 - **Sound never stays muted.** If the speech model fails to load or a dictation goes wrong, Eqho now always turns
   your volume back up, hides the overlay and resets the tray icon.
-- **No text in the wrong dictation.** A slow last sentence can no longer land in your next dictation; leftovers from
-  a finished dictation are dropped.
+- **Slow PCs no longer lose what you said.** After you stop, Eqho turns your sound and the microphone back right
+  away, shows "Writing it down…", and types the text into your window as soon as it is ready — even if that takes a
+  minute. Before, on PCs that need more than about 5 seconds, the text was lost or showed up in your next dictation.
+  Pressing the hotkey while it is still writing tells you so instead of starting over. Only a truly stuck engine
+  gives up, and then Eqho says so and suggests a smaller model.
 - **No stale text after a timeout.** The speech engine can no longer hand back the previous dictation's text after a
   timeout, and the first model download no longer times out while it is still downloading.
 - **Choosing another model no longer crashes** the dashboard.
 - **Settings are saved safely.** No more half-written settings file; if the file is locked Eqho retries, and a
   damaged file is set aside as `settings.json.bad` so the app still starts.
+- **Settings saved by Notepad no longer reset.** A settings file saved as "UTF-8 with BOM" was treated as damaged.
+- **Custom Vocabulary now also works with the AMD/Intel engine** (it was ignored there).
 - **macOS: dictation pastes again** (it pressed Ctrl+V instead of Cmd+V). On every system your old clipboard comes
   back a moment later, and only if it still holds the dictation; a picture or file on the clipboard is no longer
   wiped to empty.
@@ -29,8 +34,10 @@ Planned as 0.8.9: reliability, a test system, and the AMD/Intel engine in the Wi
 - **Clear microphone messages.** If Windows is blocking the microphone, Eqho says so in plain words and opens the
   right Windows settings page; if there is no microphone, it tells you how to pick one.
 - **AMD and Intel graphics on Windows.** The Windows downloads now include the second engine (whisper.cpp with
-  Vulkan). "Auto" uses it when there is no NVIDIA card and the processor supports it (AVX2); if it can't start,
-  Eqho quietly uses the standard engine for that session.
+  Vulkan). "Auto" uses it for AMD and Intel graphics cards that have their own memory (2 GB or more) when the
+  processor supports it (AVX2). Laptops with only built-in graphics use the processor instead — on an Intel UHD 620
+  laptop that was about 1.6× faster. If the engine can't start, Eqho quietly uses the standard engine for that
+  session. Its speech models are kept in Eqho's model folder like the others.
 - **Test system** for developers: accuracy/speed benchmark on public recordings, an end-to-end dictation test, a
   button walker for every screen, and small checks for each fix (see `docs/ai/TESTING.md`).
 
@@ -39,6 +46,8 @@ Planned as 0.8.9: reliability, a test system, and the AMD/Intel engine in the Wi
 - **Steadier downloads:** release builds use the exact library versions Eqho is tested with, built on Python 3.13
   with current GitHub Actions (third-party ones pinned to exact versions). Release titles read "Eqho vX.Y.Z".
 - README and website describe the engines as they really ship.
+- **No live preview on slow PCs.** When one transcription takes longer than a moment, Eqho skips the
+  words-while-you-talk preview, so you wait once instead of twice.
 - **A bit faster without a graphics card:** the processor engine now uses all your processor cores (about 10%).
 - Dashboard help texts wrap instead of being cut off; the log shows how long each dictation took to transcribe.
 
