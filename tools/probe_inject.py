@@ -9,8 +9,14 @@ Covers Task EQ-INJECT (review findings F6 + F12):
 6. autostart_command() returns the $APPIMAGE path when set to an existing file,
    else the old behavior.
 7. Module-level threading lock guards the paste sequence.
+8. EQ-CLIP: Windows path writes dictation + restore via OsKit
+   set_clipboard_text(private=True); falls back to pyperclip when it fails;
+   non-Windows path never touches the OsKit clipboard.
+9. EQ-CLIP real check (Windows only): private write, read back, the three
+   opt-out formats present, then the user's clipboard is restored. This one
+   check touches the real clipboard (and puts it back).
 
-Runs standalone on any OS, never presses real keys, never touches the real clipboard.
+Runs standalone on any OS, never presses real keys; only check 9 touches the real clipboard.
 Exit 0 on success, 1 on failure.
 """
 
@@ -526,6 +532,103 @@ def test_only_held_modifiers_released():
     assert got == list(injector._ALL_MODIFIERS), f"Unknown state must release all modifiers, got {got}"
 
 
+class ClipOsKit(FakeOsKit):
+    """FakeOsKit with an OsKit clipboard (records private writes)."""
+
+    def __init__(self, initial="", ok=True):
+        super().__init__("ctrl")
+        self.content = initial
+        self.ok = ok
+        self.writes = []
+
+    def set_clipboard_text(self, text, private=True):
+        self.writes.append((text, private))
+        if not self.ok:
+            return False
+        self.content = text
+        return True
+
+    def get_clipboard_text(self):
+        return self.content if self.ok else None
+
+
+def _run_paste(is_windows, kit, clip, text):
+    orig = (injector._kb, injector.pyperclip.copy, injector.pyperclip.paste,
+            injector.time.sleep, oskit.get, injector._IS_WINDOWS)
+    sleeps = []
+    try:
+        injector._kb = FakeController()
+        injector.pyperclip.copy = clip.copy
+        injector.pyperclip.paste = clip.paste
+        injector.time.sleep = lambda d: sleeps.append(d)
+        oskit.get = lambda: kit
+        injector._IS_WINDOWS = is_windows
+        injector.type_text(text)
+    finally:
+        (injector._kb, injector.pyperclip.copy, injector.pyperclip.paste,
+         injector.time.sleep, oskit.get, injector._IS_WINDOWS) = orig
+    return sleeps
+
+
+def test_windows_private_clipboard():
+    kit = ClipOsKit(initial="old user text")
+    clip = FakeClipboard(initial="pyperclip-untouched")
+    sleeps = _run_paste(True, kit, clip, "dictation")
+    assert kit.writes == [("dictation", True), ("old user text", True)], kit.writes
+    assert kit.content == "old user text", kit.content
+    assert clip.history == ["pyperclip-untouched"], f"pyperclip used: {clip.history}"
+    assert 0.1 in sleeps and injector._RESTORE_DELAY_S in sleeps, sleeps
+
+    # OsKit write fails -> pyperclip carries dictation and restore.
+    kit = ClipOsKit(ok=False)
+    clip = FakeClipboard(initial="old user text")
+    _run_paste(True, kit, clip, "dictation")
+    assert kit.writes == [("dictation", True), ("old user text", True)], kit.writes
+    assert clip.history == ["old user text", "dictation", "old user text"], clip.history
+
+    # Non-Windows: OsKit clipboard never used, pyperclip exactly as before.
+    kit = ClipOsKit(initial="x")
+    clip = FakeClipboard(initial="old user text")
+    _run_paste(False, kit, clip, "dictation")
+    assert kit.writes == [], kit.writes
+    assert clip.history == ["old user text", "dictation", "old user text"], clip.history
+
+
+def test_real_windows_clipboard():
+    if sys.platform != "win32":
+        print("    (skipped: not Windows)")
+        return
+    import ctypes
+    from src.oskit.windows import WindowsOsKit
+
+    kit = WindowsOsKit()
+    before = kit.get_clipboard_text()
+    probe = "EQ-CLIP probe \u00e4\u00f6\u00fc \u2713"
+    try:
+        assert kit.set_clipboard_text(probe, private=True), "set_clipboard_text returned False"
+        assert kit.get_clipboard_text() == probe, "read-back mismatch"
+        _, user32, _ = kit._clip_api()
+        missing = []
+        assert kit._open_clipboard(user32), "clipboard busy"
+        try:
+            for name in kit._PRIVATE_FORMATS:
+                fmt = user32.RegisterClipboardFormatW(name)
+                if not (fmt and user32.IsClipboardFormatAvailable(fmt)):
+                    missing.append(name)
+        finally:
+            user32.CloseClipboard()
+        assert not missing, f"opt-out formats missing: {missing}"
+    finally:
+        if before is not None:
+            kit.set_clipboard_text(before, private=True)
+        else:
+            _, user32, _ = kit._clip_api()
+            if kit._open_clipboard(user32):
+                user32.EmptyClipboard()
+                user32.CloseClipboard()
+    assert kit.get_clipboard_text() == before, "clipboard not restored"
+
+
 def main():
     print("Running probe_inject (EQ-INJECT)...")
     checks = [
@@ -543,6 +646,8 @@ def main():
         ),
         ("Threading lock guards paste sequence and serializes execution", test_paste_lock),
         ("Only modifiers that are really held get a key-up (None = all)", test_only_held_modifiers_released),
+        ("Windows: private OsKit clipboard for dictation + restore, pyperclip fallback", test_windows_private_clipboard),
+        ("Real Windows clipboard: private write, read-back, opt-out formats, restored", test_real_windows_clipboard),
     ]
 
     for idx, (desc, test_fn) in enumerate(checks, 1):

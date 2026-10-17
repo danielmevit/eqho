@@ -1,6 +1,7 @@
 """Inject transcribed text into the currently focused application."""
 
 import logging
+import sys
 import threading
 import time
 
@@ -14,6 +15,9 @@ log = logging.getLogger(__name__)
 _kb = Controller()
 _paste_lock = threading.Lock()
 _RESTORE_DELAY_S = 0.4
+# Windows: clipboard writes go through OsKit so the dictation carries the
+# "keep out of clipboard history / cloud clipboard / monitors" formats.
+_IS_WINDOWS = sys.platform == "win32"
 
 
 def get_foreground_window():
@@ -50,11 +54,38 @@ def type_text(text: str, *, use_clipboard: bool = True) -> None:
             pass
 
 
+def _clip_read():
+    """Clipboard text (OsKit on Windows, pyperclip elsewhere / as fallback)."""
+    if _IS_WINDOWS:
+        try:
+            value = getattr(oskit.get(), "get_clipboard_text", lambda: None)()
+        except Exception:
+            value = None
+        if value is not None:
+            return value
+    return pyperclip.paste()
+
+
+def _clip_write(text: str) -> None:
+    """Put *text* on the clipboard; on Windows kept out of history (private).
+    Raises like pyperclip.copy when every route fails."""
+    if _IS_WINDOWS:
+        try:
+            ok = getattr(oskit.get(), "set_clipboard_text", lambda t, private=True: False)(
+                text, private=True)
+        except Exception:
+            ok = False
+        if ok:
+            return
+        log.debug("OsKit clipboard write failed, using pyperclip.")
+    pyperclip.copy(text)
+
+
 def _paste_via_clipboard(text: str) -> None:
     with _paste_lock:
         old = None
         try:
-            old = pyperclip.paste()
+            old = _clip_read()
         except Exception:
             old = None
 
@@ -62,14 +93,14 @@ def _paste_via_clipboard(text: str) -> None:
         time.sleep(0.05)
 
         try:
-            pyperclip.copy(text)
+            _clip_write(text)
         except Exception as e:
             # Clipboard unavailable (e.g. missing xclip/xsel on Linux, or another
             # app holding it open) — the text must still land somewhere.
             log.warning("Clipboard unavailable (%s), falling back to simulated typing.", e)
             _type_chars(text)
             return
-        time.sleep(0.05)
+        time.sleep(0.1)
 
         mod_name = oskit.get().paste_modifier()
         mod_key = Key.cmd if mod_name == "cmd" else Key.ctrl
@@ -82,14 +113,15 @@ def _paste_via_clipboard(text: str) -> None:
 
         # Restore only if previous clipboard held non-empty text, and the clipboard
         # still holds our dictated text (if changed by user/app in the meantime, leave it alone).
+        # The restore is private too: the old text is already in the user's history.
         if old:
             try:
-                current = pyperclip.paste()
+                current = _clip_read()
             except Exception:
                 current = None
             if current == text:
                 try:
-                    pyperclip.copy(old)
+                    _clip_write(old)
                 except Exception:
                     pass
 

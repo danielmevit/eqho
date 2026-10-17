@@ -91,6 +91,135 @@ class WindowsOsKit(OsKit):
             log.debug("held_modifiers failed: %s", e)
             return None
 
+    # -- clipboard ----------------------------------------------------------------
+
+    _CF_UNICODETEXT = 13
+    _GMEM_MOVEABLE = 0x0002
+    _PRIVATE_FORMATS = (
+        "ExcludeClipboardContentFromMonitorProcessing",
+        "CanIncludeInClipboardHistory",
+        "CanUploadToCloudClipboard",
+    )
+
+    @staticmethod
+    def _clip_api():
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        user32.OpenClipboard.argtypes = [wintypes.HWND]
+        user32.OpenClipboard.restype = wintypes.BOOL
+        user32.CloseClipboard.restype = wintypes.BOOL
+        user32.EmptyClipboard.restype = wintypes.BOOL
+        user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+        user32.SetClipboardData.restype = wintypes.HANDLE
+        user32.GetClipboardData.argtypes = [wintypes.UINT]
+        user32.GetClipboardData.restype = wintypes.HANDLE
+        user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
+        user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
+        user32.RegisterClipboardFormatW.argtypes = [wintypes.LPCWSTR]
+        user32.RegisterClipboardFormatW.restype = wintypes.UINT
+        kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+        kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
+        kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+        kernel32.GlobalLock.restype = ctypes.c_void_p
+        kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+        kernel32.GlobalUnlock.restype = wintypes.BOOL
+        kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
+        kernel32.GlobalFree.restype = wintypes.HGLOBAL
+        return ctypes, user32, kernel32
+
+    @staticmethod
+    def _open_clipboard(user32) -> bool:
+        """OpenClipboard with a short retry — clipboard history / monitors
+        hold it open for a few ms right after every change."""
+        import time
+        for _ in range(20):
+            if user32.OpenClipboard(None):
+                return True
+            time.sleep(0.01)
+        return False
+
+    def _global_bytes(self, ctypes, kernel32, data: bytes):
+        """Movable global memory holding *data* (None on failure)."""
+        h = kernel32.GlobalAlloc(self._GMEM_MOVEABLE, len(data))
+        if not h:
+            return None
+        p = kernel32.GlobalLock(h)
+        if not p:
+            kernel32.GlobalFree(h)
+            return None
+        ctypes.memmove(p, data, len(data))
+        kernel32.GlobalUnlock(h)
+        return h
+
+    def set_clipboard_text(self, text: str, private: bool = True) -> bool:
+        try:
+            ctypes, user32, kernel32 = self._clip_api()
+        except Exception as e:
+            log.debug("clipboard API unavailable: %s", e)
+            return False
+        if not self._open_clipboard(user32):
+            log.debug("set_clipboard_text: clipboard busy")
+            return False
+        try:
+            if not user32.EmptyClipboard():
+                return False
+            h = self._global_bytes(ctypes, kernel32, (text + "\0").encode("utf-16-le"))
+            if not h:
+                return False
+            if not user32.SetClipboardData(self._CF_UNICODETEXT, h):
+                kernel32.GlobalFree(h)  # ownership only passes on success
+                return False
+            if private:
+                zero = (0).to_bytes(4, "little")  # DWORD 0
+                for name in self._PRIVATE_FORMATS:
+                    fmt = user32.RegisterClipboardFormatW(name)
+                    if not fmt:
+                        continue
+                    hp = self._global_bytes(ctypes, kernel32, zero)
+                    if hp and not user32.SetClipboardData(fmt, hp):
+                        kernel32.GlobalFree(hp)
+            return True
+        except Exception as e:
+            log.debug("set_clipboard_text failed: %s", e)
+            return False
+        finally:
+            try:
+                user32.CloseClipboard()
+            except Exception:
+                pass
+
+    def get_clipboard_text(self) -> Optional[str]:
+        try:
+            ctypes, user32, kernel32 = self._clip_api()
+        except Exception as e:
+            log.debug("clipboard API unavailable: %s", e)
+            return None
+        if not self._open_clipboard(user32):
+            return None
+        try:
+            if not user32.IsClipboardFormatAvailable(self._CF_UNICODETEXT):
+                return None
+            h = user32.GetClipboardData(self._CF_UNICODETEXT)
+            if not h:
+                return None
+            p = kernel32.GlobalLock(h)
+            if not p:
+                return None
+            try:
+                return ctypes.wstring_at(p)
+            finally:
+                kernel32.GlobalUnlock(h)
+        except Exception as e:
+            log.debug("get_clipboard_text failed: %s", e)
+            return None
+        finally:
+            try:
+                user32.CloseClipboard()
+            except Exception:
+                pass
+
     def get_window_process_name(self, handle) -> Optional[str]:
         if not handle:
             return None

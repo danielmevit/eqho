@@ -79,6 +79,16 @@ class OsKit:
         {"ctrl_l", "alt_r"}), or None when the OS can't tell."""
         return None
 
+    def set_clipboard_text(self, text: str, private: bool = True) -> bool:
+        """Put *text* on the clipboard; *private* keeps it out of clipboard
+        history / cloud sync / monitors where the OS supports that. False =
+        not supported or failed (caller falls back). Never raises."""
+        return False
+
+    def get_clipboard_text(self) -> Optional[str]:
+        """Clipboard text, or None when unsupported / empty / failed."""
+        return None
+
     # -- Microphone privacy ------------------------------------------------------
 
     def mic_access_blocked(self) -> Optional[bool]:
