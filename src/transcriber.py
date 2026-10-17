@@ -21,6 +21,22 @@ os.environ.setdefault("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1")
 
 SAMPLE_RATE = 16000
 CHUNK_DURATION = 0.5
+# The mic delivers small blocks (50 ms) so the overlay can draw the live
+# waveform; _audio_callback re-assembles them into the same CHUNK_DURATION
+# chunks the worker always got (VAD/partials/flush timing unchanged).
+WAVE_BLOCK = int(SAMPLE_RATE * 0.05)
+WAVE_POINTS = 48  # downsampled, peak-preserving points per block
+
+
+def downsample_wave(block: np.ndarray, points: int = WAVE_POINTS) -> np.ndarray:
+    """Signed peak-preserving downsample: per bin, the sample with the
+    largest magnitude (keeps the voice's shape; a plain mean cancels it)."""
+    n = (len(block) // points) * points
+    if n == 0:
+        return np.zeros(points, dtype=np.float32)
+    bins = block[:n].reshape(points, -1)
+    idx = np.argmax(np.abs(bins), axis=1)
+    return bins[np.arange(points), idx].astype(np.float32)
 # VAD threshold is ADAPTIVE since v0.6.8: it tracks the ambient noise floor
 # and sits at noise_floor×3.5, clamped to [VAD_THRESHOLD_MIN, SILENCE_THRESHOLD].
 # Quiet mics (whose speech never crossed the old fixed 0.003) now trigger
@@ -93,9 +109,11 @@ class TestAudioSource:
     its content between dictations. Zero effect when the env var is unset.
     """
 
-    def __init__(self, path: str, audio_q: "queue.Queue") -> None:
+    def __init__(self, path: str, audio_q: "queue.Queue",
+                 on_block: Optional[Callable[[np.ndarray], None]] = None) -> None:
         self._path = path
         self._queue = audio_q
+        self._on_block = on_block  # waveform hook, fed per 50 ms slice
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
 
@@ -120,6 +138,12 @@ class TestAudioSource:
         finally:
             container.close()
 
+    def _put(self, chunk: np.ndarray) -> None:
+        self._queue.put(chunk)
+        if self._on_block:
+            for i in range(0, len(chunk), WAVE_BLOCK):
+                self._on_block(chunk[i:i + WAVE_BLOCK])
+
     def _feed(self) -> None:
         try:
             audio = self._decode()
@@ -133,14 +157,14 @@ class TestAudioSource:
             if self._stop.is_set():
                 return
             t0 = time.monotonic()
-            self._queue.put(audio[start:start + chunk_len].copy())
+            self._put(audio[start:start + chunk_len].copy())
             delay = CHUNK_DURATION - (time.monotonic() - t0)  # real-time pace
             if delay > 0:
                 self._stop.wait(delay)
         silence = np.zeros(chunk_len, dtype=np.float32)
         while not self._stop.is_set():  # then silence, like a quiet room
             t0 = time.monotonic()
-            self._queue.put(silence.copy())
+            self._put(silence.copy())
             delay = CHUNK_DURATION - (time.monotonic() - t0)
             if delay > 0:
                 self._stop.wait(delay)
@@ -185,6 +209,9 @@ class VoiceTranscriber:
         self._on_complete: Optional[Callable[[str], None]] = None
         self._on_status: Optional[Callable[[str], None]] = None
         self._on_level: Optional[Callable[[float], None]] = None
+        self._on_waveform: Optional[Callable[[np.ndarray], None]] = None
+        self._chunk_parts: list[np.ndarray] = []  # small mic blocks → one chunk
+        self._chunk_fill = 0
         self._on_abort: Optional[Callable[[str, int], None]] = None
         self._on_notice: Optional[Callable[[str], None]] = None
         self._running = False
@@ -213,6 +240,7 @@ class VoiceTranscriber:
         on_level: Optional[Callable[[float], None]] = None,
         on_abort: Optional[Callable[[str, int], None]] = None,
         on_notice: Optional[Callable[[str], None]] = None,
+        on_waveform: Optional[Callable[[np.ndarray], None]] = None,
     ) -> None:
         self._on_partial = on_partial
         self._on_complete = on_complete
@@ -220,6 +248,7 @@ class VoiceTranscriber:
         self._on_level = on_level
         self._on_abort = on_abort
         self._on_notice = on_notice
+        self._on_waveform = on_waveform
 
     def current_session(self) -> int:
         """Id of the latest session (bumped by start() and stop())."""
@@ -333,14 +362,15 @@ class VoiceTranscriber:
         test_audio = os.environ.get("EQHO_TEST_AUDIO")
         if test_audio:
             # Test hook (EQ-TESTE2E): feed a file instead of the microphone.
-            source = TestAudioSource(test_audio, self._audio_q)
+            source = TestAudioSource(test_audio, self._audio_q,
+                                     on_block=self._emit_waveform)
             source.start()
             return source
         stream = sd.InputStream(
             samplerate=SAMPLE_RATE,
             channels=1,
             dtype="float32",
-            blocksize=int(SAMPLE_RATE * CHUNK_DURATION),
+            blocksize=WAVE_BLOCK,
             device=device,
             callback=self._audio_callback,
         )
@@ -372,6 +402,8 @@ class VoiceTranscriber:
             self._session_id += 1
             session = self._session_id
 
+            self._chunk_parts = []
+            self._chunk_fill = 0
             while not self._audio_q.empty():
                 try:
                     self._audio_q.get_nowait()
@@ -405,7 +437,29 @@ class VoiceTranscriber:
     def _audio_callback(self, indata, frames, time_info, status):
         if status:
             log.warning("Audio callback status: %s", status)
-        self._audio_q.put(indata[:, 0].copy())
+        block = indata[:, 0].copy()
+        self._emit_waveform(block)
+        # Re-assemble the small blocks into CHUNK_DURATION chunks for the worker.
+        self._chunk_parts.append(block)
+        self._chunk_fill += len(block)
+        chunk_len = int(SAMPLE_RATE * CHUNK_DURATION)
+        while self._chunk_fill >= chunk_len:
+            buf = np.concatenate(self._chunk_parts)
+            self._audio_q.put(buf[:chunk_len])
+            rest = buf[chunk_len:]
+            self._chunk_parts = [rest] if len(rest) else []
+            self._chunk_fill = len(rest)
+
+    def _emit_waveform(self, block: np.ndarray) -> None:
+        """Hand a downsampled waveform to the overlay. Runs on the audio
+        thread: cheap, never blocks, never raises."""
+        cb = self._on_waveform
+        if cb is None:
+            return
+        try:
+            cb(downsample_wave(block))
+        except Exception:
+            pass
 
     def _transcription_loop(self, session: int, stream=None) -> None:
         """Worker thread body: load the model if needed, then accumulate

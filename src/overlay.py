@@ -22,7 +22,10 @@ import sys
 import threading
 import time
 import tkinter as tk
+from collections import deque
 from typing import Optional
+
+import numpy as np
 
 from . import pillfx
 from .fonts import FONT_FAMILY
@@ -54,6 +57,7 @@ _WRAP_LENGTH = 560
 _FADE_STEPS = 5
 _FADE_INTERVAL = 25     # ms between fade steps
 _FRAME_MS = 40          # pill animation cadence (~25 fps)
+_WAVE_BLOCKS = 2        # recent 50 ms mic blocks drawn across the pill (~100 ms)
 _MAX_TEXT_CHARS = 220   # show only the TAIL of long dictations (latest words win)
 _PLACEHOLDER = "Listening..."
 # Color-keys for the pill window (Windows only). The key must match the pill's
@@ -118,6 +122,11 @@ class TranscriptionOverlay:
         self._level_raw = 0.0    # latest value from set_level (any thread)
         self._lvl_fast = 0.0     # syllable follower (attack-biased)
         self._lvl_slow = 0.0     # speech baseline (~0.7 s)
+        # Latest mic waveforms (set_waveform, audio thread) → pill line shape.
+        self._waves: deque = deque(maxlen=_WAVE_BLOCKS)
+        self._wave_lock = threading.Lock()
+        self._wave_t = 0.0       # monotonic time of the last waveform
+        self._wave_view = None   # temporally smoothed profile (overlay thread)
         self._transparent_ok = False
         self._light = 0.0
         self._pill_bg = (0.0, 0.0, 0.0)
@@ -256,6 +265,7 @@ class TranscriptionOverlay:
             self._level_raw = 0.0
             self._lvl_fast = 0.0
             self._lvl_slow = 0.0
+            self._clear_waves()
             self._start_render()
             self._fade_to(1.0)
         else:
@@ -350,6 +360,7 @@ class TranscriptionOverlay:
         self._level_raw = 0.0
         self._lvl_fast = 0.0
         self._lvl_slow = 0.0
+        self._clear_waves()
 
         def _finish() -> None:
             self._root.withdraw()
@@ -364,6 +375,33 @@ class TranscriptionOverlay:
     def set_level(self, level: float) -> None:
         """Feed the live mic level (0..1); the pill's ribbons ride it."""
         self._level_raw = max(0.0, min(1.0, level))
+
+    def set_waveform(self, wave) -> None:
+        """Feed one small downsampled mic block (any thread, non-blocking);
+        the pill's lines take the shape of the recent waveform."""
+        with self._wave_lock:
+            self._waves.append(wave)
+            self._wave_t = time.monotonic()
+
+    def _take_wave(self):
+        """Recent waveform for this frame (overlay thread), or None when no
+        waveform is flowing — then the pill animates from the level alone."""
+        with self._wave_lock:
+            if not self._waves or time.monotonic() - self._wave_t > 0.4:
+                self._wave_view = None
+                return None
+            cur = np.concatenate(list(self._waves))
+        # Blend with the previous frame's shape so it flows instead of jumping.
+        prev = self._wave_view
+        if prev is not None and prev.shape == cur.shape:
+            cur = prev + (cur - prev) * 0.55
+        self._wave_view = cur
+        return cur
+
+    def _clear_waves(self) -> None:
+        with self._wave_lock:
+            self._waves.clear()
+            self._wave_view = None
 
     # -- Pill animation -----------------------------------------------------------
 
@@ -398,7 +436,11 @@ class TranscriptionOverlay:
         # tempo change is continuous (no jumps).
         self._phase += dt * (1.0 + 0.9 * level)
         try:
-            data = pillfx.render_ppm(self._pill_w, self._pill_h, self._phase, level, self._light, self._pill_bg)
+            wave = self._take_wave()
+            if not getattr(self._settings, "overlay_show_level", True):
+                wave = None
+            data = pillfx.render_ppm(self._pill_w, self._pill_h, self._phase, level, self._light,
+                                     self._pill_bg, wave)
             # Explicit master: the default root is deliberately released above.
             img = tk.PhotoImage(master=self._root, data=data)
             self._pill_img = img  # keep a reference; tk only borrows it

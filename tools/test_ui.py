@@ -1092,6 +1092,7 @@ class UITestRunner:
                     else:
                         print(f"  [contain] overlay '{name}{sfx}': text inside panel ({geo})")
                 self._grab_boxes(box["boxes"], f"state-{name}{sfx}")
+            self._pill_voice_state(overlay, sfx)
             overlay.hide()
             time.sleep(0.5)
         except Exception as e:
@@ -1115,6 +1116,39 @@ class UITestRunner:
                 self._overlay_pass(sfx)
         finally:
             self.settings.overlay_pill_scale, self.settings.overlay_panel_opacity = saved
+
+    def _pill_voice_state(self, overlay: Any, sfx: str) -> None:
+        """The pill while someone talks: feed a synthetic speech-like waveform
+        (50 ms blocks, like the mic) and screenshot the voice-shaped lines."""
+        import numpy as np
+        from src import transcriber as tr
+        rate, blk = tr.SAMPLE_RATE, tr.WAVE_BLOCK
+        t = np.arange(int(1.5 * rate)) / rate
+        ph = 2 * np.pi * np.cumsum(140 + 20 * np.sin(2 * np.pi * 0.7 * t)) / rate
+        voice = sum(np.sin(k * ph) / k for k in range(1, 8))
+        voice = (0.12 * voice * (0.6 + 0.4 * np.sin(2 * np.pi * 4 * t))).astype(np.float32)
+        for i in range(0, len(voice) - blk + 1, blk):
+            b = voice[i:i + blk]
+            overlay.set_level(min(1.0, (float(np.sqrt(np.mean(b ** 2))) / 0.012) ** 0.6))
+            overlay.set_waveform(tr.downsample_wave(b))
+            time.sleep(blk / rate)
+        box: Dict[str, Any] = {}
+        done = threading.Event()
+
+        def _probe() -> None:
+            try:
+                r = overlay._root
+                box["boxes"] = [(r.winfo_rootx(), r.winfo_rooty(), r.winfo_width(), r.winfo_height())]
+            except Exception as e:
+                box["error"] = str(e)
+            finally:
+                done.set()
+
+        overlay._root.after(0, _probe)
+        if not done.wait(timeout=3) or "error" in box:
+            self.errors.append(f"Overlay: pill-voice probe failed: {box.get('error', 'timeout')}")
+            return
+        self._grab_boxes(box["boxes"], f"state-overlay-pill-voice{sfx}")
 
     def _grab_boxes(self, boxes: List[Tuple[int, int, int, int]], name: str) -> None:
         """Screenshot the union of screen rectangles (x, y, w, h) to ui-<name>.png."""

@@ -83,6 +83,7 @@ class App:
             on_complete=self._on_complete,
             on_status=self._on_status,
             on_level=self._on_level,
+            on_waveform=self._on_waveform,
             on_abort=self._on_abort,
             on_notice=lambda msg: self.tray.notify(msg),
         )
@@ -146,6 +147,10 @@ class App:
     def _on_level(self, level: float) -> None:
         """Live mic level (0..1) for the overlay's audio indicator."""
         self.overlay.set_level(level)
+
+    def _on_waveform(self, wave) -> None:
+        """Live downsampled mic waveform (audio thread) — shapes the pill's lines."""
+        self.overlay.set_waveform(wave)
 
     def _on_abort(self, reason: str, session: int) -> None:
         """The transcriber worker died mid-session (model-load failure or
