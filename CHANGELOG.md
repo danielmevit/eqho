@@ -6,7 +6,9 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
-Planned as 0.8.10: first launch, and speed on every PC.
+## [0.8.10] - 2026-10-17
+
+First launch, the right speech model for every PC, and no more missing dictations.
 
 ### Added
 - **First-time setup.** The first time you start Eqho, a short setup helps you pick your language and microphone,
