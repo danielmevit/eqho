@@ -330,9 +330,9 @@ class GeneralTab(TabBase):
         self._hotkey_capturing = True
         self._captured_keys.clear()
         self._hotkey_display.configure(
-            text="Press a key combo...",
+            text="Press your new keys…",
             fg_color=self._colors.accent_muted,
-            text_color=self._colors.danger,
+            text_color=self._colors.accent,
         )
         self._hotkey_hint.configure(text="Esc to cancel")
         self._hotkey_hook = keyboard.hook(self._on_hotkey_event, suppress=False)

@@ -26,10 +26,8 @@ class SettingsTab(TabBase):
             grid.pack(fill="x", pady=SPACING["xs"])
             grid.columnconfigure(0, weight=1, uniform="appearance")
             grid.columnconfigure(1, weight=1, uniform="appearance")
-            col0 = ctk.CTkFrame(grid, fg_color="transparent")
-            col0.grid(row=0, column=0, sticky="nsew")
-            col1 = ctk.CTkFrame(grid, fg_color="transparent")
-            col1.grid(row=0, column=1, sticky="nsew")
+            col0 = self._column_frame(grid, 0, 2)
+            col1 = self._column_frame(grid, 1, 2)
             self._build_theme_card(col0)
             self._build_zoom_card(col1)
         else:
@@ -125,7 +123,7 @@ class SettingsTab(TabBase):
     def _icon_section_label(self, parent, icon_name: str, text: str) -> None:
         """Section divider with an accent Phosphor glyph — the warmth accents."""
         row = ctk.CTkFrame(parent, fg_color="transparent")
-        row.pack(fill="x", padx=SPACING["md"], pady=(SPACING["lg"], 3))
+        row.pack(fill="x", padx=self._hpad(parent), pady=(SPACING["lg"], 3))
         ctk.CTkLabel(
             row, text=icon(icon_name),
             font=icon_font("sm", 3),

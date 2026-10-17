@@ -25,13 +25,11 @@ class AboutTab(TabBase):
         if cols >= 3:
             grid = self._make_grid_container(tab)
 
-            col0 = ctk.CTkFrame(grid, fg_color="transparent")
-            col0.grid(row=0, column=0, sticky="nsew", padx=SPACING["xs"])
+            col0 = self._column_frame(grid, 0, cols)
 
             self._build_about_details(col0)
 
-            col1 = ctk.CTkFrame(grid, fg_color="transparent")
-            col1.grid(row=0, column=1, sticky="nsew", padx=SPACING["xs"])
+            col1 = self._column_frame(grid, 1, cols)
 
             self._build_about_credits(col1)
         else:

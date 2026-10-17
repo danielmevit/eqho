@@ -8,6 +8,9 @@ Spacing law (applies to every tab, both 1-col and grid layouts):
 - Card/section/header horizontal inset from the tab edge = SPACING["md"].
   Grid containers and column frames add NO extra horizontal padding, so
   content aligns identically at every breakpoint.
+- Between columns the gap is column_gap(cols) (10 px at 3, 8 px at 2): a
+  column frame records its (left, right) inset and every card / section
+  label packed into it uses _hpad(parent), so labels stay on the card edges.
 - Row padding inside a card = SPACING["md"]; gap between sections = SPACING["lg"].
 """
 
@@ -17,6 +20,21 @@ from ..theme import (
     MODEL_INFO, SPACING, RADIUS_SM, RADIUS_LG, font,
 )
 from .context import DashboardContext
+
+
+def column_gap(cols: int) -> int:
+    """Gap between dashboard columns on the 2/4/6/8/10 scale: tighter with
+    fewer columns, none for a single column."""
+    return {1: 0, 2: 8}.get(cols, 10)
+
+
+def column_inset(col: int, cols: int) -> tuple[int, int]:
+    """(left, right) padding of column `col` of `cols`: the outer edges keep
+    the md margin, inner edges take half the column gap each."""
+    half = column_gap(cols) // 2
+    left = SPACING["md"] if col == 0 else half
+    right = SPACING["md"] if col == cols - 1 else half
+    return left, right
 from .widgets import ThemedDropdown, auto_wrap_label
 
 
@@ -154,7 +172,7 @@ class TabBase:
             text_color=self._colors.fg_secondary,
             anchor="w",
         )
-        lbl.pack(fill="x", padx=SPACING["md"], pady=(SPACING["md"], 3))
+        lbl.pack(fill="x", padx=self._hpad(parent), pady=(SPACING["md"], 3))
         return lbl
 
     def _dropdown_colors(self) -> dict:
@@ -175,6 +193,19 @@ class TabBase:
         merged = {**self._dropdown_colors(), **kwargs}
         return ThemedDropdown(parent, **merged)
 
+    @staticmethod
+    def _hpad(parent):
+        """Horizontal inset for a card/label packed into `parent`: the
+        column's inset inside a column frame, else md on both sides."""
+        return getattr(parent, "_eqho_hpad", SPACING["md"])
+
+    def _column_frame(self, grid, col: int, cols: int) -> ctk.CTkFrame:
+        """A transparent column frame in `grid` that carries its inset."""
+        frame = ctk.CTkFrame(grid, fg_color="transparent")
+        frame.grid(row=0, column=col, sticky="nsew", padx=0)
+        frame._eqho_hpad = column_inset(col, cols)
+        return frame
+
     def _card(self, parent) -> ctk.CTkFrame:
         card = ctk.CTkFrame(
             parent,
@@ -183,7 +214,7 @@ class TabBase:
             border_width=1,
             border_color=self._colors.border_subtle,
         )
-        card.pack(fill="x", padx=SPACING["md"], pady=(SPACING["xs"], 0))
+        card.pack(fill="x", padx=self._hpad(parent), pady=(SPACING["xs"], 0))
         return card
 
     def _card_grid(self, parent, col: int, row: int) -> ctk.CTkFrame:
@@ -196,7 +227,7 @@ class TabBase:
             border_color=self._colors.border_subtle,
         )
         card.grid(row=row, column=col, sticky="nsew",
-                  padx=SPACING["md"], pady=SPACING["xs"])
+                  padx=column_inset(col, self._get_col_count()), pady=SPACING["xs"])
         return card
 
     def _setting_row(self, parent, label: str, description: str = "") -> ctk.CTkFrame:
@@ -249,9 +280,7 @@ class TabBase:
         frames = []
         for c in range(cols):
             grid.columnconfigure(c, weight=1, uniform="col")
-            frame = ctk.CTkFrame(grid, fg_color="transparent")
-            frame.grid(row=0, column=c, sticky="nsew", padx=0)
-            frames.append(frame)
+            frames.append(self._column_frame(grid, c, cols))
         return frames
 
     def _build_switch_row(self, card, label: str, desc: str, value: bool, on_change):
