@@ -265,7 +265,10 @@ class OnboardingScreen(TabBase):
         self._level_bar.set(0)
         self._level_bar.pack(fill="x", pady=(0, SPACING["md"]))
         self._mic_msg = self._text("", color=self._colors.warning)
-        self._mic_btn_row = ctk.CTkFrame(self._body, fg_color="transparent")
+        # height=1: an empty CTkFrame keeps its default 200 px height and pushed the
+        # page over the visible area (idle scrollbar at zoom 1.5); it still grows
+        # to fit when the "Open Windows settings" / "Try again" buttons appear.
+        self._mic_btn_row = ctk.CTkFrame(self._body, fg_color="transparent", height=1)
         self._mic_btn_row.pack(fill="x")
         self._restart_mic()
 
