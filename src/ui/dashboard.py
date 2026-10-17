@@ -643,7 +643,7 @@ class Dashboard(ctk.CTkToplevel):
         would scale them a second time, so take its own unscaled arguments."""
         info = child.pack_info()
         last = getattr(child, "_last_geometry_manager_call", None)
-        if last and last.get("function").__name__ == "pack":
+        if last is not None:  # set by its last pack() (the current manager is pack)
             info = {**last["kwargs"], "in": info["in"]}
         return info
 

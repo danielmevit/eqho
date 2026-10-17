@@ -555,30 +555,45 @@ class UITestRunner:
                     self._pump(count=1, step_delay=0.005)
             d._show_tab(tab)
             self._pump(count=10, step_delay=0.03)
-            labels, cards = [], []
+            def _is_card(w: Any) -> bool:
+                return isinstance(w, ctk.CTkFrame) and w.cget("fg_color") != "transparent"
 
-            def _walk(w: Any, in_card: bool) -> None:
+            def _first_card(w: Any) -> Any:
+                if _is_card(w):
+                    return w
                 for c in w.winfo_children():
-                    if not c.winfo_ismapped():
-                        continue
-                    mgr = c.winfo_manager()
-                    card = in_card or (mgr == "grid" and isinstance(c, ctk.CTkFrame))
-                    if mgr == "grid" and isinstance(c, ctk.CTkFrame) and not in_card:
-                        cards.append(c.winfo_rootx())
-                    elif mgr == "pack" and not in_card and isinstance(c, ctk.CTkLabel) \
-                            and str(c.cget("text")).strip() and c.winfo_width() > 1:
-                        labels.append((c.winfo_rootx(), str(c.cget("text"))[:30]))
-                    _walk(c, card)
+                    if c.winfo_ismapped() and isinstance(c, ctk.CTkFrame):
+                        found = _first_card(c)
+                        if found is not None:
+                            return found
+                return None
 
-            _walk(d._tab_frames[tab], False)
-            if not cards or not labels:
-                self.errors.append(f"alignment[{tab}]: no cards ({len(cards)}) or labels ({len(labels)}) found")
+            pairs = []  # (section label, first card below it), outside any card
+
+            def _walk(w: Any) -> None:
+                kids = [c for c in w.winfo_children() if c.winfo_ismapped()]
+                if w.winfo_manager() != "grid":
+                    kids.sort(key=lambda c: c.winfo_rooty())
+                for i, c in enumerate(kids):
+                    if isinstance(c, ctk.CTkLabel) and c.winfo_manager() == "pack" \
+                            and str(c.cget("text")).strip():
+                        below = next((_first_card(k) for k in kids[i + 1:]
+                                      if isinstance(k, ctk.CTkFrame) and _first_card(k) is not None), None)
+                        if below is not None:
+                            pairs.append((c, below))
+                    elif isinstance(c, ctk.CTkFrame) and not _is_card(c):
+                        _walk(c)
+
+            _walk(d._tab_frames[tab])
+            if not pairs:
+                self.errors.append(f"alignment[{tab}]: no section label above a card found")
                 continue
-            edge = min(cards)
-            bad = [(x, t) for x, t in labels if x > edge + 40 or abs(x - edge) <= 40 and abs(x - edge) > 2]
-            print(f"  {tab}: card x={edge}, labels {sorted({x for x, _ in labels})}")
-            for x, t in bad:
-                self.errors.append(f"alignment[{tab}]: label '{t}' x={x} vs first card x={edge}")
+            for lab, card in pairs:
+                lx, cx = lab.winfo_rootx(), card.winfo_rootx()
+                text = str(lab.cget("text"))[:30]
+                print(f"  {tab}: '{text}' x={lx}, card below x={cx}")
+                if abs(lx - cx) > 2:
+                    self.errors.append(f"alignment[{tab}]: label '{text}' x={lx} vs card below x={cx}")
 
     def _check_cutoff(self, tab_name: str, where: str, root: Any = None) -> None:
         """Fail on any visible CTkLabel whose text does not fit the width it got.
