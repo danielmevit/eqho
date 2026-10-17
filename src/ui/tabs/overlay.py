@@ -21,8 +21,7 @@ class OverlayTab(TabBase):
         if cols >= 2:
             grid = self._make_grid_container(tab)
 
-            col0 = ctk.CTkFrame(grid, fg_color="transparent")
-            col0.grid(row=0, column=0, sticky="nsew", padx=0)
+            col0 = self._column_frame(grid, 0, cols)
 
             if not embedded:
                 self._section_label(col0, "VISIBILITY")
@@ -34,8 +33,7 @@ class OverlayTab(TabBase):
             card = self._card(col0)
             self._build_position_setting(card)
 
-            col1 = ctk.CTkFrame(grid, fg_color="transparent")
-            col1.grid(row=0, column=1, sticky="nsew", padx=0)
+            col1 = self._column_frame(grid, 1, cols)
 
             if not embedded:
                 self._section_label(col1, "APPEARANCE")
