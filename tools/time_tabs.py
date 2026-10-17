@@ -2,13 +2,14 @@
 
 Copies the owner's settings into a temporary EQHO_CONFIG_DIR (nothing is written to the real folder), opens the
 dashboard (a window appears for ~15 s) and prints seconds per tab. Optional 2nd argument: a tab key to cProfile.
+Waits for the dashboard's background tab prewarm first; --cold turns the prewarm off (tabs build on first click).
 
-    venv/Scripts/python.exe tools/time_tabs.py . [models]
+    venv/Scripts/python.exe tools/time_tabs.py . [models] [--cold]
 """
 import cProfile, io, json, os, pstats, shutil, sys, tempfile, time
 from pathlib import Path
 
-REPO = Path(sys.argv[1] if len(sys.argv) > 1 else Path(__file__).resolve().parents[1])
+REPO = Path(sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] != "--cold" else Path(__file__).resolve().parents[1])
 sys.path.insert(0, str(REPO))
 tmp = Path(tempfile.mkdtemp(prefix="eqho_tabtime_"))
 real = Path(os.environ["APPDATA"]) / "Eqho" / "settings.json"
@@ -27,6 +28,10 @@ def pump(root, n=20):
         root.update()
         time.sleep(0.01)
 
+cold = "--cold" in sys.argv          # --cold: no background prewarm, tabs build on their first click
+argv = [a for a in sys.argv if a != "--cold"]
+if cold:
+    Dashboard._schedule_prewarm = lambda self: None
 load_fonts()
 root = ctk.CTk(); root.withdraw()
 settings = Settings.load()
@@ -35,7 +40,16 @@ dash = Dashboard(settings=settings, on_settings_changed=lambda *a, **k: None, pa
 root.update()
 print(f"open dashboard + General: {time.perf_counter() - t0:.2f}s")
 pump(root)
-prof_target = sys.argv[2] if len(sys.argv) > 2 else ""
+if not cold:                         # a user takes a few seconds before the first click
+    t0 = time.perf_counter()
+    def warming():
+        cols = dash._get_col_count()
+        return dash._warming or getattr(dash, "_resize_job", None) or any(
+            dash._tab_built_cols.get(k) != cols for k in ("models", "history", "settings"))
+    while warming() and time.perf_counter() - t0 < 20:
+        root.update(); time.sleep(0.005)
+    print(f"background prewarm done after {time.perf_counter() - t0:.2f}s")
+prof_target = argv[2] if len(argv) > 2 else ""
 for key in ("models", "history", "settings", "general", "models", "history", "settings"):
     pr = cProfile.Profile() if key == prof_target and key not in dash._tab_frames else None
     t0 = time.perf_counter()

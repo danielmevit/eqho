@@ -16,7 +16,7 @@ from ..settings import SUPPORTED_LANGUAGES, WHISPER_MODELS
 from ..theme import SPACING, RADIUS_SM, font
 from .layout import TabBase
 from .widgets import (primary_button, secondary_button, ghost_button,
-                      auto_wrap_label)
+                      auto_wrap_label, coalesce_scrollbar)
 
 log = logging.getLogger(__name__)
 
@@ -81,6 +81,7 @@ class OnboardingScreen(TabBase):
             scrollbar_button_hover_color=self._colors.bg_hover)
         self._scroll.pack(side="top", fill="both", expand=True,
                           padx=(SPACING["2xl"], 0), pady=(SPACING["xl"], 0))
+        coalesce_scrollbar(self._scroll)
         self._body = ctk.CTkFrame(self._scroll, fg_color="transparent")
         self._body.pack(fill="both", expand=True, padx=(0, SPACING["2xl"]))
         try:  # CTkScrollableFrame keeps its canvas private

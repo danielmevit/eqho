@@ -384,6 +384,50 @@ class ThemedDropdown(ctk.CTkFrame):
         return self._variable.get() if self._variable else ""
 
 
+def coalesce_scrollbar(scroll) -> None:
+    """Make a CTkScrollableFrame update its scrollbar once per idle round.
+
+    CTkScrollbar.set() redraws and forces a synchronous update_idletasks(), so
+    every canvas size change while a tab's layout settles re-entered the layout
+    (seconds of redraws on the first show). Only the latest values are drawn.
+    """
+    try:
+        canvas, bar = scroll._parent_canvas, scroll._scrollbar
+    except Exception:
+        return
+    try:
+        # The forced flush in CTkScrollbar._draw() is what re-entered the layout;
+        # the redrawn bar is painted by the normal idle pass anyway.
+        bar._canvas.update_idletasks = lambda: None
+    except Exception:
+        pass
+    latest = None
+
+    def _flush() -> None:
+        nonlocal latest
+        values, latest = latest, None
+        if values is not None:
+            try:
+                bar.set(*values)
+            except Exception:
+                pass
+
+    def _set(start, end) -> None:
+        nonlocal latest
+        first = latest is None
+        latest = (start, end)
+        if first:
+            try:
+                canvas.after_idle(_flush)
+            except Exception:
+                _flush()
+
+    try:
+        canvas.configure(yscrollcommand=_set)
+    except Exception:
+        pass
+
+
 def auto_wrap_label(
     label: ctk.CTkLabel,
     container=None,
@@ -421,13 +465,28 @@ def auto_wrap_label(
             except Exception:
                 pass
 
-    def _on_configure(_event=None):
+    pending = None
+
+    def _apply() -> None:
+        nonlocal pending
+        pending = None
         # CTkFrame.bind() lands on the frame's inner canvas, so event.widget is
         # never the CTkFrame itself: read the container's real width instead.
         try:
             _update_wraplength(target.winfo_width())
         except Exception:
             pass
+
+    def _on_configure(_event=None):
+        # Coalesce: a settling layout fires many <Configure>s; re-wrap once with
+        # the latest width instead of starting a resize cascade for each one.
+        nonlocal pending
+        if pending is not None:
+            return
+        try:
+            pending = label.after_idle(_apply)
+        except Exception:
+            pending = None
 
     try:
         target.bind("<Configure>", _on_configure, add="+")
