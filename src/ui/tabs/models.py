@@ -16,7 +16,8 @@ _EN_MODELS = ["distil-large-v3", "distil-medium.en", "distil-small.en"]
 _ML_MODELS = ["large-v3-turbo", "medium", "small", "base", "tiny", "large-v3"]
 
 
-FAILED_TEXT = "Download didn't finish — check the internet connection."
+FAILED_TEXT = "Download failed"  # short: it sits next to the model name
+FAILED_HINT = "Check the internet connection, then press Try again."
 
 
 def runs_on_text(hw: str) -> str:
@@ -327,12 +328,18 @@ class ModelsTab(TabBase):
             return
         row = ctk.CTkFrame(refs["inner"], fg_color="transparent")
         row.pack(fill="x", pady=(SPACING["xs"], 0))
+        hint = ctk.CTkLabel(
+            row, text=FAILED_HINT, font=font("xs"),
+            text_color=self._colors.fg_muted, anchor="w", justify="left",
+        )
+        hint.pack(fill="x")
+        auto_wrap_label(hint, row, padding=4)
         btn = secondary_button(
             row, self._colors, text="Try again",
             font=font("xs"), height=24,
             command=lambda k=model_key: self._start_download(k),
         )
-        btn.pack(side="right")
+        btn.pack(anchor="e", pady=(SPACING["xs"], 0))
         refs["retry"] = row
         refs["retry_button"] = btn
 
