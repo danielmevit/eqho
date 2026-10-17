@@ -97,12 +97,16 @@ class OverlayTab(TabBase):
 
     def _build_opacity_setting(self, card) -> None:
         self._build_pill_size_setting(card)
+        # The sliders show how SEE-THROUGH it is (right = clearer); the settings
+        # keep storing opacity, so value = 1 - opacity (opacity 0.3–1.0).
+        see_pill = 1.0 - self._settings.overlay_opacity
+        see_panel = 1.0 - self._settings.overlay_panel_opacity
         self._pill_opacity_val_label = self._slider_row(
-            card, "Pill see-through", self._settings.overlay_opacity, 0.3, 1.0, 14,
-            self._pct(self._settings.overlay_opacity), self._on_opacity_changed)
+            card, "Pill see-through", see_pill, 0.0, 0.7, 14,
+            self._pct(see_pill), self._on_opacity_changed, ends=("Solid", "Clear"))
         self._panel_opacity_val_label = self._slider_row(
-            card, "Text box see-through", self._settings.overlay_panel_opacity, 0.3, 1.0, 14,
-            self._pct(self._settings.overlay_panel_opacity), self._on_panel_opacity_changed)
+            card, "Text box see-through", see_panel, 0.0, 0.7, 14,
+            self._pct(see_panel), self._on_panel_opacity_changed, ends=("Solid", "Clear"))
 
     def _build_pill_size_setting(self, card) -> None:
         self._pill_size_val_label = self._slider_row(
@@ -177,13 +181,13 @@ class OverlayTab(TabBase):
         self._settings.overlay_position = key
         self._settings.save()
 
-    def _on_opacity_changed(self, val) -> None:
-        self._settings.overlay_opacity = round(val, 2)
+    def _on_opacity_changed(self, val) -> None:  # val = see-through amount
+        self._settings.overlay_opacity = round(1.0 - val, 2)
         self._settings.save()
         self._pill_opacity_val_label.configure(text=self._pct(val))
 
-    def _on_panel_opacity_changed(self, val) -> None:
-        self._settings.overlay_panel_opacity = round(val, 2)
+    def _on_panel_opacity_changed(self, val) -> None:  # val = see-through amount
+        self._settings.overlay_panel_opacity = round(1.0 - val, 2)
         self._settings.save()
         self._panel_opacity_val_label.configure(text=self._pct(val))
 
