@@ -16,6 +16,9 @@ _EN_MODELS = ["distil-large-v3", "distil-medium.en", "distil-small.en"]
 _ML_MODELS = ["large-v3-turbo", "medium", "small", "base", "tiny", "large-v3"]
 
 
+FAILED_TEXT = "Download didn't finish — check the internet connection."
+
+
 def runs_on_text(hw: str) -> str:
     """The one line at the top of the tab saying where models run."""
     if hw == "gpu":
@@ -233,8 +236,12 @@ class ModelsTab(TabBase):
         )
         name_label.pack(side="left")
 
+        failed = (not cached and not downloading
+                  and bool((download_status(model_key) or {}).get("error")))
         if cached:
             status_text, status_color = "✓ Ready", self._colors.success
+        elif failed:
+            status_text, status_color = FAILED_TEXT, self._colors.danger
         elif downloading:
             status_text, status_color = "Downloading…", self._colors.accent
         else:
@@ -294,8 +301,10 @@ class ModelsTab(TabBase):
             "card": card, "inner": inner, "name": name_label,
             "status": status_label, "actions": actions,
             "select": select_btn, "download": download_btn,
-            "base_name": info.get("name", model_key),
+            "base_name": info.get("name", model_key), "retry": None,
         }
+        if failed:
+            self._show_retry(model_key)
 
         if downloading:
             self._attach_progress(model_key)
@@ -309,6 +318,23 @@ class ModelsTab(TabBase):
         )
         btn.pack(side="right", padx=(0, SPACING["xs"]))
         return btn
+
+    def _show_retry(self, model_key: str) -> None:
+        """"Try again" row under the card's text. Packed into the card body, not
+        the actions row, so it shows on the selected card too."""
+        refs = self._card_refs.get(model_key)
+        if not refs or refs.get("retry") is not None:
+            return
+        row = ctk.CTkFrame(refs["inner"], fg_color="transparent")
+        row.pack(fill="x", pady=(SPACING["xs"], 0))
+        btn = secondary_button(
+            row, self._colors, text="Try again",
+            font=font("xs"), height=24,
+            command=lambda k=model_key: self._start_download(k),
+        )
+        btn.pack(side="right")
+        refs["retry"] = row
+        refs["retry_button"] = btn
 
     def _attach_progress(self, model_key: str) -> None:
         """Thin progress bar at the card bottom, filling left → right."""
@@ -343,6 +369,9 @@ class ModelsTab(TabBase):
         if not refs:
             return
         start_download(self._settings, model_key)
+        if refs.get("retry") is not None:
+            refs["retry"].destroy()
+            refs["retry"] = refs["retry_button"] = None
         if refs["download"] is not None:
             refs["download"].destroy()
             refs["download"] = None
@@ -385,10 +414,8 @@ class ModelsTab(TabBase):
         if not refs:
             return
         if state.get("error"):
-            refs["status"].configure(text="Download failed — check logs",
-                                     text_color=self._colors.danger)
-            if refs["download"] is None:  # let the user retry
-                refs["download"] = self._make_download_button(refs["actions"], model_key)
+            refs["status"].configure(text=FAILED_TEXT, text_color=self._colors.danger)
+            self._show_retry(model_key)
             return
         refs["status"].configure(text="✓ Ready", text_color=self._colors.success)
         refs["select"].configure(state="normal", text_color=self._colors.fg_primary)

@@ -783,8 +783,11 @@ class UITestRunner:
             with modelstore._lock:
                 modelstore._downloads[key].update(done=True, error="test: simulated failure")
             self._pump(count=25, step_delay=0.03)
-            if "failed" not in str(refs["status"].cget("text")).lower():
+            if str(refs["status"].cget("text")) != models_mod.FAILED_TEXT:
                 self.errors.append(f"Models: '{key}' does not show the failed download")
+            retry = refs.get("retry_button")
+            if retry is None or not retry.winfo_ismapped():
+                self.errors.append(f"Models: '{key}' failed card has no visible 'Try again'")
             self._state("models", "models-failed", sfx)
         finally:
             models_mod.start_download = orig_start
