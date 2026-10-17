@@ -9,8 +9,8 @@ Date format: `YYYY-MM-DD`.
 Planned as 0.8.11: the dictation pill.
 
 ### Changed
-- **Even spacing between cards:** one gap between columns and between rows of cards, the same with two or three
-  columns — a little smaller than the margin at the window edge, and wide enough that cards never blend together.
+- **Calmer spacing:** cards that belong together sit closer (8 between rows), columns are a bit further apart
+  (12), and the window edge has the most room (16) — the same at any number of columns, and cards never blend.
 
 ## [0.8.10] - 2026-10-17
 

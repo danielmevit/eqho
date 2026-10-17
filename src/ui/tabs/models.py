@@ -9,7 +9,7 @@ import customtkinter as ctk
 from ...modelpick import hardware_class, recommend_model
 from ...modelstore import is_downloading, start_download, status as download_status
 from ...theme import MODEL_INFO, SPACING, RADIUS_LG, RADIUS_SM, font
-from ..layout import GUTTER, TabBase, column_inset
+from ..layout import EDGE, ROW_GAP, TabBase, column_inset
 from ..widgets import secondary_button, auto_wrap_label
 
 _EN_MODELS = ["distil-large-v3", "distil-medium.en", "distil-small.en"]
@@ -57,7 +57,7 @@ class ModelsTab(TabBase):
         ctk.CTkLabel(
             tab, text=runs_on_text(hardware_class()),
             font=font("xs"), text_color=self._colors.fg_muted, anchor="w",
-        ).pack(fill="x", padx=SPACING["md"], pady=(SPACING["sm"], 0))
+        ).pack(fill="x", padx=EDGE, pady=(SPACING["sm"], 0))
 
         if cols >= 2:
             self._section_label(tab, "ENGLISH OPTIMIZED")
@@ -181,7 +181,7 @@ class ModelsTab(TabBase):
     def _build_model_card(self, parent, model_key: str) -> None:
         is_selected = self._settings.model_size == model_key
         card = self._card_frame(is_selected, parent)
-        card.pack(fill="x", padx=self._hpad(parent), pady=(SPACING["xs"], 0))
+        card.pack(fill="x", padx=self._hpad(parent), pady=(0, ROW_GAP))
         self._fill_model_card(card, model_key, is_selected)
 
     def _build_model_card_grid(self, grid, model_key: str, col: int, row: int) -> None:
@@ -189,7 +189,7 @@ class ModelsTab(TabBase):
         card = self._card_frame(is_selected, grid)
         card.grid(row=row, column=col, sticky="nsew",
                   padx=column_inset(col, self._get_col_count()),
-                  pady=GUTTER // 2)  # rows apart by the same gutter as columns
+                  pady=(0, ROW_GAP))  # rows of one section sit closer than the columns
         self._fill_model_card(card, model_key, is_selected)
 
     @staticmethod

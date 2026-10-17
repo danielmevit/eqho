@@ -8,7 +8,7 @@ import customtkinter as ctk
 
 from ...history import TranscriptHistory
 from ...theme import SPACING, RADIUS_SM, font
-from ..layout import TabBase
+from ..layout import EDGE, TabBase
 from ..widgets import auto_wrap_label, ghost_button, secondary_button
 
 log = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ class HistoryTab(TabBase):
         bar = ctk.CTkFrame(tab, fg_color="transparent")
         # Same top inset as the other sections (their section labels sit
         # at pady lg) so all three pages start at an identical height.
-        bar.pack(fill="x", padx=SPACING["md"], pady=(SPACING["lg"], SPACING["xs"]))
+        bar.pack(fill="x", padx=EDGE, pady=(SPACING["lg"], SPACING["xs"]))
 
         # No textvariable: CTkEntry silently DISABLES its placeholder when
         # one is attached — that's why the grey hint text never showed.

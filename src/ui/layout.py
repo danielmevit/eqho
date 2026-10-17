@@ -22,23 +22,26 @@ from ..theme import (
 from .context import DashboardContext
 
 
-# Owner 2026-10-17: the same gap between columns and between card rows, at any
-# column count, smaller than the 12 px outer margin (6/4 px let cards blend).
-GUTTER = 8
+# Dashboard spacing (owner 2026-10-17): cards in the same group sit closer than the
+# groups, and everything sits inside a slightly larger window margin:
+#   ROW_GAP (between cards of one column/section) < GUTTER (between columns) < EDGE.
+EDGE = 16     # window/content edge → section labels, headers and cards
+GUTTER = 12   # between columns, at any column count
+ROW_GAP = 8   # between stacked cards / rows of cards
 
 
 def column_gap(cols: int) -> int:
     """Gap between dashboard columns: one even gutter (GUTTER) at every column
-    count — smaller than the md outer margin; none for a single column."""
+    count — smaller than the EDGE margin; none for a single column."""
     return 0 if cols <= 1 else GUTTER
 
 
 def column_inset(col: int, cols: int) -> tuple[int, int]:
     """(left, right) padding of column `col` of `cols`: the outer edges keep
-    the md margin, inner edges take half the column gap each."""
+    the EDGE margin, inner edges take half the column gap each."""
     half = column_gap(cols) // 2
-    left = SPACING["md"] if col == 0 else half
-    right = SPACING["md"] if col == cols - 1 else half
+    left = EDGE if col == 0 else half
+    right = EDGE if col == cols - 1 else half
     return left, right
 from .widgets import ThemedDropdown, auto_wrap_label
 
@@ -140,7 +143,7 @@ class TabBase:
         """Standard tab header with title and status info; `icon` is a Phosphor
         glyph name rendered in the accent color left of the title."""
         header = ctk.CTkFrame(parent, fg_color="transparent")
-        header.pack(fill="x", padx=SPACING["md"], pady=(SPACING["md"], 2))
+        header.pack(fill="x", padx=EDGE, pady=(SPACING["md"], 2))
 
         title_row = ctk.CTkFrame(header, fg_color="transparent")
         title_row.pack(anchor="w")
@@ -168,7 +171,7 @@ class TabBase:
             parent, text=subtitle,
             font=font("sm"),
             text_color=self._colors.fg_secondary, anchor="w",
-        ).pack(fill="x", padx=SPACING["md"], pady=(0, SPACING["sm"]))
+        ).pack(fill="x", padx=EDGE, pady=(0, SPACING["sm"]))
 
     def _section_label(self, parent, text: str) -> ctk.CTkLabel:
         lbl = ctk.CTkLabel(
@@ -202,7 +205,7 @@ class TabBase:
     def _hpad(parent):
         """Horizontal inset for a card/label packed into `parent`: the
         column's inset inside a column frame, else md on both sides."""
-        return getattr(parent, "_eqho_hpad", SPACING["md"])
+        return getattr(parent, "_eqho_hpad", EDGE)
 
     def _column_frame(self, grid, col: int, cols: int) -> ctk.CTkFrame:
         """A transparent column frame in `grid` that carries its inset."""
@@ -219,7 +222,7 @@ class TabBase:
             border_width=1,
             border_color=self._colors.border_subtle,
         )
-        card.pack(fill="x", padx=self._hpad(parent), pady=(SPACING["xs"], 0))
+        card.pack(fill="x", padx=self._hpad(parent), pady=(0, ROW_GAP))
         return card
 
     def _card_grid(self, parent, col: int, row: int) -> ctk.CTkFrame:
