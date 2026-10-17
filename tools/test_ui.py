@@ -975,9 +975,10 @@ class UITestRunner:
                         if overlay._panel_shown:
                             boxes.append((p.winfo_rootx(), p.winfo_rooty(),
                                           p.winfo_width(), p.winfo_height()))
-                            box["label"] = (str(lbl.cget("text")), lbl.winfo_reqwidth(),
-                                            lbl.winfo_width(), lbl.winfo_reqheight(),
-                                            lbl.winfo_height())
+                            box["label"] = (str(lbl.cget("text")),
+                                            (lbl.winfo_rootx(), lbl.winfo_rooty(),
+                                             lbl.winfo_width(), lbl.winfo_height()),
+                                            (lbl.winfo_reqwidth(), lbl.winfo_reqheight()))
                         box["boxes"] = boxes
                     except Exception as e:
                         box["error"] = str(e)
@@ -994,14 +995,27 @@ class UITestRunner:
                 if "label" not in box:
                     self.errors.append(f"Overlay: '{name}' text panel not shown")
                 else:
-                    shown, req_w, got_w, req_h, got_h = box["label"]
-                    if req_w > got_w + 2 or req_h > got_h + 2:
-                        msg = (f"Cut-off text in overlay ('{name}{sfx}'): {shown[:60]!r}… "
-                               f"needs {req_w}x{req_h}px, got {got_w}x{got_h}px")
-                        print(f"    [CUT-OFF] {msg}")
+                    # The label's on-screen rectangle must lie inside the
+                    # panel window with at least half the padding on every
+                    # side, and be no smaller than the text it has to show.
+                    shown, (lx, ly, lw, lh), (req_w, req_h) = box["label"]
+                    px, py, pw, ph = box["boxes"][1]
+                    gaps = {"left": lx - px, "top": ly - py,
+                            "right": (px + pw) - (lx + lw), "bottom": (py + ph) - (ly + lh)}
+                    need = {"left": ov._PADDING_X // 2, "right": ov._PADDING_X // 2,
+                            "top": ov._PADDING_Y // 2, "bottom": ov._PADDING_Y // 2}
+                    bad = [f"{k} {gaps[k]}px < {need[k]}px" for k in gaps if gaps[k] < need[k]]
+                    if req_w > lw or req_h > lh:
+                        bad.append(f"label {lw}x{lh}px < text {req_w}x{req_h}px")
+                    geo = (f"label {lw}x{lh}+{lx}+{ly} in panel {pw}x{ph}+{px}+{py}, "
+                           f"gaps L{gaps['left']} T{gaps['top']} R{gaps['right']} B{gaps['bottom']}")
+                    if bad:
+                        msg = (f"Overlay text outside its panel ('{name}{sfx}'): {shown[:60]!r}… "
+                               f"{'; '.join(bad)} ({geo})")
+                        print(f"    [OVERFLOW] {msg}")
                         self.errors.append(msg)
                     else:
-                        print(f"  [cut-off] overlay '{name}{sfx}': text fits ({got_w}x{got_h}px)")
+                        print(f"  [contain] overlay '{name}{sfx}': text inside panel ({geo})")
                 self._grab_boxes(box["boxes"], f"state-{name}{sfx}")
             overlay.hide()
             time.sleep(0.5)

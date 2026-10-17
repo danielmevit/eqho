@@ -299,11 +299,12 @@ class TranscriptionOverlay:
         try:
             self._panel_label.config(text=_tail_text(content))
             self._panel.update_idletasks()
-            w = min(
-                max(self._panel_label.winfo_reqwidth() + 2 * _PADDING_X, _PILL_W),
-                _PANEL_MAX_W,
-            )
-            h = self._panel_label.winfo_reqheight() + 2 * _PADDING_Y
+            # Size the window from the padded frame's own request (label +
+            # padx/pady + any border) so every wrapped line keeps equal
+            # padding on all sides.
+            frame = self._panel_label.master
+            w = min(max(frame.winfo_reqwidth(), _PILL_W), _PANEL_MAX_W)
+            h = frame.winfo_reqheight()
             pill_cx = self._pill_x + _PILL_W // 2
             x = pill_cx - w // 2
             if self._anchored_top():
