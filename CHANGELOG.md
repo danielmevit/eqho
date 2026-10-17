@@ -9,9 +9,9 @@ Date format: `YYYY-MM-DD`.
 Planned as 0.8.11: the dictation pill.
 
 ### Added
-- **The pill follows your voice.** While you speak, its glowing lines take the shape of your voice, drawn from the
-  live microphone signal; when you pause they settle into calm, nearly flat lines. Eqho still hears and transcribes
-  exactly the same audio.
+- **The pill moves with your voice, like water.** While you speak, its lines rise into soft, flowing swells — taller
+  when you're louder, a little livelier with a higher voice — and settle into calm, nearly flat lines when you
+  pause. Eqho still hears and transcribes exactly the same audio.
 - **Pill and text box settings** (Settings → Overlay): pill size (60–140 %), pill see-through and text box
   see-through, each from Solid to Clear. The pill is now 20 % smaller by default; the text box looks as before.
 
