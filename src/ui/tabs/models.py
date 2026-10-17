@@ -9,7 +9,7 @@ import customtkinter as ctk
 from ...modelpick import hardware_class, recommend_model
 from ...modelstore import is_downloading, start_download, status as download_status
 from ...theme import MODEL_INFO, SPACING, RADIUS_LG, RADIUS_SM, font
-from ..layout import TabBase, column_inset
+from ..layout import GUTTER, TabBase, column_inset
 from ..widgets import secondary_button, auto_wrap_label
 
 _EN_MODELS = ["distil-large-v3", "distil-medium.en", "distil-small.en"]
@@ -189,7 +189,7 @@ class ModelsTab(TabBase):
         card = self._card_frame(is_selected, grid)
         card.grid(row=row, column=col, sticky="nsew",
                   padx=column_inset(col, self._get_col_count()),
-                  pady=SPACING["md"] // 2)  # rows apart by the same gutter as columns
+                  pady=GUTTER // 2)  # rows apart by the same gutter as columns
         self._fill_model_card(card, model_key, is_selected)
 
     @staticmethod

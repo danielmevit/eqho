@@ -22,10 +22,15 @@ from ..theme import (
 from .context import DashboardContext
 
 
+# Owner 2026-10-17: the same gap between columns and between card rows, at any
+# column count, smaller than the 12 px outer margin (6/4 px let cards blend).
+GUTTER = 8
+
+
 def column_gap(cols: int) -> int:
-    """Gap between dashboard columns: the same as the outer margin (md), so the
-    grid has one even gutter everywhere; none for a single column."""
-    return 0 if cols <= 1 else SPACING["md"]  # owner 2026-10-17: equal to the outer margin, so cards never blend
+    """Gap between dashboard columns: one even gutter (GUTTER) at every column
+    count — smaller than the md outer margin; none for a single column."""
+    return 0 if cols <= 1 else GUTTER
 
 
 def column_inset(col: int, cols: int) -> tuple[int, int]:
