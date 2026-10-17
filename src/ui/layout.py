@@ -23,9 +23,9 @@ from .context import DashboardContext
 
 
 def column_gap(cols: int) -> int:
-    """Gap between dashboard columns on the 2/4/6/8/10 scale: tighter with
-    fewer columns, none for a single column."""
-    return {1: 0, 2: 4}.get(cols, 6)  # owner 2026-10-17: clearly smaller than the 12 px outer margin
+    """Gap between dashboard columns: the same as the outer margin (md), so the
+    grid has one even gutter everywhere; none for a single column."""
+    return 0 if cols <= 1 else SPACING["md"]  # owner 2026-10-17: equal to the outer margin, so cards never blend
 
 
 def column_inset(col: int, cols: int) -> tuple[int, int]:

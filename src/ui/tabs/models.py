@@ -189,7 +189,7 @@ class ModelsTab(TabBase):
         card = self._card_frame(is_selected, grid)
         card.grid(row=row, column=col, sticky="nsew",
                   padx=column_inset(col, self._get_col_count()),
-                  pady=SPACING["xs"])
+                  pady=SPACING["md"] // 2)  # rows apart by the same gutter as columns
         self._fill_model_card(card, model_key, is_selected)
 
     @staticmethod

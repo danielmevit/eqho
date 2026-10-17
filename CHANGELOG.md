@@ -6,6 +6,12 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+Planned as 0.8.11: the dictation pill.
+
+### Changed
+- **Even spacing between cards:** the gap between columns and rows now matches the margin at the window edge, so
+  cards never blend into each other.
+
 ## [0.8.10] - 2026-10-17
 
 First launch, the right speech model for every PC, and no more missing dictations.
