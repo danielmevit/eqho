@@ -1120,6 +1120,8 @@ class UITestRunner:
     def _pill_voice_state(self, overlay: Any, sfx: str) -> None:
         """The pill while someone talks: feed a synthetic speech-like waveform
         (50 ms blocks, like the mic) and screenshot the voice-shaped lines."""
+        import threading
+
         import numpy as np
         from src import transcriber as tr
         rate, blk = tr.SAMPLE_RATE, tr.WAVE_BLOCK
