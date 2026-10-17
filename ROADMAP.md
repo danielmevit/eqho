@@ -100,11 +100,18 @@ system (docs/ai/TESTING.md: ASR benchmark, end-to-end dictation test, UI walker)
 - [x] Version number in Eqho.exe's file properties (EQ-EXEVER; CI checks it)
 - [x] Probes write into a temporary folder, never the real eqho.log (EQ-PROBEENV + tools/check_probe_isolation.py)
 
-### 0.8.11 — languages (speech)
+### 0.8.11 — the dictation pill (owner 2026-10-17)
+- [ ] Text box above the pill stays see-through by default; options to customise it (see-through amount, text size,
+      maybe width)
+- [ ] Pill size option; default about 20 % smaller than today
+- [ ] Waves shaped by the voice itself: the line(s) inside the pill follow the live microphone waveform, not just the
+      loudness
+
+### 0.8.12 — languages (speech)
 - [ ] Non-English: multilingual model when a non-English language is chosen; offer every language Whisper supports
       (~99), not only 13
 
-### 0.8.12 — the app in many languages (interface)
+### 0.8.13 — the app in many languages (interface)
 - [ ] Move all UI text (dashboard, onboarding, tray, overlay, messages) into translation files
 - [ ] Translate the interface, then grow the list; follow the Windows display language, with a picker in
       onboarding and settings. Wave 1 languages: **main** — English, German, Spanish, French, Italian, Portuguese, Dutch, Polish, Russian, Ukrainian, Turkish, Japanese, Chinese (Simplified), Korean; **Balkan** — Macedonian, Serbian (Latin only), Croatian, Slovenian, Bulgarian, Albanian, Romanian, Greek (no separate Bosnian: Serbian and Croatian cover it); **Central Europe** — Czech, Slovak. Later waves: as many more as quality allows (owner: "as huge as it can be").

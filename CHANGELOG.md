@@ -47,7 +47,8 @@ Planned as 0.8.10: first launch, and speed on every PC.
   says to check the internet connection instead of "check logs".
 
 ### Changed
-- **Tighter, adaptive spacing between columns** (it shrinks when the window shows two columns instead of three).
+- **Tighter, adaptive spacing between columns** — clearly smaller than the outer margin, and smaller again when the
+  window shows two columns instead of three.
 - Changing the hotkey shows "Press your new keys…" in the normal blue instead of an alarming red.
 - **Other sounds are no longer muted unless you say so.** New installs ask during setup; your current choice stays.
 - Developer checks run in a temporary folder and never touch your Eqho settings or log.

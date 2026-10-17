@@ -25,7 +25,7 @@ from .context import DashboardContext
 def column_gap(cols: int) -> int:
     """Gap between dashboard columns on the 2/4/6/8/10 scale: tighter with
     fewer columns, none for a single column."""
-    return {1: 0, 2: 8}.get(cols, 10)
+    return {1: 0, 2: 4}.get(cols, 6)  # owner 2026-10-17: clearly smaller than the 12 px outer margin
 
 
 def column_inset(col: int, cols: int) -> tuple[int, int]:
