@@ -172,6 +172,17 @@ CustomTkinter dashboard (`src/ui/`):
    hotkey capture.
 6. **Screenshots**: Captures a PIL ImageGrab screenshot of the dashboard window for
    each visited tab to `<work>/ui-<tab>.png`.
+7. **Conditional states** (EQ-STATES): with fakes only (no real download, mic,
+   keyboard hook), each rarely seen state gets the cut-off check and a
+   `<work>/ui-state-<name>.png`: Models card downloading (40 %) and failed;
+   General hotkey capture mode; History empty / search with no results / one
+   very long entry; Setup model page with the model present and after a failed
+   download, mic page "Windows is blocking" and "No microphone found"; the
+   dictation overlay (own Tk thread — only show/update/hide/after cross threads,
+   geometry read on the overlay thread) with "Writing it down…", "Still
+   writing…" and a long partial.
+8. **Light theme**: default tabs, setup pages and all states again in the light
+   theme (`*-light.png`, cut-off check included), then the theme is restored.
 
 ### Run
 

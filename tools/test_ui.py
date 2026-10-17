@@ -18,6 +18,10 @@ Key properties:
 6b. Opens the first-time setup screen and walks every page (mic stream and
     model download stubbed) with one screenshot per page:
     `<work>/ui-setup-<n>-<page>.png`.
+6c. Puts the app into every conditional state (download running/failed,
+    hotkey capture, empty/no-results/long history, rare setup pages, the
+    dictation overlay) -> `<work>/ui-state-<name>.png`, then repeats the
+    tabs, setup pages and states in the light theme (`*-light.png`).
 7. Prints a comprehensive summary and exits 1 on any error, 0 on success.
 
 Usage:
@@ -641,6 +645,12 @@ class UITestRunner:
             self._narrow_pass("zoom as saved")
             self._walk_onboarding()
 
+            # Conditional states ("only sometimes" screens), then everything
+            # again in the light theme
+            self._states_pass()
+            self._overlay_pass()
+            self._light_pass()
+
             # Second pass at Eqho zoom 1.5: on a 125 % Windows PC that is the
             # 14" laptop's 1.875x total (1920x1080 at 150 %, zoom 1.25)
             print(f"\n==================================================")
@@ -704,6 +714,331 @@ class UITestRunner:
             if gen:
                 gen._update_lang_warning()
             self._pump(count=4)
+
+    # -- Conditional states (EQ-STATES) ------------------------------------------
+
+    def _state(self, tab: str, name: str, sfx: str, root: Any = None) -> None:
+        """Cut-off check + screenshot `ui-state-<name><sfx>.png` for one state."""
+        self._pump(count=8, step_delay=0.03)
+        where = f"state '{name}{sfx}', {self.dash.winfo_width()}px"
+        self._check_cutoff(tab, where, root=root)
+        self._capture_tab_screenshot(f"state-{name}{sfx}")
+
+    def _run_state(self, label: str, fn: Callable[[str], None], sfx: str) -> None:
+        print(f"\n  State group: {label}{sfx}")
+        try:
+            fn(sfx)
+        except Exception as e:
+            msg = f"State '{label}{sfx}' failed: {e}"
+            print(f"    [ERROR] {msg}\n{traceback.format_exc()}", file=sys.stderr)
+            self.errors.append(msg)
+        self._pump(count=4)
+
+    def _states_pass(self, sfx: str = "") -> None:
+        """Every conditional state a user can meet, at the current size/zoom."""
+        print(f"\n==================================================")
+        print(f"Conditional states{(' (' + sfx.strip('-') + ')') if sfx else ''}...")
+        print(f"==================================================")
+        self._run_state("models download", self._state_models, sfx)
+        self._run_state("hotkey capture", self._state_hotkey, sfx)
+        self._run_state("history", self._state_history, sfx)
+        self._run_state("setup", self._state_setup, sfx)
+
+    def _state_models(self, sfx: str) -> None:
+        """A card mid-download (40 %) and the same card after a failed download."""
+        from src import modelstore
+        import src.ui.tabs.models as models_mod
+
+        self.dash._show_tab("models")
+        self._pump(count=6, step_delay=0.03)
+        tab = self.dash._tabs["models"]
+        key = next(k for k in models_mod._EN_MODELS + models_mod._ML_MODELS
+                   if not tab._is_model_cached(k))
+        orig_start = models_mod.start_download
+
+        def _fake_start(_settings, model_key):
+            with modelstore._lock:
+                modelstore._downloads[model_key] = {"progress": 0.4, "done": False, "error": None}
+            return True
+
+        models_mod.start_download = _fake_start
+        try:
+            tab._start_download(key)
+            self._pump(count=25, step_delay=0.03)  # one 500 ms poll tick
+            refs = tab._card_refs[key]
+            if str(refs["status"].cget("text")) != "Downloading…" or key not in tab._progress_widgets:
+                self.errors.append(f"Models: '{key}' shows no download progress")
+            self._state("models", "models-downloading", sfx)
+            with modelstore._lock:
+                modelstore._downloads[key].update(done=True, error="test: simulated failure")
+            self._pump(count=25, step_delay=0.03)
+            if "failed" not in str(refs["status"].cget("text")).lower():
+                self.errors.append(f"Models: '{key}' does not show the failed download")
+            self._state("models", "models-failed", sfx)
+        finally:
+            models_mod.start_download = orig_start
+            with modelstore._lock:
+                modelstore._downloads.pop(key, None)
+            self.dash.rebuild_tab("models")
+
+    def _state_hotkey(self, sfx: str) -> None:
+        """Hotkey capture mode ("Press a key combo..." + "Esc to cancel"), entered
+        like a click does but with the global keyboard hook stubbed out."""
+        import types
+
+        self.dash._show_tab("general")
+        self._pump(count=6, step_delay=0.03)
+        gen = self.dash._tabs["general"]
+        fake = types.ModuleType("keyboard")
+        fake.hook = lambda *a, **k: object()
+        fake.unhook = lambda *a, **k: None
+        fake.KEY_DOWN, fake.KEY_UP = "down", "up"
+        saved = sys.modules.get("keyboard")
+        sys.modules["keyboard"] = fake
+        try:
+            gen._hotkey_display.invoke()
+            self._pump(count=6, step_delay=0.03)
+            if not gen._hotkey_capturing:
+                self.errors.append("General: hotkey capture mode did not start")
+            self._state("general", "general-hotkey-capture", sfx)
+            gen._stop_hotkey_capture(cancelled=True)
+            self._pump(count=6, step_delay=0.03)
+            if gen._hotkey_capturing:
+                self.errors.append("General: hotkey capture did not cancel")
+        finally:
+            if gen._hotkey_capturing:
+                gen._hotkey_capturing = False
+            if saved is not None:
+                sys.modules["keyboard"] = saved
+            else:
+                sys.modules.pop("keyboard", None)
+
+    def _state_history(self, sfx: str) -> None:
+        """Empty history, a search with no results, one very long entry."""
+        import src.history as history_mod
+
+        path = history_mod.HISTORY_FILE
+        saved = path.read_text(encoding="utf-8") if path.exists() else ""
+
+        def _show() -> Any:
+            self.dash.rebuild_tab("history")
+            self.dash._show_tab("history")
+            self._pump(count=8, step_delay=0.03)
+            return self.dash._tabs["history"]
+
+        try:
+            path.write_text("", encoding="utf-8")
+            _show()
+            self._state("history", "history-empty", sfx)
+
+            path.write_text(saved, encoding="utf-8")
+            tab = _show()
+            tab._search_entry.insert(0, "zzqx no such words")
+            tab._render_entries()
+            self._state("history", "history-no-results", sfx)
+
+            long_text = " ".join(
+                ["This is one very long dictation that keeps going so the card has to wrap "
+                 "over many lines without cutting any words off at the right edge."] * 12
+                + ["Supercalifragilisticexpialidocious_without_any_spaces_" * 3])
+            path.write_text(json.dumps({"ts": time.time(), "text": long_text, "duration": 95.0,
+                                        "model": "distil-large-v3", "lang": "en"}) + "\n",
+                            encoding="utf-8")
+            _show()
+            self._state("history", "history-long-entry", sfx)
+        finally:
+            path.write_text(saved, encoding="utf-8")
+            self.dash.rebuild_tab("history")
+            self._pump(count=4)
+
+    def _state_setup(self, sfx: str) -> None:
+        """Setup pages in their rarer states: model already present, failed
+        download, mic blocked by Windows, no mic at all. No real mic/download."""
+        from src import modelstore, oskit
+        from src.ui import onboarding as ob
+
+        cls = ob.OnboardingScreen
+        saved_methods = (cls._open_mic_stream, cls._start_download)
+        saved_dir = self.settings.model_dir
+        kit = oskit.get()
+        failed_model = self.settings.model_size
+
+        def _fake_fail(screen, model):
+            with modelstore._lock:
+                modelstore._downloads[model] = {"progress": 0.3, "done": True,
+                                                "error": "test: simulated failure"}
+
+        cls._open_mic_stream = lambda screen, device: False
+        cls._start_download = _fake_fail
+        try:
+            self.settings.model_dir = str(self._temp_path / "models")  # model is present
+            self.dash.show_onboarding()
+            self._pump(count=8, step_delay=0.03)
+            screen = self.dash._onboarding
+            if screen is None:
+                self.errors.append("Setup screen did not open (states)")
+                return
+
+            screen.show_page(ob.PAGES.index("model"))
+            self._state("onboarding", "setup-model-present", sfx, root=screen.frame)
+
+            self.settings.model_dir = str(self._temp_path / "empty-models")
+            screen.show_page(ob.PAGES.index("model"))
+            self._pump(count=4)
+            screen._dl_btn.invoke()
+            self._pump(count=10, step_delay=0.03)
+            if str(screen._dl_msg.cget("text")) != ob.DOWNLOAD_FAILED_TEXT:
+                self.errors.append("Setup: failed download message not shown")
+            self._state("onboarding", "setup-model-failed", sfx, root=screen.frame)
+            with modelstore._lock:
+                modelstore._downloads.pop(failed_model, None)
+
+            for name, blocked, text in (("setup-mic-blocked", True, ob.MIC_BLOCKED_TEXT),
+                                        ("setup-mic-none", False, ob.NO_MIC_TEXT)):
+                kit.mic_access_blocked = (lambda b=blocked: b)
+                screen.show_page(ob.PAGES.index("microphone"))
+                self._pump(count=6, step_delay=0.03)
+                if str(screen._mic_msg.cget("text")) != text:
+                    self.errors.append(f"Setup: '{name}' message not shown")
+                self._state("onboarding", name, sfx, root=screen.frame)
+        finally:
+            kit.__dict__.pop("mic_access_blocked", None)
+            cls._open_mic_stream, cls._start_download = saved_methods
+            with modelstore._lock:
+                modelstore._downloads.pop(failed_model, None)
+            self.settings.model_dir = saved_dir
+            if self.dash._onboarding is not None:
+                self.dash._onboarding._leave_page()
+                self.dash._end_onboarding(skipped=False, model_changed=False)
+            self._pump(count=8, step_delay=0.03)
+
+    def _overlay_pass(self, sfx: str = "") -> None:
+        """The dictation overlay (own Tk root on its own thread, like the app).
+        Only show()/update_text()/hide() and root.after() cross threads — the
+        same calls the app makes; geometry is read ON the overlay thread."""
+        import threading
+        import tkinter as tk
+        from src import overlay as ov
+
+        # The overlay strings live in src/main.py; read them without importing
+        # it (that would pull in the tray, hotkey and transcriber modules).
+        import ast
+        consts = {}
+        for node in ast.parse((REPO_ROOT / "src" / "main.py").read_text(encoding="utf-8")).body:
+            if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                    and isinstance(node.targets[0], ast.Name)
+                    and isinstance(node.value, ast.Constant)):
+                consts[node.targets[0].id] = node.value.value
+        WRITING_TEXT = consts.get("WRITING_TEXT", "Writing it down…")
+        STILL_WRITING_TEXT = consts.get("STILL_WRITING_TEXT",
+                                        "Still writing your last dictation — one moment.")
+
+        print(f"\n  State group: overlay{sfx}")
+        saved_default = tk._default_root
+        saved_enabled = self.settings.overlay_enabled
+        self.settings.overlay_enabled = True
+        overlay = ov.TranscriptionOverlay(self.settings)
+        try:
+            overlay.start()
+            # The overlay drops tkinter's default root (GOTCHAS); give the
+            # dashboard's back so the walker's later widgets bind to it.
+            tk._default_root = saved_default
+            if overlay._root is None:
+                self.errors.append("Overlay did not start")
+                return
+            long_partial = " ".join(["and then I kept talking about the quarterly plan, "
+                                     "the budget and who owns which part of it"] * 6)
+            states = (("overlay-writing", WRITING_TEXT),
+                      ("overlay-still-writing", STILL_WRITING_TEXT),
+                      ("overlay-long-partial", long_partial))
+            for name, text in states:
+                overlay.show(text)
+                time.sleep(0.6)  # fade-in
+                box: Dict[str, Any] = {}
+                done = threading.Event()
+
+                def _probe() -> None:
+                    try:
+                        r, p, lbl = overlay._root, overlay._panel, overlay._panel_label
+                        boxes = [(r.winfo_rootx(), r.winfo_rooty(), r.winfo_width(), r.winfo_height())]
+                        if overlay._panel_shown:
+                            boxes.append((p.winfo_rootx(), p.winfo_rooty(),
+                                          p.winfo_width(), p.winfo_height()))
+                            box["label"] = (str(lbl.cget("text")), lbl.winfo_reqwidth(),
+                                            lbl.winfo_width(), lbl.winfo_reqheight(),
+                                            lbl.winfo_height())
+                        box["boxes"] = boxes
+                    except Exception as e:
+                        box["error"] = str(e)
+                    finally:
+                        done.set()
+
+                overlay._root.after(0, _probe)
+                if not done.wait(timeout=3):
+                    self.errors.append(f"Overlay: '{name}' probe timed out")
+                    continue
+                if "error" in box:
+                    self.errors.append(f"Overlay: '{name}' probe failed: {box['error']}")
+                    continue
+                if "label" not in box:
+                    self.errors.append(f"Overlay: '{name}' text panel not shown")
+                else:
+                    shown, req_w, got_w, req_h, got_h = box["label"]
+                    if req_w > got_w + 2 or req_h > got_h + 2:
+                        msg = (f"Cut-off text in overlay ('{name}{sfx}'): {shown[:60]!r}… "
+                               f"needs {req_w}x{req_h}px, got {got_w}x{got_h}px")
+                        print(f"    [CUT-OFF] {msg}")
+                        self.errors.append(msg)
+                    else:
+                        print(f"  [cut-off] overlay '{name}{sfx}': text fits ({got_w}x{got_h}px)")
+                self._grab_boxes(box["boxes"], f"state-{name}{sfx}")
+            overlay.hide()
+            time.sleep(0.5)
+        except Exception as e:
+            self.errors.append(f"Overlay states failed: {e}")
+        finally:
+            overlay.shutdown()
+            time.sleep(0.3)
+            tk._default_root = saved_default
+            self.settings.overlay_enabled = saved_enabled
+            self._pump(count=4)
+
+    def _grab_boxes(self, boxes: List[Tuple[int, int, int, int]], name: str) -> None:
+        """Screenshot the union of screen rectangles (x, y, w, h) to ui-<name>.png."""
+        target = self.work_dir / f"ui-{name}.png"
+        try:
+            from PIL import ImageGrab
+            x0 = min(b[0] for b in boxes)
+            y0 = min(b[1] for b in boxes)
+            x1 = max(b[0] + b[2] for b in boxes)
+            y1 = max(b[1] + b[3] for b in boxes)
+            ImageGrab.grab(bbox=(x0 - 8, y0 - 8, x1 + 8, y1 + 8)).save(target)
+            self.screenshots.append(target)
+            print(f"  [screenshot] Captured '{name}' -> {target.name} ({x1 - x0}x{y1 - y0})")
+        except Exception as e:
+            print(f"  [screenshot] Warning: overlay grab failed: {e}")
+
+    def _light_pass(self) -> None:
+        """Default tabs, setup pages, conditional states and overlay in the
+        LIGHT theme (`*-light.png`), then the theme is restored."""
+        print(f"\n==================================================")
+        print("Light theme pass...")
+        print(f"==================================================")
+        orig_theme = self.settings.theme
+        try:
+            self.dash._set_theme("light")
+            self._pump(count=10, step_delay=0.03)
+            for tab_name in ("general", "models", "history", "settings"):
+                self.dash._show_tab(tab_name)
+                self._pump(count=6, step_delay=0.03)
+                self._check_cutoff(tab_name, f"light, {self.dash.winfo_width()}px")
+                self._capture_tab_screenshot(f"{tab_name}-light")
+            self._walk_onboarding(tag="light")
+            self._states_pass("-light")
+            self._overlay_pass("-light")
+        finally:
+            self.dash._set_theme(orig_theme)
+            self._pump(count=10, step_delay=0.03)
 
     def _narrow_pass(self, label: str) -> None:
         """Every tab at the minimum window width (logical px)."""
