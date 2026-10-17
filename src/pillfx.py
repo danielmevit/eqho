@@ -39,13 +39,13 @@ class VoiceFollower:
     """Live voice state for the pill: only the CURRENT voice, lightly smoothed.
 
     ``feed(loud, tone)`` takes one block's features (any thread — a plain
-    assignment); ``step(dt)`` (render thread) eases toward them — ~150 ms
-    attack, ~450 ms release, tone slower still — and integrates the drift
+    assignment); ``step(dt)`` (render thread) eases toward them — ~180 ms
+    attack, ~500 ms release, tone slower still — and integrates the drift
     phase (faster with more voice). Returns ``(loud, tone, phase)`` for
     ``render_rgb(voice=...)``. Features older than ``stale`` s count as
     silence, so the lines settle when the mic stops."""
 
-    def __init__(self, attack: float = 0.15, release: float = 0.45, stale: float = 0.3):
+    def __init__(self, attack: float = 0.18, release: float = 0.50, stale: float = 0.3):
         self.attack, self.release, self.stale = attack, release, stale
         self._target = (0.0, 0.5)
         self._age = 1e9
@@ -67,7 +67,7 @@ class VoiceFollower:
         self.loud += (loud - self.loud) * (1.0 - np.exp(-dt / tau))
         if loud > 0.08:  # tone only means something while there is voice
             self.tone += (tone - self.tone) * (1.0 - np.exp(-dt / 0.30))
-        self.phase += dt * (0.55 + 2.2 * self.loud)
+        self.phase += dt * (0.5 + 1.7 * self.loud)
         return self.loud, self.tone, self.phase
 
 

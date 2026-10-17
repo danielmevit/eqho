@@ -3,12 +3,12 @@
 (a) the mic stream is opened with small blocks (50 ms) and _audio_callback
     re-assembles them into the SAME 0.5 s chunks the worker always got
     (bit-identical to the old one-block-per-chunk stream);
-(b) one downsampled waveform arrives per small block, peak-preserving;
+(b) one voice-feature pair [loud, tone] arrives per small block;
 (c) the EQHO_TEST_AUDIO feeder still queues 0.5 s chunks and now also feeds
-    waveforms;
-(d) pillfx: a frame with a synthetic voice waveform differs from the silent
-    frame, its line profile correlates with the input, silence → near-flat,
-    no waveform → the classic level-only frame; frame time measured.
+    features;
+(d) pillfx (EQ-WAVES2B): louder voice → larger curve amplitude, silence →
+    near-flat, consecutive frames change smoothly (no jumps), no voice →
+    the classic level-only frame; frame time measured.
 
 Exit 0 on success, 1 on any failure.
 
@@ -108,12 +108,19 @@ def probe_chunks() -> None:
     check(all(np.array_equal(a, b) for a, b in zip(got, old)),
           "chunks bit-identical to the old 0.5 s blocks")
 
-    # (b) one waveform per block, peak-preserving
-    check(len(waves) == n_fed > 0, f"{len(waves)} waveforms, one per block")
+    # (b) one feature pair per block
+    check(len(waves) == n_fed > 0, f"{len(waves)} feature pairs, one per block")
     w0 = waves[5]
-    blk = audio[5 * tr.WAVE_BLOCK:6 * tr.WAVE_BLOCK]
-    check(w0.shape == (tr.WAVE_POINTS,) and w0.dtype == np.float32, "waveform = 48 float32 points")
-    check(abs(np.max(np.abs(w0)) - np.max(np.abs(blk))) < 1e-6, "downsample keeps the block peak")
+    check(w0.shape == (2,) and w0.dtype == np.float32, "features = [loud, tone] float32")
+    check(all(0.0 <= float(v) <= 1.0 for f in waves for v in f), "features stay in 0..1")
+    quiet = tr.voice_features(0.001 * speech(tr.WAVE_BLOCK))
+    loud = tr.voice_features(speech(tr.WAVE_BLOCK * 8)[tr.WAVE_BLOCK * 2:tr.WAVE_BLOCK * 3])
+    check(loud[0] > quiet[0] + 0.3, f"louder block -> higher loudness ({loud[0]:.2f} vs {quiet[0]:.2f})")
+    rate = tr.SAMPLE_RATE
+    tt = np.arange(tr.WAVE_BLOCK) / rate
+    lo = tr.voice_features((0.1 * np.sin(2 * np.pi * 200 * tt)).astype(np.float32))
+    hi = tr.voice_features((0.1 * np.sin(2 * np.pi * 2000 * tt)).astype(np.float32))
+    check(hi[1] > lo[1] + 0.3, f"brighter tone -> higher tone ({hi[1]:.2f} vs {lo[1]:.2f})")
 
     # a raising waveform callback must not break the audio path
     vt2 = bare_transcriber()
@@ -127,7 +134,7 @@ def probe_chunks() -> None:
     src = tr.TestAudioSource("unused.wav", q, on_block=fw.append)
     src._put(audio[:chunk_len].copy())
     check(q.qsize() == 1 and len(q.get()) == chunk_len and len(fw) == chunk_len // tr.WAVE_BLOCK,
-          "EQHO_TEST_AUDIO feeder: 0.5 s chunk + per-block waveforms")
+          "EQHO_TEST_AUDIO feeder: 0.5 s chunk + per-block features")
     src2 = tr.TestAudioSource("unused.wav", q)  # old signature still works
     src2._put(audio[:chunk_len].copy())
     check(q.qsize() == 1, "TestAudioSource without a waveform hook unchanged")
@@ -142,50 +149,71 @@ def centroid(img: np.ndarray, light: float) -> np.ndarray:
     return (lum * ys).sum(0) / np.maximum(lum.sum(0), 1e-6)
 
 
+def follow(feats, seconds: float, fps: int = 25):
+    """Run VoiceFollower like the overlay: features every 50 ms, frames at fps."""
+    fol = pillfx.VoiceFollower()
+    out = []
+    for i in range(int(seconds * fps)):
+        t = i / fps
+        b = min(int(t / 0.05), len(feats) - 1)
+        fol.feed(*feats[b])
+        out.append(fol.step(1.0 / fps))
+    return out
+
+
 def probe_render() -> None:
     bg = (0.0, 0.0, 0.0)
-    voice = np.concatenate([tr.downsample_wave(b) for b in
-                            speech(2 * tr.WAVE_BLOCK, seed=3).reshape(2, -1)])
-    silent = np.concatenate([tr.downsample_wave(b) for b in
-                             (0.001 * np.random.default_rng(4).standard_normal(
-                                 2 * tr.WAVE_BLOCK)).astype(np.float32).reshape(2, -1)])
-    for w, h in ((224, 41), (280, 51)):
+    blk = tr.WAVE_BLOCK
+    sp = speech(blk * 40, seed=3)
+    f_voice = [tr.voice_features(sp[i:i + blk]) for i in range(0, len(sp), blk)]
+    f_soft = [tr.voice_features(0.15 * sp[i:i + blk]) for i in range(0, len(sp), blk)]
+    f_sil = [tr.voice_features((0.0005 * np.random.default_rng(4).standard_normal(blk)).astype(np.float32))] * 40
+    v_loud = follow(f_voice, 2.0)
+    v_soft = follow(f_soft, 2.0)
+    v_sil = follow(f_sil, 2.0)
+
+    def amp(states):
+        return float(np.mean([np.abs(pillfx.voice_curves(280, *s)[0]).max() for s in states[25:]]))
+    a_l, a_s, a_0 = amp(v_loud), amp(v_soft), amp(v_sil)
+    check(a_l > a_s * 1.3 > 0, f"louder -> larger amplitude ({a_l:.3f} > {a_s:.3f})")
+    check(a_0 < 0.25 * a_l, f"silence near-flat ({a_0:.3f} vs loud {a_l:.3f})")
+
+    # smooth frame to frame: curve and loudness never jump, phase continuous
+    seq = follow(f_sil[:10] + f_voice + f_sil, 4.0)
+    curves = [pillfx.voice_curves(280, *s)[0] for s in seq]
+    jump = max(float(np.abs(b - a).max()) for a, b in zip(curves, curves[1:]))
+    check(jump < 0.08, f"consecutive frames change smoothly (max step {jump:.3f} r)")
+    dph = np.diff([s[2] for s in seq])
+    check(bool((dph > 0).all() and dph.max() < 0.15), "phase integrates continuously")
+    # roundness: curve has at most a few crests (no jagged detail)
+    m = curves[60]
+    crests = int(((m[1:-1] > m[:-2]) & (m[1:-1] > m[2:])).sum())
+    check(crests <= 3, f"at most 3 crests across the pill ({crests})")
+
+    for w, h in ((168, 31), (224, 41), (280, 51), (392, 71)):
         for light in (0.0, 1.0):
             tag = f"{w}x{h} {'light' if light else 'dark'}"
-            f_none = pillfx.render_rgb(w, h, 1.3, 0.5, light, bg)
-            f_sil = pillfx.render_rgb(w, h, 1.3, 0.5, light, bg, silent)
-            f_voice = pillfx.render_rgb(w, h, 1.3, 0.5, light, bg, voice)
-            diff = np.abs(f_voice.astype(int) - f_sil.astype(int)).mean()
-            check(diff > 3.0, f"{tag}: voice frame differs from silent (mean |d|={diff:.1f})")
-            prof = pillfx.wave_profile(voice, w)
-            dc = centroid(f_voice, light) - centroid(f_sil, light)
-            mid = slice(w // 8, w - w // 8)
-            corr = float(np.corrcoef(prof[mid], dc[mid])[0, 1])
-            check(corr > 0.5, f"{tag}: line profile correlates with the input (r={corr:.2f})")
-            check(f_none.shape == (h, w, 3), f"{tag}: level-only frame still renders")
-    # silence → near-flat
-    sp = pillfx.wave_profile(silent, 280)
-    vp = pillfx.wave_profile(voice, 280)
-    check(np.abs(sp).max() < 0.05 * max(np.abs(vp).max(), 1e-6) + 0.02,
-          f"silence near-flat (max {np.abs(sp).max():.3f} vs voice {np.abs(vp).max():.3f})")
-    ref = np.corrcoef(np.interp(np.linspace(0, len(voice) - 1, 280), np.arange(len(voice)), voice),
-                      vp)[0, 1]
-    check(ref > 0.6, f"profile follows the raw waveform (r={ref:.2f})")
+            fv = pillfx.render_rgb(w, h, 1.3, 0.5, light, bg, v_loud[40])
+            fs = pillfx.render_rgb(w, h, 1.3, 0.5, light, bg, v_sil[40])
+            fn = pillfx.render_rgb(w, h, 1.3, 0.5, light, bg)
+            diff = np.abs(fv.astype(int) - fs.astype(int)).mean()
+            check(diff > 1.0 and fn.shape == (h, w, 3), f"{tag}: voice frame differs from silent (|d|={diff:.1f})")
+            dc = np.abs(np.diff(centroid(fv, light)[w // 8:-w // 8])).max()
+            check(dc < 0.08 * h, f"{tag}: line slope gentle (max {dc:.2f} px/col)")
 
-    # frame time
     for w, h in ((224, 41), (280, 51)):
-        pillfx.render_ppm(w, h, 0.0, 0.5, 0.0, bg, voice)
+        pillfx.render_ppm(w, h, 0.0, 0.5, 0.0, bg, v_loud[0])
         n = 60
         t0 = time.perf_counter()
         for i in range(n):
-            pillfx.render_ppm(w, h, i * 0.04, 0.5, float(i % 2), bg, voice)
+            pillfx.render_ppm(w, h, i * 0.04, 0.5, float(i % 2), bg, v_loud[i % len(v_loud)])
         ms = (time.perf_counter() - t0) / n * 1000
         t0 = time.perf_counter()
         for i in range(n):
             pillfx.render_ppm(w, h, i * 0.04, 0.5, float(i % 2), bg)
         ms0 = (time.perf_counter() - t0) / n * 1000
-        print(f"FRAME {w}x{h}: {ms:.2f} ms with waveform, {ms0:.2f} ms level-only")
-        check(ms < 10.0, f"{w}x{h} frame well under 10 ms ({ms:.2f} ms)")
+        print(f"FRAME {w}x{h}: {ms:.2f} ms with voice, {ms0:.2f} ms level-only")
+        check(ms < 10.0, f"{w}x{h} frame under 10 ms ({ms:.2f} ms)")
 
 
 def main() -> int:
