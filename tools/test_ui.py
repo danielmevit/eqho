@@ -687,10 +687,12 @@ class UITestRunner:
         the warning under the language picker must show and not be cut."""
         print("\nLanguage warning: German on an English-only model...")
         orig = (self.settings.language, self.settings.model_size)
-        gen = self.dash._tabs.get("general")
         try:
             self.settings.language, self.settings.model_size = "de", "distil-small.en"
             self.dash._show_tab("general")
+            self._pump(count=4, step_delay=0.03)
+            # Look the tab up AFTER showing it: the zoom pass rebuilds tabs lazily.
+            gen = self.dash._tabs.get("general")
             gen._update_lang_warning()
             self._pump(count=6, step_delay=0.03)
             if not gen._lang_warn.winfo_ismapped():
