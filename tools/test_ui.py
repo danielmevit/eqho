@@ -94,6 +94,11 @@ class UITestRunner:
         """Point settings and history at an isolated temporary folder."""
         self._temp_dir = tempfile.TemporaryDirectory(prefix="eqho_ui_test_")
         self._temp_path = Path(self._temp_dir.name)
+        # Point ALL of Eqho's config (settings, history, log) at the temp folder
+        # before src is imported — module-level paths and default arguments are
+        # bound at import time (TranscriptHistory(path=HISTORY_FILE) showed the
+        # owner's REAL history in screenshots before this).
+        os.environ["EQHO_CONFIG_DIR"] = str(self._temp_path)
 
         import src.settings as settings_mod
         import src.history as history_mod
@@ -102,6 +107,12 @@ class UITestRunner:
         settings_mod.CONFIG_DIR = self._temp_path
         settings_mod.LEGACY_MODEL_DIR = self._temp_path / "no-legacy-model-cache"
         history_mod.HISTORY_FILE = self._temp_path / "history.jsonl"
+        # Belt and braces if src.history was imported earlier: the class's
+        # default path argument was bound then.
+        defaults = list(history_mod.TranscriptHistory.__init__.__defaults__ or ())
+        if defaults:
+            defaults[0] = history_mod.HISTORY_FILE
+            history_mod.TranscriptHistory.__init__.__defaults__ = tuple(defaults)
 
         # Pre-seed history entries so HistoryTab renders cards and controls
         seed_entries = [
