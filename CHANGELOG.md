@@ -8,6 +8,18 @@ Date format: `YYYY-MM-DD`.
 
 Planned as 0.8.11: the dictation pill.
 
+### Added
+- **The pill follows your voice.** While you speak, its glowing lines take the shape of your voice, drawn from the
+  live microphone signal; when you pause they settle into calm, nearly flat lines. Eqho still hears and transcribes
+  exactly the same audio.
+- **Pill and text box settings** (Settings → Overlay): pill size (60–140 %), pill see-through and text box
+  see-through, each from Solid to Clear. The pill is now 20 % smaller by default; the text box looks as before.
+
+### Fixed
+- **Dictations stay out of Windows clipboard history.** Eqho marks the text it pastes as private, so it doesn't
+  pile up in Win+V or sync to the cloud clipboard — and the history service can no longer get in the way of the
+  paste (the last rare cause of a dictation typing nothing).
+
 ### Changed
 - **Calmer spacing:** cards that belong together sit closer (8 between rows), columns are a bit further apart
   (12), and the window edge has the most room (16) — the same at any number of columns, and cards never blend.
