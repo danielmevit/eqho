@@ -85,7 +85,7 @@ def voice_curves(w: int, loud: float, tone: float, phase: float):
     loud = min(max(float(loud), 0.0), 1.0)
     tone = min(max(float(tone), 0.0), 1.0)
     xn = np.linspace(-1.0, 1.0, w, dtype=np.float32)
-    taper = np.sin((xn + 1.0) * (np.pi / 2)) ** 0.8
+    taper = np.clip(np.sin((xn + 1.0) * (np.pi / 2)), 0.0, 1.0) ** 0.8
     e = loud * loud * (3.0 - 2.0 * loud)          # smoothstep: soft start, soft cap
     amp = 0.05 + 0.50 * e                        # radius units; silence ≈ flat
     k = 1.0 + 0.55 * tone                        # wavelength shift by tone

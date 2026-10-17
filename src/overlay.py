@@ -41,6 +41,7 @@ _PANEL_MAX_W = 640
 _PILL_SCALE_MIN = 0.6
 _PILL_SCALE_MAX = 1.4
 
+
 def pill_size(scale: float) -> tuple[int, int]:
     """Pill (w, h) for the `overlay_pill_scale` setting; 1.0 = 280x51."""
     try:
@@ -64,10 +65,12 @@ _KEY_LIGHT = "#fefefd"
 # The light pill is translucent-but-not-transparent: 90% visible.
 _LIGHT_PILL_ALPHA = 0.90
 
+
 def _tail_text(text: str) -> str:
     if len(text) <= _MAX_TEXT_CHARS:
         return text
     return "…" + text[-(_MAX_TEXT_CHARS - 1):]
+
 
 def _apply_rounded_corners(hwnd: int) -> None:
     """Apply rounded corners via Windows 11 DWM API. No-op on older Windows."""
@@ -84,12 +87,14 @@ def _apply_rounded_corners(hwnd: int) -> None:
     except Exception:
         pass
 
+
 def _round_window(widget: tk.Misc) -> None:
     try:
         hwnd = ctypes.windll.user32.GetParent(widget.winfo_id())
         _apply_rounded_corners(hwnd)
     except Exception:
         pass
+
 
 class TranscriptionOverlay:
     """The floating pill + upward-filling live transcription panel."""
