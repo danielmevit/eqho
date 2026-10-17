@@ -38,7 +38,17 @@ Planned as 0.8.10: first launch, and speed on every PC.
   and zoom, setup's Skip / Back / Next always stay visible, and no text is cut off or overlapping even at the
   smallest window size.
 
+- **Tabs open much faster.** The dashboard redrew itself dozens of times while a tab settled; now it draws once, and
+  the other tabs are prepared in the background right after the window opens, so switching tabs is instant
+  (Models used to take about 5 seconds the first time).
+- **The "English-only model" note under the language picker reads properly** — left-aligned, in the warning colour,
+  and it names the model to pick for your language on your PC.
+- **A failed model download can be retried** with a "Try again" button (also on the selected model), and the message
+  says to check the internet connection instead of "check logs".
+
 ### Changed
+- **Tighter, adaptive spacing between columns** (it shrinks when the window shows two columns instead of three).
+- Changing the hotkey shows "Press your new keys…" in the normal blue instead of an alarming red.
 - **Other sounds are no longer muted unless you say so.** New installs ask during setup; your current choice stays.
 - Developer checks run in a temporary folder and never touch your Eqho settings or log.
 - Eqho no longer looks for models in a fixed developer folder (`D:\EqhoModels`); models go to the standard folder
