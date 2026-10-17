@@ -19,7 +19,7 @@ shader does not do this yet — it should follow later (same ``voice_curves``).
 
 import numpy as np
 
-__all__ = ["render_rgb", "render_ppm", "hex_rgb01", "voice_curves"]
+__all__ = ["render_rgb", "render_ppm", "hex_rgb01", "voice_curves", "VoiceFollower"]
 
 
 def hex_rgb01(hex_color: str) -> tuple[float, float, float]:
@@ -33,6 +33,42 @@ def _gs(x: np.ndarray, s: float) -> np.ndarray:
 
 def _mix(a, b, t):
     return a + (b - a) * t
+
+
+class VoiceFollower:
+    """Live voice state for the pill: only the CURRENT voice, lightly smoothed.
+
+    ``feed(loud, tone)`` takes one block's features (any thread — a plain
+    assignment); ``step(dt)`` (render thread) eases toward them — ~150 ms
+    attack, ~450 ms release, tone slower still — and integrates the drift
+    phase (faster with more voice). Returns ``(loud, tone, phase)`` for
+    ``render_rgb(voice=...)``. Features older than ``stale`` s count as
+    silence, so the lines settle when the mic stops."""
+
+    def __init__(self, attack: float = 0.15, release: float = 0.45, stale: float = 0.3):
+        self.attack, self.release, self.stale = attack, release, stale
+        self._target = (0.0, 0.5)
+        self._age = 1e9
+        self.loud, self.tone, self.phase = 0.0, 0.5, 0.0
+
+    def feed(self, loud: float, tone: float) -> None:
+        self._target = (float(loud), float(tone))
+        self._age = 0.0
+
+    def reset(self) -> None:
+        self._target, self._age = (0.0, 0.5), 1e9
+        self.loud, self.tone = 0.0, 0.5
+
+    def step(self, dt: float):
+        dt = min(max(float(dt), 0.0), 0.1)
+        self._age += dt
+        loud, tone = self._target if self._age <= self.stale else (0.0, self.tone)
+        tau = self.attack if loud > self.loud else self.release
+        self.loud += (loud - self.loud) * (1.0 - np.exp(-dt / tau))
+        if loud > 0.08:  # tone only means something while there is voice
+            self.tone += (tone - self.tone) * (1.0 - np.exp(-dt / 0.30))
+        self.phase += dt * (0.55 + 2.2 * self.loud)
+        return self.loud, self.tone, self.phase
 
 
 def voice_curves(w: int, loud: float, tone: float, phase: float):

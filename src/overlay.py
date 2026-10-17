@@ -22,10 +22,7 @@ import sys
 import threading
 import time
 import tkinter as tk
-from collections import deque
 from typing import Optional
-
-import numpy as np
 
 from . import pillfx
 from .fonts import FONT_FAMILY
@@ -44,7 +41,6 @@ _PANEL_MAX_W = 640
 _PILL_SCALE_MIN = 0.6
 _PILL_SCALE_MAX = 1.4
 
-
 def pill_size(scale: float) -> tuple[int, int]:
     """Pill (w, h) for the `overlay_pill_scale` setting; 1.0 = 280x51."""
     try:
@@ -57,7 +53,6 @@ _WRAP_LENGTH = 560
 _FADE_STEPS = 5
 _FADE_INTERVAL = 25     # ms between fade steps
 _FRAME_MS = 40          # pill animation cadence (~25 fps)
-_WAVE_BLOCKS = 2        # recent 50 ms mic blocks drawn across the pill (~100 ms)
 _MAX_TEXT_CHARS = 220   # show only the TAIL of long dictations (latest words win)
 _PLACEHOLDER = "Listening..."
 # Color-keys for the pill window (Windows only). The key must match the pill's
@@ -69,12 +64,10 @@ _KEY_LIGHT = "#fefefd"
 # The light pill is translucent-but-not-transparent: 90% visible.
 _LIGHT_PILL_ALPHA = 0.90
 
-
 def _tail_text(text: str) -> str:
     if len(text) <= _MAX_TEXT_CHARS:
         return text
     return "…" + text[-(_MAX_TEXT_CHARS - 1):]
-
 
 def _apply_rounded_corners(hwnd: int) -> None:
     """Apply rounded corners via Windows 11 DWM API. No-op on older Windows."""
@@ -91,14 +84,12 @@ def _apply_rounded_corners(hwnd: int) -> None:
     except Exception:
         pass
 
-
 def _round_window(widget: tk.Misc) -> None:
     try:
         hwnd = ctypes.windll.user32.GetParent(widget.winfo_id())
         _apply_rounded_corners(hwnd)
     except Exception:
         pass
-
 
 class TranscriptionOverlay:
     """The floating pill + upward-filling live transcription panel."""
@@ -122,11 +113,9 @@ class TranscriptionOverlay:
         self._level_raw = 0.0    # latest value from set_level (any thread)
         self._lvl_fast = 0.0     # syllable follower (attack-biased)
         self._lvl_slow = 0.0     # speech baseline (~0.7 s)
-        # Latest mic waveforms (set_waveform, audio thread) → pill line shape.
-        self._waves: deque = deque(maxlen=_WAVE_BLOCKS)
-        self._wave_lock = threading.Lock()
-        self._wave_t = 0.0       # monotonic time of the last waveform
-        self._wave_view = None   # temporally smoothed profile (overlay thread)
+        # Live voice features (set_waveform, audio thread) → water-like lines.
+        self._voice = pillfx.VoiceFollower()
+        self._voice_seen = False  # any features yet? (else level-only pill)
         self._transparent_ok = False
         self._light = 0.0
         self._pill_bg = (0.0, 0.0, 0.0)
@@ -376,32 +365,15 @@ class TranscriptionOverlay:
         """Feed the live mic level (0..1); the pill's ribbons ride it."""
         self._level_raw = max(0.0, min(1.0, level))
 
-    def set_waveform(self, wave) -> None:
-        """Feed one small downsampled mic block (any thread, non-blocking);
-        the pill's lines take the shape of the recent waveform."""
-        with self._wave_lock:
-            self._waves.append(wave)
-            self._wave_t = time.monotonic()
-
-    def _take_wave(self):
-        """Recent waveform for this frame (overlay thread), or None when no
-        waveform is flowing — then the pill animates from the level alone."""
-        with self._wave_lock:
-            if not self._waves or time.monotonic() - self._wave_t > 0.4:
-                self._wave_view = None
-                return None
-            cur = np.concatenate(list(self._waves))
-        # Blend with the previous frame's shape so it flows instead of jumping.
-        prev = self._wave_view
-        if prev is not None and prev.shape == cur.shape:
-            cur = prev + (cur - prev) * 0.55
-        self._wave_view = cur
-        return cur
+    def set_waveform(self, features) -> None:
+        """Feed one 50 ms block's voice features ``[loud, tone]`` (any thread,
+        non-blocking); the pill's lines flow with the CURRENT voice."""
+        self._voice.feed(features[0], features[1])
+        self._voice_seen = True
 
     def _clear_waves(self) -> None:
-        with self._wave_lock:
-            self._waves.clear()
-            self._wave_view = None
+        self._voice.reset()
+        self._voice_seen = False
 
     # -- Pill animation -----------------------------------------------------------
 
@@ -436,7 +408,7 @@ class TranscriptionOverlay:
         # tempo change is continuous (no jumps).
         self._phase += dt * (1.0 + 0.9 * level)
         try:
-            wave = self._take_wave()
+            wave = self._voice.step(dt) if self._voice_seen else None
             if not getattr(self._settings, "overlay_show_level", True):
                 wave = None
             data = pillfx.render_ppm(self._pill_w, self._pill_h, self._phase, level, self._light,

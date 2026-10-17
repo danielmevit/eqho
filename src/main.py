@@ -149,7 +149,7 @@ class App:
         self.overlay.set_level(level)
 
     def _on_waveform(self, wave) -> None:
-        """Live downsampled mic waveform (audio thread) — shapes the pill's lines."""
+        """Live voice features [loud, tone] per 50 ms block (audio thread) — shape the pill's lines."""
         self.overlay.set_waveform(wave)
 
     def _on_abort(self, reason: str, session: int) -> None:

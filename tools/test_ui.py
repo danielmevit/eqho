@@ -1132,7 +1132,7 @@ class UITestRunner:
         for i in range(0, len(voice) - blk + 1, blk):
             b = voice[i:i + blk]
             overlay.set_level(min(1.0, (float(np.sqrt(np.mean(b ** 2))) / 0.012) ** 0.6))
-            overlay.set_waveform(tr.downsample_wave(b))
+            overlay.set_waveform(tr.voice_features(b))
             time.sleep(blk / rate)
         box: Dict[str, Any] = {}
         done = threading.Event()
