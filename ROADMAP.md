@@ -127,6 +127,10 @@ system (docs/ai/TESTING.md: ASR benchmark, end-to-end dictation test, UI walker)
 - [ ] Demo GIF + README/Store screenshots
 
 ### Microsoft Store — after the app is as good as we can make it
+- [ ] Store presentation like Vecto's and Laydown's: visual slides/screenshots that explain how Eqho works
+      (press the hotkey, speak, text appears; the pill; models; privacy) — owner 2026-10-17
+- [ ] **Guided first-run tour** (owner 2026-10-17, to iron out later): the onboarding opens as a popup first, then
+      points at the app's main controls one by one ("this is where…") — same approach in Eqho, Vecto and Laydown.
 - [ ] Store package (MSIX, microphone capability) + listing text (no competitor names, no unverifiable claims)
 - [ ] Privacy page on the site; AI disclosure in the listing
 - [ ] Pricing decision (one-time, like Vecto/Laydown)
