@@ -235,7 +235,7 @@ class TabBase:
             border_color=self._colors.border_subtle,
         )
         card.grid(row=row, column=col, sticky="nsew",
-                  padx=column_inset(col, self._get_col_count()), pady=SPACING["xs"])
+                  padx=column_inset(col, self._get_col_count()), pady=(0, ROW_GAP))
         return card
 
     def _setting_row(self, parent, label: str, description: str = "") -> ctk.CTkFrame:
