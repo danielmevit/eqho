@@ -6,9 +6,12 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
-Planned as 0.8.11: the dictation pill.
+## [0.8.11] - 2026-10-17
+
+The dictation pill: it moves with your voice, and you can size and tune it.
 
 ### Added
+- **A grey example in the empty Custom Vocabulary box** shows what you can add there (it is never saved).
 - **The pill moves with your voice, like water.** While you speak, its lines rise into soft, flowing swells — taller
   when you're louder, a little livelier with a higher voice — and settle into calm, nearly flat lines when you
   pause. Eqho still hears and transcribes exactly the same audio.
@@ -16,6 +19,7 @@ Planned as 0.8.11: the dictation pill.
   see-through, each from Solid to Clear. The pill is now 20 % smaller by default; the text box looks as before.
 
 ### Fixed
+- **Choosing another model highlights it right away** in the Models tab (the highlight used to stay on the old model).
 - **Dictations stay out of Windows clipboard history.** Eqho marks the text it pastes as private, so it doesn't
   pile up in Win+V or sync to the cloud clipboard — and the history service can no longer get in the way of the
   paste (the last rare cause of a dictation typing nothing).
