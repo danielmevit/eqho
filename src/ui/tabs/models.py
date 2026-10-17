@@ -45,6 +45,9 @@ class ModelsTab(TabBase):
         self._progress_widgets: dict = {}
         self._poll_widget = None
         self._selected_key = ""
+        # The dashboard's "model_changed" handler marks every OTHER tab stale
+        # — this one stays as-is, so it must move its own highlight in place.
+        ctx.subscribe("model_changed", self.KEY, self._on_model_changed)
 
     def build(self, tab) -> None:
         self._card_refs = {}
@@ -435,3 +438,36 @@ class ModelsTab(TabBase):
         # Switch models seamlessly — the model host swaps in the background
         # (a fresh child process loads the new model), no app restart needed.
         self.ctx.change_model(key)
+
+    def _on_model_changed(self, model_key: str) -> None:
+        """Selection moved (Select button, download finish, onboarding) —
+        swap the card highlight in place, no rebuild."""
+        old_key = self._selected_key
+        self._selected_key = model_key
+        if old_key and old_key != model_key:
+            self._apply_card_selection(old_key, False)
+        self._apply_card_selection(model_key, True)
+
+    def _apply_card_selection(self, model_key: str, selected: bool) -> None:
+        """Restyle one existing card to the selected/deselected look."""
+        refs = self._card_refs.get(model_key)
+        if not refs:
+            return
+        try:
+            refs["card"].configure(
+                border_width=2 if selected else 1,
+                border_color=(self._colors.accent if selected
+                              else self._colors.border_subtle),
+            )
+            refs["name"].configure(
+                text=refs["base_name"] + ("  ●" if selected else ""),
+                text_color=(self._colors.accent if selected
+                            else self._colors.fg_primary),
+            )
+            if selected:
+                refs["actions"].pack_forget()
+            else:
+                refs["actions"].pack(fill="x", pady=(SPACING["xs"], 0))
+        except Exception:
+            # Widgets are gone (tab mid-rebuild) — build() re-reads settings.
+            pass

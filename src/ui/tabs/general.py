@@ -18,6 +18,12 @@ from ..widgets import segmented, auto_wrap_label
 
 log = logging.getLogger(__name__)
 
+# Grey example text shown in the EMPTY Custom Vocabulary box. Display-only:
+# it is never saved into settings.initial_prompt (the flag below guards the
+# save path), so it never reaches the model either.
+VOCAB_HINT = ("For example: Grok, Eqho, Daniel Mevit — one per line "
+              "or separated by commas")
+
 
 def lang_warning_text(language: str, model_size: str) -> str:
     """The warning under the language picker, or "" when none is needed."""
@@ -236,12 +242,35 @@ class GeneralTab(TabBase):
             border_width=1, border_color=self._colors.border, wrap="word",
         )
         self._vocab_box.pack(fill="x", pady=(SPACING["xs"], 0))
+        self._vocab_hint_active = False
         if self._settings.initial_prompt:
             self._vocab_box.insert("1.0", self._settings.initial_prompt)
+        else:
+            self._show_vocab_hint()
+        self._vocab_box.bind("<FocusIn>", self._on_vocab_focus_in)
         self._vocab_box.bind("<FocusOut>", self._on_vocab_changed)
 
+    def _show_vocab_hint(self) -> None:
+        """Grey example text in the empty box (CTkTextbox has no placeholder)."""
+        self._vocab_hint_active = True
+        self._vocab_box.delete("1.0", "end")
+        self._vocab_box.insert("1.0", VOCAB_HINT)
+        self._vocab_box.configure(text_color=self._colors.fg_muted)
+
+    def _on_vocab_focus_in(self, _event=None) -> None:
+        if self._vocab_hint_active:
+            self._vocab_hint_active = False
+            self._vocab_box.delete("1.0", "end")
+            self._vocab_box.configure(text_color=self._colors.fg_primary)
+
     def _on_vocab_changed(self, _event=None) -> None:
-        text = self._vocab_box.get("1.0", "end").strip()
+        if self._vocab_hint_active:
+            text = ""
+        else:
+            text = self._vocab_box.get("1.0", "end").strip()
+            if not text:
+                self._show_vocab_hint()
+                text = ""
         if text != self._settings.initial_prompt:
             self._settings.initial_prompt = text
             self._settings.save()

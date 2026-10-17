@@ -716,6 +716,7 @@ class UITestRunner:
                     self._exercise_rebuilding_settings()
 
             self._langwarn_pass()
+            self._selvocab_pass()
 
             # Re-check every tab at the MINIMUM window width (logical px, so
             # the same layout is tested at every Windows scaling)
@@ -791,6 +792,91 @@ class UITestRunner:
             self.settings.language, self.settings.model_size = orig
             if gen:
                 gen._update_lang_warning()
+            self._pump(count=4)
+
+    def _selvocab_pass(self) -> None:
+        """EQ-SELVOCAB: (a) Selecting a model via its Select button moves the
+        card highlight immediately (2 px accent border on the new card, 1 px on
+        the old one); (b) the empty Custom Vocabulary box shows a grey hint
+        that clears on focus, restores on blur, and is NEVER saved into
+        settings.initial_prompt."""
+        print("\nModel selection highlight + vocabulary hint checks...")
+        try:
+            # -- (a) Models tab: in-place highlight swap ------------------------
+            self.dash._show_tab("models")
+            self._pump(count=6, step_delay=0.03)
+            models_tab = self.dash._tabs.get("models")
+            old_key = self.settings.model_size
+            new_key = next(k for k in ("distil-large-v3", "distil-medium.en")
+                           if k != old_key and models_tab._is_model_cached(k))
+            old_refs = models_tab._card_refs[old_key]
+            new_refs = models_tab._card_refs[new_key]
+
+            new_refs["select"].invoke()
+            self._pump(count=4, step_delay=0.03)
+
+            if int(new_refs["card"].cget("border_width")) != 2:
+                self.errors.append(f"Models: '{new_key}' card not highlighted (2 px) after Select")
+            if str(new_refs["card"].cget("border_color")) != str(models_tab._colors.accent):
+                self.errors.append(f"Models: '{new_key}' card border not accent after Select")
+            if not str(new_refs["name"].cget("text")).endswith("  ●"):
+                self.errors.append(f"Models: '{new_key}' title missing the selected dot")
+            if new_refs["actions"].winfo_ismapped():
+                self.errors.append(f"Models: '{new_key}' actions row still visible when selected")
+            if int(old_refs["card"].cget("border_width")) != 1:
+                self.errors.append(f"Models: '{old_key}' card still highlighted (2 px) after switch")
+            if str(old_refs["card"].cget("border_color")) != str(models_tab._colors.border_subtle):
+                self.errors.append(f"Models: '{old_key}' card border not subtle after switch")
+            if str(old_refs["name"].cget("text")).endswith("  ●"):
+                self.errors.append(f"Models: '{old_key}' title kept the selected dot")
+            if not old_refs["actions"].winfo_ismapped():
+                self.errors.append(f"Models: '{old_key}' actions row not visible after deselect")
+            if self.settings.model_size != new_key:
+                self.errors.append("Models: Select did not save the new model_size")
+            self._capture_tab_screenshot("models-selected")
+
+            # Restore the original selection the same way (via Select button)
+            old_refs["select"].invoke()
+            self._pump(count=4, step_delay=0.03)
+            if self.settings.model_size != old_key:
+                self.errors.append("Models: could not restore the original model selection")
+
+            # -- (b) General tab: vocabulary hint, never saved ------------------
+            from src.ui.tabs.general import VOCAB_HINT
+
+            self.settings.initial_prompt = ""
+            self.settings.save()
+            self.dash._show_tab("general")
+            self._pump(count=4, step_delay=0.03)
+            self.dash.rebuild_tab("general")  # deterministic: box built empty
+            self._pump(count=6, step_delay=0.03)
+            gen = self.dash._tabs.get("general")
+            box = gen._vocab_box
+
+            if not gen._vocab_hint_active:
+                self.errors.append("General: vocabulary hint not shown on empty box")
+            if str(box.get("1.0", "end").strip()) != VOCAB_HINT:
+                self.errors.append("General: vocabulary hint text wrong or missing")
+            if str(box.cget("text_color")) != str(gen._colors.fg_muted):
+                self.errors.append("General: vocabulary hint not in the muted grey color")
+
+            box._textbox.event_generate("<FocusIn>")
+            self._pump(count=2)
+            if gen._vocab_hint_active or str(box.get("1.0", "end").strip()):
+                self.errors.append("General: vocabulary hint not cleared on focus")
+
+            box._textbox.event_generate("<FocusOut>")
+            self._pump(count=2)
+            if not gen._vocab_hint_active or str(box.get("1.0", "end").strip()) != VOCAB_HINT:
+                self.errors.append("General: vocabulary hint not restored on blur when empty")
+            if self.settings.initial_prompt != "":
+                self.errors.append("General: vocabulary hint leaked into settings.initial_prompt")
+            self._capture_tab_screenshot("general-vocabhint")
+        except Exception as e:
+            msg = f"Selvocab pass failed: {e}"
+            print(f"    [ERROR] {msg}\n{traceback.format_exc()}", file=sys.stderr)
+            self.errors.append(msg)
+        finally:
             self._pump(count=4)
 
     # -- Conditional states (EQ-STATES) ------------------------------------------
