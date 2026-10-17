@@ -726,6 +726,7 @@ class UITestRunner:
             # again in the light theme
             self._states_pass()
             self._overlay_pass()
+            self._overlay_variants_pass()
             self._light_pass()
 
             # Second pass at Eqho zoom 1.5: on a 125 % Windows PC that is the
@@ -1049,6 +1050,7 @@ class UITestRunner:
                                              lbl.winfo_width(), lbl.winfo_height()),
                                             (lbl.winfo_reqwidth(), lbl.winfo_reqheight()))
                         box["boxes"] = boxes
+                        box["pill"] = (r.winfo_width(), r.winfo_height())
                     except Exception as e:
                         box["error"] = str(e)
                     finally:
@@ -1061,6 +1063,10 @@ class UITestRunner:
                 if "error" in box:
                     self.errors.append(f"Overlay: '{name}' probe failed: {box['error']}")
                     continue
+                want = ov.pill_size(self.settings.overlay_pill_scale)
+                if box["pill"] != want:
+                    self.errors.append(f"Overlay: '{name}{sfx}' pill {box['pill']} != {want} "
+                                       f"at scale {self.settings.overlay_pill_scale}")
                 if "label" not in box:
                     self.errors.append(f"Overlay: '{name}' text panel not shown")
                 else:
@@ -1096,6 +1102,19 @@ class UITestRunner:
             tk._default_root = saved_default
             self.settings.overlay_enabled = saved_enabled
             self._pump(count=4)
+
+    def _overlay_variants_pass(self) -> None:
+        """Overlay at the smallest and largest pill, and with a nearly solid
+        text box; the user's values are restored afterwards."""
+        saved = (self.settings.overlay_pill_scale, self.settings.overlay_panel_opacity)
+        try:
+            for scale, panel, sfx in ((0.6, saved[1], "-pill60"), (1.4, saved[1], "-pill140"),
+                                      (saved[0], 0.98, "-solidbox")):
+                self.settings.overlay_pill_scale = scale
+                self.settings.overlay_panel_opacity = panel
+                self._overlay_pass(sfx)
+        finally:
+            self.settings.overlay_pill_scale, self.settings.overlay_panel_opacity = saved
 
     def _grab_boxes(self, boxes: List[Tuple[int, int, int, int]], name: str) -> None:
         """Screenshot the union of screen rectangles (x, y, w, h) to ui-<name>.png."""

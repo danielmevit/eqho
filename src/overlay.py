@@ -38,6 +38,18 @@ _GAP = 10               # space between the pill and the panel
 _PILL_W = 280   # was 400 — Daniel wants the pill ~30% narrower
 _PILL_H = 51    # was 64 — and ~20% shorter
 _PANEL_MAX_W = 640
+_PILL_SCALE_MIN = 0.6
+_PILL_SCALE_MAX = 1.4
+
+
+def pill_size(scale: float) -> tuple[int, int]:
+    """Pill (w, h) for the `overlay_pill_scale` setting; 1.0 = 280x51."""
+    try:
+        scale = float(scale)
+    except (TypeError, ValueError):
+        scale = 0.8
+    scale = min(_PILL_SCALE_MAX, max(_PILL_SCALE_MIN, scale))
+    return round(_PILL_W * scale), round(_PILL_H * scale)
 _WRAP_LENGTH = 560
 _FADE_STEPS = 5
 _FADE_INTERVAL = 25     # ms between fade steps
@@ -110,7 +122,8 @@ class TranscriptionOverlay:
         self._light = 0.0
         self._pill_bg = (0.0, 0.0, 0.0)
         self._pill_alpha_scale = 1.0  # 0.90 in light theme (translucent pill)
-        self._alpha_logical = 0.0     # current overlay opacity before pill scaling
+        self._alpha_logical = 0.0     # fade progress 0..1 (x each window's own opacity)
+        self._pill_w, self._pill_h = pill_size(getattr(settings, "overlay_pill_scale", 0.8))
         self._pill_x = 0
         self._pill_y = 0
 
@@ -134,7 +147,7 @@ class TranscriptionOverlay:
         self._root.title("Eqho")
         self._root.overrideredirect(True)
         self._root.attributes("-topmost", True)
-        self._root.attributes("-alpha", self._settings.overlay_opacity)
+        self._root.attributes("-alpha", 0.0)
 
         # Color-key transparency lets the capsule float without a plate
         # (Windows layered windows only; elsewhere the pill sits on a
@@ -149,8 +162,8 @@ class TranscriptionOverlay:
 
         self._pill_canvas = tk.Canvas(
             self._root,
-            width=_PILL_W,
-            height=_PILL_H,
+            width=self._pill_w,
+            height=self._pill_h,
             highlightthickness=0,
             bd=0,
         )
@@ -227,8 +240,12 @@ class TranscriptionOverlay:
 
         sw = self._root.winfo_screenwidth()
         sh = self._root.winfo_screenheight()
-        self._pill_x, self._pill_y = self._calc_position(_PILL_W, _PILL_H, sw, sh)
-        self._root.geometry(f"{_PILL_W}x{_PILL_H}+{self._pill_x}+{self._pill_y}")
+        size = pill_size(getattr(self._settings, "overlay_pill_scale", 0.8))
+        if size != (self._pill_w, self._pill_h):
+            self._pill_w, self._pill_h = size
+            self._pill_canvas.configure(width=self._pill_w, height=self._pill_h)
+        self._pill_x, self._pill_y = self._calc_position(self._pill_w, self._pill_h, sw, sh)
+        self._root.geometry(f"{self._pill_w}x{self._pill_h}+{self._pill_x}+{self._pill_y}")
 
         if not self._visible:
             self._apply_alpha(0.0)
@@ -240,9 +257,9 @@ class TranscriptionOverlay:
             self._lvl_fast = 0.0
             self._lvl_slow = 0.0
             self._start_render()
-            self._fade_to(self._settings.overlay_opacity)
+            self._fade_to(1.0)
         else:
-            self._apply_alpha(self._settings.overlay_opacity)
+            self._apply_alpha(1.0)
 
         self._set_panel_text(text)
 
@@ -303,16 +320,16 @@ class TranscriptionOverlay:
             # padx/pady + any border) so every wrapped line keeps equal
             # padding on all sides.
             frame = self._panel_label.master
-            w = min(max(frame.winfo_reqwidth(), _PILL_W), _PANEL_MAX_W)
+            w = min(max(frame.winfo_reqwidth(), self._pill_w), _PANEL_MAX_W)
             h = frame.winfo_reqheight()
-            pill_cx = self._pill_x + _PILL_W // 2
+            pill_cx = self._pill_x + self._pill_w // 2
             x = pill_cx - w // 2
             if self._anchored_top():
-                y = self._pill_y + _PILL_H + _GAP
+                y = self._pill_y + self._pill_h + _GAP
             else:
                 y = self._pill_y - _GAP - h
             self._panel.geometry(f"{w}x{h}+{x}+{y}")
-            self._panel.attributes("-alpha", self._alpha_logical)
+            self._panel.attributes("-alpha", self._panel_alpha())
             if not self._panel_shown:
                 self._panel.deiconify()
                 self._panel_shown = True
@@ -381,7 +398,7 @@ class TranscriptionOverlay:
         # tempo change is continuous (no jumps).
         self._phase += dt * (1.0 + 0.9 * level)
         try:
-            data = pillfx.render_ppm(_PILL_W, _PILL_H, self._phase, level, self._light, self._pill_bg)
+            data = pillfx.render_ppm(self._pill_w, self._pill_h, self._phase, level, self._light, self._pill_bg)
             # Explicit master: the default root is deliberately released above.
             img = tk.PhotoImage(master=self._root, data=data)
             self._pill_img = img  # keep a reference; tk only borrows it
@@ -400,13 +417,18 @@ class TranscriptionOverlay:
 
     # -- Fade ---------------------------------------------------------------------
 
+    def _panel_alpha(self) -> float:
+        return self._alpha_logical * getattr(self._settings, "overlay_panel_opacity", 0.85)
+
     def _apply_alpha(self, alpha: float) -> None:
-        """Set overlay opacity; the pill is additionally scaled in light theme
-        (translucent-but-not-transparent, 90% visible)."""
+        """Set fade progress (0..1). The pill shows at `overlay_opacity`
+        (additionally scaled in light theme: translucent, 90% visible), the
+        text box at its own `overlay_panel_opacity`."""
         self._alpha_logical = alpha
-        self._root.attributes("-alpha", alpha * self._pill_alpha_scale)
+        self._root.attributes(
+            "-alpha", alpha * self._settings.overlay_opacity * self._pill_alpha_scale)
         if self._panel_shown:
-            self._panel.attributes("-alpha", alpha)
+            self._panel.attributes("-alpha", self._panel_alpha())
 
     def _fade_to(self, target: float, on_done=None) -> None:
         if self._fade_job is not None:

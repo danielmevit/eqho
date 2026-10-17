@@ -382,6 +382,36 @@ def test_save_retries_and_degrades_gracefully():
     print("  -> Retry and graceful degradation tests passed.")
 
 
+def test_pill_options():
+    """EQ-PILLOPTS: pill size maths; old files get pill 0.8 and a text-box
+    opacity derived from their saved overlay_opacity."""
+    print("Testing pill size / text-box opacity...")
+    from src.overlay import pill_size
+    for scale, want in ((0.6, (168, 31)), (0.8, (224, 41)), (1.0, (280, 51)), (1.4, (392, 71))):
+        assert pill_size(scale) == want, f"pill_size({scale}) = {pill_size(scale)}, want {want}"
+    assert pill_size(5) == pill_size(1.4) and pill_size(0) == pill_size(0.6)
+    assert pill_size("junk") == (224, 41)
+    s = Settings()
+    assert s.overlay_pill_scale == 0.8 and s.overlay_panel_opacity == s.overlay_opacity == 0.85
+    with tempfile.TemporaryDirectory() as td:
+        test_file = Path(td) / "settings.json"
+        settings_mod.CONFIG_FILE = test_file
+        test_file.write_text(json.dumps({"overlay_opacity": 0.6}), encoding="utf-8")
+        s = Settings.load()
+        assert s.overlay_pill_scale == 0.8, s.overlay_pill_scale
+        assert s.overlay_panel_opacity == 0.6, s.overlay_panel_opacity
+        test_file.write_text(json.dumps({"language": "de"}), encoding="utf-8")
+        s = Settings.load()
+        assert s.overlay_panel_opacity == 0.85
+        test_file.write_text(json.dumps({"overlay_opacity": 0.6, "overlay_panel_opacity": 0.95,
+                                         "overlay_pill_scale": 9}), encoding="utf-8")
+        s = Settings.load()
+        assert s.overlay_panel_opacity == 0.95 and s.overlay_pill_scale == 1.4
+        s.save()
+        assert Settings.load().overlay_panel_opacity == 0.95
+    print("  pill sizes 168x31 / 224x41 / 280x51 / 392x71; old file -> 0.8, box = saved opacity")
+
+
 def main():
     print("Running settings probe (EQ-SETTINGS)...")
     try:
@@ -392,6 +422,7 @@ def main():
         test_save_is_atomic()
         test_save_reader_holds_file()
         test_save_retries_and_degrades_gracefully()
+        test_pill_options()
         print("\nALL SETTINGS PROBE TESTS PASSED.")
         return 0
     except Exception as e:

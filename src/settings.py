@@ -306,6 +306,8 @@ class Settings:
     overlay_font_size: int = 14
     overlay_position: str = "bottom-center"
     overlay_show_level: bool = True  # audio-level line at the overlay bottom
+    overlay_pill_scale: float = 0.8      # pill size, 1.0 = 280x51 (0.6..1.4)
+    overlay_panel_opacity: float = 0.85  # text box above the pill; overlay_opacity = the pill
     volume_duck: str = "off"  # "off", "50%", "25%", "10%", "mute" — asked during first-time setup
     start_with_windows: bool = False
     theme: str = "dark"  # "dark", "light", "system"
@@ -440,6 +442,15 @@ class Settings:
                     # volume-duck default they were running with.
                     clean_data.setdefault("onboarding_done", True)
                     clean_data.setdefault("volume_duck", "mute")
+                    # Before EQ-PILLOPTS one opacity drove the pill AND the
+                    # text box: keep the box looking the same for them.
+                    if "overlay_panel_opacity" not in clean_data and "overlay_opacity" in clean_data:
+                        clean_data["overlay_panel_opacity"] = clean_data["overlay_opacity"]
+                    for key, lo, hi in (("overlay_pill_scale", 0.6, 1.4),
+                                        ("overlay_panel_opacity", 0.3, 1.0),
+                                        ("overlay_opacity", 0.3, 1.0)):
+                        if key in clean_data:
+                            clean_data[key] = min(hi, max(lo, float(clean_data[key])))
                     settings = cls(**clean_data)
                 except Exception as e:
                     log.warning("Error constructing Settings from %s: %s", CONFIG_FILE, e)

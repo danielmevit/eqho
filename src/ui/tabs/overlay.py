@@ -96,72 +96,72 @@ class OverlayTab(TabBase):
         ).pack()
 
     def _build_opacity_setting(self, card) -> None:
-        opacity_row = ctk.CTkFrame(card, fg_color="transparent")
-        opacity_row.pack(fill="x", padx=SPACING["md"], pady=SPACING["sm"])
+        self._build_pill_size_setting(card)
+        self._pill_opacity_val_label = self._slider_row(
+            card, "Pill see-through", self._settings.overlay_opacity, 0.3, 1.0, 14,
+            self._pct(self._settings.overlay_opacity), self._on_opacity_changed)
+        self._panel_opacity_val_label = self._slider_row(
+            card, "Text box see-through", self._settings.overlay_panel_opacity, 0.3, 1.0, 14,
+            self._pct(self._settings.overlay_panel_opacity), self._on_panel_opacity_changed)
 
-        ctk.CTkLabel(
-            opacity_row, text="Opacity",
-            font=font("base"),
-            text_color=self._colors.fg_primary, anchor="w",
-        ).pack(anchor="w")
-
-        slider_frame = ctk.CTkFrame(opacity_row, fg_color="transparent")
-        slider_frame.pack(fill="x")
-
-        self._opacity_val_label = ctk.CTkLabel(
-            slider_frame,
-            text=f"{int(self._settings.overlay_opacity * 100)}%",
-            font=font("sm"),
-            text_color=self._colors.fg_secondary,
-            width=40,
-        )
-        self._opacity_val_label.pack(side="right", padx=(SPACING["sm"], 0))
-
-        ctk.CTkSlider(
-            slider_frame,
-            from_=0.3, to=1.0,
-            number_of_steps=14,
-            command=self._on_opacity_changed,
-            height=16,
-            fg_color=self._colors.bg_tertiary,
-            progress_color=self._colors.accent,
-            button_color=self._colors.accent,
-            button_hover_color=self._colors.accent_hover,
-        ).pack(side="left", fill="x", expand=True)
+    def _build_pill_size_setting(self, card) -> None:
+        self._pill_size_val_label = self._slider_row(
+            card, "Pill size", self._settings.overlay_pill_scale, 0.6, 1.4, 8,
+            self._pct(self._settings.overlay_pill_scale), self._on_pill_size_changed,
+            ends=("Small", "Large"))
 
     def _build_fontsize_setting(self, card) -> None:
-        font_row = ctk.CTkFrame(card, fg_color="transparent")
-        font_row.pack(fill="x", padx=SPACING["md"], pady=SPACING["sm"])
+        self._fontsize_val_label = self._slider_row(
+            card, "Text size", self._settings.overlay_font_size, 10, 28, 18,
+            f"{self._settings.overlay_font_size}px", self._on_fontsize_changed)
+
+    @staticmethod
+    def _pct(val: float) -> str:
+        return f"{int(round(val * 100))}%"
+
+    def _slider_row(self, card, title, value, lo, hi, steps, val_text, command, ends=None):
+        """Title, then slider + value label on one line; returns the value label."""
+        row = ctk.CTkFrame(card, fg_color="transparent")
+        row.pack(fill="x", padx=SPACING["md"], pady=SPACING["sm"])
 
         ctk.CTkLabel(
-            font_row, text="Font Size",
+            row, text=title,
             font=font("base"),
             text_color=self._colors.fg_primary, anchor="w",
         ).pack(anchor="w")
 
-        fs_frame = ctk.CTkFrame(font_row, fg_color="transparent")
-        fs_frame.pack(fill="x")
+        slider_frame = ctk.CTkFrame(row, fg_color="transparent")
+        slider_frame.pack(fill="x")
 
-        self._fontsize_val_label = ctk.CTkLabel(
-            fs_frame,
-            text=f"{self._settings.overlay_font_size}px",
+        val_label = ctk.CTkLabel(
+            slider_frame,
+            text=val_text,
             font=font("sm"),
             text_color=self._colors.fg_secondary,
             width=40,
         )
-        self._fontsize_val_label.pack(side="right", padx=(SPACING["sm"], 0))
+        val_label.pack(side="right", padx=(SPACING["sm"], 0))
 
-        ctk.CTkSlider(
-            fs_frame,
-            from_=10, to=28,
-            number_of_steps=18,
-            command=self._on_fontsize_changed,
+        if ends:
+            ctk.CTkLabel(slider_frame, text=ends[1], font=font("sm"),
+                         text_color=self._colors.fg_secondary).pack(side="right", padx=(SPACING["xs"], 0))
+            ctk.CTkLabel(slider_frame, text=ends[0], font=font("sm"),
+                         text_color=self._colors.fg_secondary).pack(side="left", padx=(0, SPACING["xs"]))
+
+        slider = ctk.CTkSlider(
+            slider_frame,
+            from_=lo, to=hi,
+            number_of_steps=steps,
+            command=command,
             height=16,
             fg_color=self._colors.bg_tertiary,
             progress_color=self._colors.accent,
             button_color=self._colors.accent,
             button_hover_color=self._colors.accent_hover,
-        ).pack(side="left", fill="x", expand=True)
+        )
+        slider.set(value)
+        slider.pack(side="left", fill="x", expand=True)
+        return val_label
 
     def _on_overlay_toggle(self) -> None:
         self._settings.overlay_enabled = self._overlay_var.get()
@@ -180,7 +180,17 @@ class OverlayTab(TabBase):
     def _on_opacity_changed(self, val) -> None:
         self._settings.overlay_opacity = round(val, 2)
         self._settings.save()
-        self._opacity_val_label.configure(text=f"{int(val * 100)}%")
+        self._pill_opacity_val_label.configure(text=self._pct(val))
+
+    def _on_panel_opacity_changed(self, val) -> None:
+        self._settings.overlay_panel_opacity = round(val, 2)
+        self._settings.save()
+        self._panel_opacity_val_label.configure(text=self._pct(val))
+
+    def _on_pill_size_changed(self, val) -> None:
+        self._settings.overlay_pill_scale = round(val, 2)
+        self._settings.save()
+        self._pill_size_val_label.configure(text=self._pct(val))
 
     def _on_fontsize_changed(self, val) -> None:
         self._settings.overlay_font_size = int(val)
