@@ -530,6 +530,56 @@ class UITestRunner:
                 settings_tab._on_zoom_changed(orig_zoom)
                 self._pump(count=8, step_delay=0.03)
 
+    def _prewarm_alignment_pass(self) -> None:
+        """Tabs built by the background prewarm must lay out like click-built ones:
+        on Models and General the section labels' left edge equals the first card's (+-2 px)."""
+        import customtkinter as ctk
+        d = self.dash
+        t0 = time.perf_counter()
+        while time.perf_counter() - t0 < 20:
+            cols = d._get_col_count()
+            if not d._warming and not getattr(d, "_resize_job", None) and all(
+                    d._tab_built_cols.get(k) == cols for k in ("models", "history", "settings")):
+                break
+            self._pump(count=1, step_delay=0.005)
+        print("\nPrewarm alignment check (models prewarmed, general rebuilt after):")
+        for tab in ("models", "general"):
+            if tab == "general":
+                d._show_tab("models")
+                d.rebuild_tab("general")   # general was click-built; rebuild it hidden ...
+                d._tab_built_cols["general"] = -1
+                d._schedule_prewarm()      # ... and let the prewarm build it instead
+                t0 = time.perf_counter()
+                while (d._tab_built_cols.get("general") != d._get_col_count() or d._warming) \
+                        and time.perf_counter() - t0 < 20:
+                    self._pump(count=1, step_delay=0.005)
+            d._show_tab(tab)
+            self._pump(count=10, step_delay=0.03)
+            labels, cards = [], []
+
+            def _walk(w: Any, in_card: bool) -> None:
+                for c in w.winfo_children():
+                    if not c.winfo_ismapped():
+                        continue
+                    mgr = c.winfo_manager()
+                    card = in_card or (mgr == "grid" and isinstance(c, ctk.CTkFrame))
+                    if mgr == "grid" and isinstance(c, ctk.CTkFrame) and not in_card:
+                        cards.append(c.winfo_rootx())
+                    elif mgr == "pack" and not in_card and isinstance(c, ctk.CTkLabel) \
+                            and str(c.cget("text")).strip() and c.winfo_width() > 1:
+                        labels.append((c.winfo_rootx(), str(c.cget("text"))[:30]))
+                    _walk(c, card)
+
+            _walk(d._tab_frames[tab], False)
+            if not cards or not labels:
+                self.errors.append(f"alignment[{tab}]: no cards ({len(cards)}) or labels ({len(labels)}) found")
+                continue
+            edge = min(cards)
+            bad = [(x, t) for x, t in labels if x > edge + 40 or abs(x - edge) <= 40 and abs(x - edge) > 2]
+            print(f"  {tab}: card x={edge}, labels {sorted({x for x, _ in labels})}")
+            for x, t in bad:
+                self.errors.append(f"alignment[{tab}]: label '{t}' x={x} vs first card x={edge}")
+
     def _check_cutoff(self, tab_name: str, where: str, root: Any = None) -> None:
         """Fail on any visible CTkLabel whose text does not fit the width it got.
 
@@ -594,6 +644,7 @@ class UITestRunner:
             self._setup_isolation()
             self._build_dashboard()
             self._check_fits_screen("start size")
+            self._prewarm_alignment_pass()
 
             # The 4 primary dashboard tabs
             tabs_to_test = ["general", "models", "history", "settings"]

@@ -604,7 +604,7 @@ class Dashboard(ctk.CTkToplevel):
             for child in frame.winfo_children():
                 manager = child.winfo_manager()
                 if manager == "pack":
-                    pending.append((child, manager, child.pack_info()))
+                    pending.append((child, manager, self._pack_args(child)))
                     child.pack_forget()
                 elif manager == "grid":
                     pending.append((child, manager, None))
@@ -635,6 +635,17 @@ class Dashboard(ctk.CTkToplevel):
             self._next_prewarm_step(key, frame)
             return
         self._finish_warming(key)
+
+    @staticmethod
+    def _pack_args(child) -> dict:
+        """Arguments that re-pack *child* exactly as it was. pack_info() holds
+        the Tk values, which CTk has already scaled; a CTk widget's pack()
+        would scale them a second time, so take its own unscaled arguments."""
+        info = child.pack_info()
+        last = getattr(child, "_last_geometry_manager_call", None)
+        if last and last.get("function").__name__ == "pack":
+            info = {**last["kwargs"], "in": info["in"]}
+        return info
 
     @staticmethod
     def _remap(item) -> None:
