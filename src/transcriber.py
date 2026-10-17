@@ -26,6 +26,32 @@ CHUNK_DURATION = 0.5
 # chunks the worker always got (VAD/partials/flush timing unchanged).
 WAVE_BLOCK = int(SAMPLE_RATE * 0.05)
 WAVE_POINTS = 48  # downsampled, peak-preserving points per block
+_FFT_N = 1024
+_FFT_WIN = np.hanning(WAVE_BLOCK).astype(np.float32)
+_FFT_HZ = np.fft.rfftfreq(_FFT_N, 1.0 / SAMPLE_RATE).astype(np.float32)
+_FFT_BAND = (_FFT_HZ >= 80) & (_FFT_HZ <= 5000)
+
+
+def voice_features(block: np.ndarray) -> np.ndarray:
+    """A few smooth voice features of one mic block → float32 [loud, tone].
+
+    loud: RMS on a dB scale, -60 dB (room noise) → 0 … -24 dB (loud) → 1.
+    tone: spectral centroid (80-5000 Hz band), log-mapped 250 Hz → 0 … 3 kHz → 1;
+    0.5 when the block is too quiet to tell. Cheap (one 1024-pt FFT)."""
+    x = np.asarray(block, dtype=np.float32).ravel()
+    if x.size == 0:
+        return np.array([0.0, 0.5], dtype=np.float32)
+    rms = float(np.sqrt(np.mean(x * x)))
+    loud = min(max((20.0 * np.log10(rms + 1e-9) + 60.0) / 36.0, 0.0), 1.0)
+    tone = 0.5
+    if rms > 1e-3:
+        win = _FFT_WIN if x.size == WAVE_BLOCK else np.hanning(x.size).astype(np.float32)
+        mag = np.abs(np.fft.rfft(x[:_FFT_N] * win[:_FFT_N], _FFT_N))[_FFT_BAND]
+        tot = float(mag.sum())
+        if tot > 0:
+            c = float((mag * _FFT_HZ[_FFT_BAND]).sum()) / tot
+            tone = min(max(np.log2(c / 250.0) / np.log2(12.0), 0.0), 1.0)
+    return np.array([loud, tone], dtype=np.float32)
 
 
 def downsample_wave(block: np.ndarray, points: int = WAVE_POINTS) -> np.ndarray:
@@ -451,13 +477,13 @@ class VoiceTranscriber:
             self._chunk_fill = len(rest)
 
     def _emit_waveform(self, block: np.ndarray) -> None:
-        """Hand a downsampled waveform to the overlay. Runs on the audio
+        """Hand the block's voice features (loudness, tone) to the overlay. Runs on the audio
         thread: cheap, never blocks, never raises."""
         cb = self._on_waveform
         if cb is None:
             return
         try:
-            cb(downsample_wave(block))
+            cb(voice_features(block))
         except Exception:
             pass
 

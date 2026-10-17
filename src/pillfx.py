@@ -11,15 +11,15 @@ left. Dark theme = additive glow; light theme = soft pigment on frosted pearl
 Keep the constants in sync with the mobile shader when tuning — same look on
 every surface Eqho ships.
 
-Voice-shaped lines (0.8.11, desktop first): with ``wave`` (the recent
-downsampled mic waveform) the ribbons' vertical displacement along x follows
-the voice itself, and in silence they settle nearly flat. The mobile shader
-does not do this yet — it should follow later (same ``wave_profile`` math).
+Voice-shaped lines (0.8.11, desktop first): with ``voice`` (smoothed loudness,
+tone and an integrated phase) the ribbons flow like water — a few soft sines
+that swell with the voice and settle nearly flat in silence. The mobile
+shader does not do this yet — it should follow later (same ``voice_curves``).
 """
 
 import numpy as np
 
-__all__ = ["render_rgb", "render_ppm", "hex_rgb01", "wave_profile"]
+__all__ = ["render_rgb", "render_ppm", "hex_rgb01", "voice_curves"]
 
 
 def hex_rgb01(hex_color: str) -> tuple[float, float, float]:
@@ -35,24 +35,31 @@ def _mix(a, b, t):
     return a + (b - a) * t
 
 
-_WAVE_GAIN = 7.0     # raw sample peaks of normal speech ~0.05-0.3 → tanh knee
-_SMOOTH = np.array([0.06, 0.24, 0.40, 0.24, 0.06], dtype=np.float32)
+def voice_curves(w: int, loud: float, tone: float, phase: float):
+    """Per-column displacement (w,) of the main and the second ribbon, in
+    units of the capsule radius — water-like, never sharp.
 
-
-def wave_profile(wave, w: int) -> np.ndarray:
-    """Per-column line displacement (w,) in -1..1 from a 1-D waveform.
-
-    Lightly smoothed (reads as flowing voice, not noise), soft-compressed
-    (tanh: quiet room noise ≈ flat, speech fills out without clipping) and
-    tapered at both ends so the lines meet the capsule's caps calmly."""
-    a = np.asarray(wave, dtype=np.float32).ravel()
-    if a.size < 2:
-        return np.zeros(w, dtype=np.float32)
-    a = np.convolve(np.pad(a, 2, mode="edge"), _SMOOTH, mode="valid")
-    xs = np.linspace(0.0, a.size - 1.0, w, dtype=np.float32)
-    col = np.interp(xs, np.arange(a.size, dtype=np.float32), a)
-    taper = np.clip(np.sin(np.linspace(0.0, np.pi, w, dtype=np.float32)), 0.0, 1.0) ** 0.6
-    return (np.tanh(col * _WAVE_GAIN) * taper).astype(np.float32)
+    A sum of three low-frequency sines (about 1-3 gentle crests across the
+    pill), tapered at both ends. ``loud`` 0..1 (smoothed loudness) raises the
+    amplitude along an eased, capped curve; ``tone`` 0..1 (smoothed spectral
+    brightness) tightens the waves a little (higher voice → livelier, lower →
+    longer swells); ``phase`` is integrated by the caller (continuous, faster
+    with more voice), so nothing ever jumps. The second ribbon follows with an
+    offset phase and a smaller amplitude for depth (not a hard mirror)."""
+    loud = min(max(float(loud), 0.0), 1.0)
+    tone = min(max(float(tone), 0.0), 1.0)
+    xn = np.linspace(-1.0, 1.0, w, dtype=np.float32)
+    taper = np.sin((xn + 1.0) * (np.pi / 2)) ** 0.8
+    e = loud * loud * (3.0 - 2.0 * loud)          # smoothstep: soft start, soft cap
+    amp = 0.05 + 0.50 * e                        # radius units; silence ≈ flat
+    k = 1.0 + 0.55 * tone                        # wavelength shift by tone
+    p = phase
+    main = (np.sin(xn * (np.pi * 1.10 * k) + p)
+            + 0.45 * np.sin(xn * (np.pi * 1.85 * k) - p * 1.30 + 0.8)
+            + 0.20 * np.sin(xn * (np.pi * 2.70 * k) + p * 0.70 + 2.1)) / 1.65
+    second = (np.sin(xn * (np.pi * 1.30 * k) + p * 0.85 + 1.9)
+              + 0.40 * np.sin(xn * (np.pi * 2.05 * k) - p * 1.10 + 3.0)) / 1.40
+    return ((main * taper) * amp).astype(np.float32), ((second * taper) * (amp * 0.6)).astype(np.float32)
 
 
 def render_rgb(
@@ -62,11 +69,11 @@ def render_rgb(
     level: float,
     light: float,
     bg: tuple[float, float, float],
-    wave=None,
+    voice=None,
 ) -> np.ndarray:
     """One frame as uint8 (h, w, 3). ``light`` is 0 (dark theme) → 1 (light);
     ``level`` is the smoothed mic level 0..1; ``bg`` fills outside the capsule;
-    ``wave`` (optional, 1-D recent mic samples) shapes the lines along x —
+    ``voice`` (optional ``(loud, tone, phase)``) shapes the lines along x —
     without it the pill animates from ``level`` alone, as before."""
     ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
     uvx = xs / w - 0.5
@@ -108,20 +115,21 @@ def render_rgb(
     th = r * (0.17 + 0.10 * lvl)
     fr = r * (0.050 + 0.045 * lvl)
 
-    if wave is not None:
-        # Voice-shaped: the drifting sines shrink to a calm idle swell and the
-        # voice's own waveform carries the motion; silence → nearly flat.
-        amp = r * (0.035 + 0.12 * lvl)
-        vx = wave_profile(wave, w)[None, :] * (r * 0.62)
+    if voice is not None:
+        # Water-like: soft low-frequency swells driven by the voice features.
+        loud, tone, vph = voice
+        m1, m2 = voice_curves(w, loud, tone, vph)
+        c1 = (m1 * r)[None, :]
+        c2 = (m2 * r)[None, :] - r * 0.16
+        th = r * (0.17 + 0.08 * float(loud))
     else:
-        vx = 0.0
-    c1 = amp * np.sin(uvx * 2.6 - t * 1.15) + amp * 0.45 * np.sin(uvx * 4.9 + t * 0.70) + vx
+        c1 = amp * np.sin(uvx * 2.6 - t * 1.15) + amp * 0.45 * np.sin(uvx * 4.9 + t * 0.70)
+        c2 = amp * 0.75 * np.sin(uvx * 3.4 + t * 0.90 + 1.7) - r * 0.16
     y1 = uvy - c1
     b1 = np.stack([_gs(y1 - fr, th), _gs(y1, th), _gs(y1 + fr, th)], axis=-1)
     col = col + b1 * v3(0.250, 0.550, 1.000) * ((1.0 - light) * 0.80)
     col = paint(col, v3(0.100, 0.420, 0.850), b1 * (light * 0.78))
 
-    c2 = amp * 0.75 * np.sin(uvx * 3.4 + t * 0.90 + 1.7) - r * 0.16 - vx * 0.55
     y2 = uvy - c2
     b2 = np.stack([_gs(y2 + fr, th * 0.55), _gs(y2, th * 0.55), _gs(y2 - fr, th * 0.55)], axis=-1)
     col = col + b2 * v3(0.450, 0.850, 1.000) * ((1.0 - light) * 0.35)
@@ -175,8 +183,8 @@ def render_ppm(
     level: float,
     light: float,
     bg: tuple[float, float, float],
-    wave=None,
+    voice=None,
 ) -> bytes:
     """One frame as a binary PPM — feed straight to ``tk.PhotoImage(data=...)``."""
-    arr = render_rgb(w, h, t, level, light, bg, wave)
+    arr = render_rgb(w, h, t, level, light, bg, voice)
     return b"P6 %d %d 255\n" % (w, h) + arr.tobytes()
