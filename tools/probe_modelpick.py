@@ -80,6 +80,14 @@ def main() -> int:
     check("CPU only" in detail_text(MODEL_INFO["large-v3"], "gpu")
           and "CPU only" not in detail_text(MODEL_INFO["large-v3"], "cpu"),
           "Large v3 CPU-only note on gpu PCs only")
+    from src.ui.tabs.general import lang_warning_text
+    for hw, label in (("gpu", "Large v3 Turbo"), ("cpu", "Small")):
+        modelpick._hw_class = hw
+        t = lang_warning_text("de", "distil-small.en")
+        check(f"For German, choose {label} in Eqho" in t and "\n" not in t,
+              f'{hw}: "de" warning names {label}')
+    check(lang_warning_text("en", "distil-small.en") == "", 'no warning for "en"')
+    check(lang_warning_text("de", "small") == "", "no warning for a multilingual model")
     modelpick._hw_class = None
     print(f"[INFO] this PC: hardware_class={modelpick.hardware_class()}, "
           f"en -> {modelpick.recommend_model('en')}, de -> {modelpick.recommend_model('de')}")

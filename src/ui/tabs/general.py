@@ -8,12 +8,26 @@ import logging
 import customtkinter as ctk
 
 from ...audio import list_input_devices
-from ...settings import LANGUAGE_TIERS, SUPPORTED_LANGUAGES, is_english_only_model
+from ...modelpick import recommend_model
+from ...settings import (
+    LANGUAGE_TIERS, SUPPORTED_LANGUAGES, WHISPER_MODELS, is_english_only_model,
+)
 from ...theme import SPACING, RADIUS_SM, font
 from ..layout import TabBase
 from ..widgets import segmented, auto_wrap_label
 
 log = logging.getLogger(__name__)
+
+
+def lang_warning_text(language: str, model_size: str) -> str:
+    """The warning under the language picker, or "" when none is needed."""
+    if language == "en" or not is_english_only_model(model_size):
+        return ""
+    lang_name = SUPPORTED_LANGUAGES.get(language, language)
+    rec = recommend_model(language)
+    rec_label = WHISPER_MODELS.get(rec, rec).split(" (")[0]
+    return (f"The current speech model only understands English. "
+            f"For {lang_name}, choose {rec_label} in Eqho → Models.")
 
 
 class GeneralTab(TabBase):
@@ -189,17 +203,18 @@ class GeneralTab(TabBase):
         ).pack()
 
         # Honesty guard: a non-English language on an English-only model would
-        # transcribe garbage — say so right where the choice happens.
+        # transcribe garbage — say so right where the choice happens, across
+        # the full row below the dropdown.
         self._lang_warn = ctk.CTkLabel(
-            right,
+            right.master,
             text="",
             font=font("xs"),
-            text_color=self._colors.accent,
+            text_color=self._colors.warning,
             fg_color="transparent",
-            anchor="e",
-            justify="right",
-            wraplength=230,
+            anchor="w",
+            justify="left",
         )
+        auto_wrap_label(self._lang_warn, right.master, padding=4)
         self._update_lang_warning()
 
     def _build_vocab_setting(self, card) -> None:
@@ -299,16 +314,10 @@ class GeneralTab(TabBase):
 
     def _update_lang_warning(self) -> None:
         """Show/hide the English-only-model warning under the language picker."""
-        mismatch = (
-            self._settings.language != "en"
-            and is_english_only_model(self._settings.model_size)
-        )
-        if mismatch:
-            self._lang_warn.configure(
-                text="This model is English-only — pick a multilingual model\n"
-                     "(e.g. Large v3 Turbo) in the Models tab.",
-            )
-            self._lang_warn.pack(pady=(4, 0))
+        text = lang_warning_text(self._settings.language, self._settings.model_size)
+        if text:
+            self._lang_warn.configure(text=text)
+            self._lang_warn.pack(anchor="w", fill="x", pady=(4, 0))
         else:
             self._lang_warn.pack_forget()
 

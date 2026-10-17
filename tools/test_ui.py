@@ -634,6 +634,8 @@ class UITestRunner:
                 if tab_name == "settings":
                     self._exercise_rebuilding_settings()
 
+            self._langwarn_pass()
+
             # Re-check every tab at the MINIMUM window width (logical px, so
             # the same layout is tested at every Windows scaling)
             self._narrow_pass("zoom as saved")
@@ -679,6 +681,27 @@ class UITestRunner:
             self._teardown()
 
         return self._print_summary()
+
+    def _langwarn_pass(self) -> None:
+        """General tab with a non-English language on an English-only model:
+        the warning under the language picker must show and not be cut."""
+        print("\nLanguage warning: German on an English-only model...")
+        orig = (self.settings.language, self.settings.model_size)
+        gen = self.dash._tabs.get("general")
+        try:
+            self.settings.language, self.settings.model_size = "de", "distil-small.en"
+            self.dash._show_tab("general")
+            gen._update_lang_warning()
+            self._pump(count=6, step_delay=0.03)
+            if not gen._lang_warn.winfo_ismapped():
+                self.errors.append("General: English-only warning not shown for German")
+            self._check_cutoff("general", f"langwarn, {self.dash.winfo_width()}px")
+            self._capture_tab_screenshot("general-langwarn")
+        finally:
+            self.settings.language, self.settings.model_size = orig
+            if gen:
+                gen._update_lang_warning()
+            self._pump(count=4)
 
     def _narrow_pass(self, label: str) -> None:
         """Every tab at the minimum window width (logical px)."""
