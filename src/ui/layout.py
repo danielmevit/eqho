@@ -22,12 +22,11 @@ from ..theme import (
 from .context import DashboardContext
 
 
-# Dashboard spacing (owner 2026-10-17): cards in the same group sit closer than the
-# groups, and everything sits inside a slightly larger window margin:
-#   ROW_GAP (between cards of one column/section) < GUTTER (between columns) < EDGE.
+# Dashboard spacing (owner 2026-10-17, final): one even gap between columns AND rows,
+# a little smaller than the window margin:  GUTTER == ROW_GAP (14) < EDGE (16).
 EDGE = 16     # window/content edge → section labels, headers and cards
-GUTTER = 12   # between columns, at any column count
-ROW_GAP = 8   # between stacked cards / rows of cards
+GUTTER = 14   # between columns, at any column count
+ROW_GAP = 14  # between stacked cards / rows of cards
 
 
 def column_gap(cols: int) -> int:

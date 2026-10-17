@@ -21,8 +21,8 @@ Planned as 0.8.11: the dictation pill.
   paste (the last rare cause of a dictation typing nothing).
 
 ### Changed
-- **Calmer spacing:** cards that belong together sit closer (8 between rows), columns are a bit further apart
-  (12), and the window edge has the most room (16) — the same at any number of columns, and cards never blend.
+- **Calmer spacing:** one even gap between columns and between rows of cards (14), a little less than the room at
+  the window edge (16) — the same at any number of columns, so cards never blend together.
 
 ## [0.8.10] - 2026-10-17
 
