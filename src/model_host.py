@@ -85,7 +85,9 @@ def _load_backend(backend: str, cfg: dict, progress=None):
 def _progress_tqdm(report):
     """A tqdm subclass that forwards HF-hub download progress to the parent
     process (used as snapshot_download's tqdm_class)."""
-    from tqdm import tqdm
+    # HF supplies a `name` keyword and honors named progress-bar settings.
+    # Its wrapper handles both before delegating to plain tqdm.
+    from huggingface_hub.utils import tqdm
 
     class _ReportingTqdm(tqdm):
         def update(self, n=1):
