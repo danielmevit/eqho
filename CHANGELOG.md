@@ -6,6 +6,9 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+### Fixed
+- First-time model downloads no longer fail with `TqdmKeyError` when Hugging Face passes a named progress bar.
+
 ## [0.8.11] - 2026-10-17
 
 The dictation pill: it moves with your voice, and you can size and tune it.
