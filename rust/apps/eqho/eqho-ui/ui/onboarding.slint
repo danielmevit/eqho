@@ -364,7 +364,8 @@ export component OnboardingView inherits Rectangle {
         // Persistent background download bar (visible across all steps while downloading / done / error)
         if root.bg-download-active || root.bg-download-done || root.bg-download-error : Rectangle {
             background: Theme.surface;
-            min-height: dl-lay.preferred-height;
+            vertical-stretch: 0;
+            height: dl-lay.preferred-height;
 
             Rectangle {
                 y: 0;
@@ -453,6 +454,7 @@ export component OnboardingView inherits Rectangle {
         // 6-part segmented blue step progress strip directly above the bottom navigation bar.
         // Dynamically spans the exact popup width: step 1 = 1/6, step 2 = 2/6, step 3 = 3/6 (half), ..., step 6 = 6/6.
         Rectangle {
+            vertical-stretch: 0;
             height: 4px;
             background: Theme.bg;
 
