@@ -1,7 +1,7 @@
 // Eqho Slint 1.19 Root UI: DashboardWindow & EqhoTray.
 import { Theme } from "@app-theme/theme.slint";
 import { ModelCardItem, HistoryRowItem, LanguageOption, OnboardingModelOption } from "types.slint";
-import { TopBar, RecoveryBanner } from "components.slint";
+import { TopBar, RecoveryBanner, StoreTrialBanner, StoreTrialFooter } from "components.slint";
 import { GeneralTab } from "tab_general.slint";
 import { ModelsTab } from "tab_models.slint";
 import { HistoryTab } from "tab_history.slint";
@@ -30,6 +30,20 @@ export component DashboardWindow inherits Window {
     in-out property <string> recovery-text: "";
     callback copy-recovery();
     callback dismiss-recovery();
+
+    // Microsoft Store trial & purchase state (all hidden when store-build is false)
+    in-out property <bool> store-build: false;
+    in-out property <string> license-state: "unknown";
+    in-out property <int> trial-days-left: -1;
+    in-out property <string> trial-ended-title: "Your trial has ended.";
+    in-out property <string> trial-ended-body: "If you'd like to keep using Eqho, please buy it.";
+    in-out property <string> buy-label: "Buy Eqho";
+    in-out property <string> trial-days-left-text: "";
+    in-out property <string> made-with-slint-label: "Made with Slint";
+    callback buy-clicked();
+
+    property <bool> trial-ended: root.store-build && root.license-state == "trial-expired";
+    property <bool> trial-running: root.store-build && root.license-state == "trial" && root.trial-days-left > 0;
 
     // TopBar callbacks
     callback tab-selected(string);
@@ -191,6 +205,7 @@ export component DashboardWindow inherits Window {
         hotkey-display: root.hotkey-display;
         hotkey-mode-index: root.hotkey-mode-index;
         hotkey-ok: root.onboarding-hotkey-ok;
+        trial-ended: root.trial-ended;
         is-dictating: root.onboarding-is-dictating;
         bg-download-active <=> root.bg-download-active;
         bg-download-done <=> root.bg-download-done;
@@ -232,7 +247,21 @@ export component DashboardWindow inherits Window {
             theme-toggled => { root.theme-toggled(); }
         }
 
+        if root.trial-ended : VerticalLayout {
+            vertical-stretch: 0;
+            padding-left: Theme.space-16;
+            padding-right: Theme.space-16;
+            padding-top: Theme.space-12;
+            StoreTrialBanner {
+                title: root.trial-ended-title;
+                body: root.trial-ended-body;
+                buy-label: root.buy-label;
+                buy-clicked => { root.buy-clicked(); }
+            }
+        }
+
         if root.recovery-text != "" : VerticalLayout {
+            vertical-stretch: 0;
             padding-left: Theme.space-16;
             padding-right: Theme.space-16;
             padding-top: Theme.space-12;
@@ -333,6 +362,8 @@ export component DashboardWindow inherits Window {
                 overlay-panel-see-through-pct <=> root.overlay-panel-see-through-pct;
                 overlay-font-size <=> root.overlay-font-size;
                 app-version: root.app-version;
+                store-build: root.store-build;
+                made-with-slint-label: root.made-with-slint-label;
 
                 theme-mode-changed(i) => { root.theme-mode-changed(i); }
                 ui-scale-changed(i) => { root.ui-scale-changed(i); }
@@ -352,6 +383,13 @@ export component DashboardWindow inherits Window {
                 start-onboarding => { root.start-onboarding(); }
             }
         }
+
+        if root.trial-running : StoreTrialFooter {
+            days-left-text: root.trial-days-left-text;
+            buy-label: root.buy-label;
+            made-with-slint-label: root.made-with-slint-label;
+            buy-clicked => { root.buy-clicked(); }
+        }
     }
 }
 
@@ -359,6 +397,7 @@ export component EqhoTray inherits SystemTrayIcon {
     in property <image> tray-icon;
     in property <string> tray-tooltip: "Eqho";
     in property <bool> is-dictating: false;
+    in property <bool> dictation-allowed: true;
     in property <bool> has-recovery: false;
     in property <string> toggle-label: "Start Dictation";
 
@@ -375,6 +414,7 @@ export component EqhoTray inherits SystemTrayIcon {
     Menu {
         MenuItem {
             title: root.toggle-label;
+            enabled: root.dictation-allowed;
             activated => { root.toggle-dictation(); }
         }
         MenuItem {

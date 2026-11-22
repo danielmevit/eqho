@@ -94,6 +94,7 @@ struct CoordinatorInner {
     worker_handle: Mutex<Option<JoinHandle<()>>>,
     finish_handle: Mutex<Option<JoinHandle<()>>>,
     hotkey_reg: Mutex<Option<Box<dyn HotkeyRegistration>>>,
+    dictation_suspended: AtomicBool,
 }
 
 /// Pure-Rust dictation coordinator orchestrating audio capture, VAD,
@@ -142,6 +143,7 @@ impl DictationCoordinator {
                 worker_handle: Mutex::new(None),
                 finish_handle: Mutex::new(None),
                 hotkey_reg: Mutex::new(None),
+                dictation_suspended: AtomicBool::new(false),
             }),
         }
     }
@@ -152,6 +154,28 @@ impl DictationCoordinator {
 
     pub fn is_finishing(&self) -> bool {
         lock_unpoisoned(&self.inner.state).finishing
+    }
+
+    pub fn is_dictation_suspended(&self) -> bool {
+        self.inner.dictation_suspended.load(Ordering::Acquire)
+    }
+
+    /// Quietly suspend or resume dictation (used by Store trial expiry / purchase).
+    ///
+    /// When `suspended` is `true`, unregisters the global hotkey and quietly ends any active
+    /// capture without nagging. When `false`, re-registers the global hotkey immediately.
+    pub fn set_dictation_suspended(&self, suspended: bool) {
+        let was_suspended = self
+            .inner
+            .dictation_suspended
+            .swap(suspended, Ordering::AcqRel);
+        if suspended {
+            self.inner.unregister_hotkey();
+            let _guard = lock_unpoisoned(&self.inner.session_lock);
+            self.inner.teardown_session_locked(None, None, true);
+        } else if was_suspended {
+            let _ = self.inner.register_hotkey();
+        }
     }
 
     pub fn activate(&self) {
@@ -210,6 +234,9 @@ impl DictationCoordinator {
 
 impl CoordinatorInner {
     fn activate(self: &Arc<Self>) {
+        if self.dictation_suspended.load(Ordering::Acquire) {
+            return;
+        }
         let _guard = lock_unpoisoned(&self.session_lock);
 
         let settings = lock_unpoisoned(&self.settings).clone();
@@ -393,6 +420,9 @@ impl CoordinatorInner {
     }
 
     fn toggle(self: &Arc<Self>) {
+        if self.dictation_suspended.load(Ordering::Acquire) {
+            return;
+        }
         let (running, finishing) = {
             let st = lock_unpoisoned(&self.state);
             (st.running, st.finishing)
@@ -886,6 +916,9 @@ impl CoordinatorInner {
     }
 
     fn register_hotkey(self: &Arc<Self>) -> Result<(), String> {
+        if self.dictation_suspended.load(Ordering::Acquire) {
+            return Ok(());
+        }
         let settings = lock_unpoisoned(&self.settings).clone();
         let mode = if settings.hotkey_mode.eq_ignore_ascii_case("hold") {
             HotkeyMode::Hold

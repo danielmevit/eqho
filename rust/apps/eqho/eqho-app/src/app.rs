@@ -4,12 +4,16 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::rc::Rc;
+#[cfg(feature = "store")]
+use std::rc::Weak as RcWeak;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use damt_app::{Acquire, ErrorLog, SingleInstance, SingleInstanceGuard, install_panic_hook};
+#[cfg(feature = "store")]
+use damt_platform::{Clock, SystemClock};
 use damt_platform::PlatformServices;
 use eqho_core::history::TranscriptHistory;
 use eqho_core::modelpick::HardwareClass;
@@ -35,9 +39,18 @@ use crate::assets::{
     LOGO_32, LOGO_HORIZONTAL_DARK, LOGO_HORIZONTAL_LIGHT, build_tray_icon_rgba,
     decode_png_rgba, rgba_to_slint_image,
 };
-use crate::paths::{resolve_dll_dir, resolve_runtime_paths, resolve_theme_is_dark};
+use crate::license::{DemoLicense, demo_license_is_honoured};
+#[cfg(feature = "store")]
+use crate::license::{
+    LICENSE_CACHE_FILE_NAME, LicenseState, STORE_FEATURE_ENABLED, StoreLicenseTexts,
+    demo_license_state,
+};
+use crate::paths::{RuntimePaths, resolve_dll_dir, resolve_runtime_paths, resolve_theme_is_dark};
 
 const SINGLE_INSTANCE_ID: &str = "xyz.damt.eqho.rust09";
+
+#[cfg(all(windows, feature = "store"))]
+const STARTUP_TASK_ID: &str = "EqhoStartup";
 
 #[cfg(windows)]
 type EqhoPlatformImpl = eqho_platform_win::WinEqhoPlatform;
@@ -49,20 +62,66 @@ type DamtPlatformImpl = damt_platform_win::WinPlatform;
 #[cfg(not(windows))]
 type DamtPlatformImpl = damt_platform::Unsupported;
 
-fn build_damt_platform() -> DamtPlatformImpl {
+fn build_damt_platform(is_isolated: bool, error_log: &ErrorLog) -> DamtPlatformImpl {
     #[cfg(windows)]
     {
-        let notifier = damt_platform_win::WinNotifier::new(
-            SINGLE_INSTANCE_ID,
-            "Eqho (0.9 Dev)",
-            "Eqho-Rust-0.9",
-            crate::assets::LOGO_32_WHITE,
-        );
-        damt_platform_win::WinPlatform::new("Eqho-Rust-0.9").with_notifier(notifier)
+        let mut win_platform = damt_platform_win::WinPlatform::new("Eqho-Rust-0.9");
+        #[cfg(feature = "store")]
+        {
+            win_platform = win_platform.with_startup_task_id(STARTUP_TASK_ID);
+        }
+        if !is_isolated {
+            let notifier = damt_platform_win::WinNotifier::new(
+                SINGLE_INSTANCE_ID,
+                "Eqho (0.9 Dev)",
+                "Eqho-Rust-0.9",
+                crate::assets::LOGO_32_WHITE,
+            );
+            win_platform = win_platform.with_notifier(notifier);
+        }
+        #[cfg(feature = "store")]
+        if !is_isolated {
+            use damt_platform::{SessionEvent, SessionEventSource};
+            let dispatch_log = error_log.clone();
+            win_platform.session().start(Box::new(move |event| {
+                if event == SessionEvent::Resumed
+                    && let Err(err) = slint::invoke_from_event_loop(store_license::refresh)
+                {
+                    dispatch_log.log_error("session_event_dispatch", &err);
+                }
+            }));
+        }
+        #[cfg(not(feature = "store"))]
+        let _ = error_log;
+        win_platform
     }
     #[cfg(not(windows))]
     {
+        let _ = (is_isolated, error_log);
         damt_platform::Unsupported
+    }
+}
+
+#[cfg(feature = "store")]
+fn raw_win32_hwnd(window: &slint::Window) -> Option<isize> {
+    #[cfg(windows)]
+    {
+        use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        use slint::winit_030::WinitWindowAccessor;
+        window
+            .with_winit_window(|winit_win| {
+                let raw = winit_win.window_handle().ok()?;
+                match raw.as_raw() {
+                    RawWindowHandle::Win32(win32) => Some(win32.hwnd.get()),
+                    _ => None,
+                }
+            })
+            .flatten()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = window;
+        None
     }
 }
 
@@ -100,6 +159,7 @@ fn now_epoch_secs() -> f64 {
 #[derive(Debug, Clone)]
 struct UiSyncSnapshot {
     is_dictating: bool,
+    dictation_allowed: bool,
     recovery_text: Option<String>,
     downloading_key: Option<String>,
     download_progress: f32,
@@ -135,6 +195,7 @@ impl AppUiSink {
         let _ = slint::invoke_from_event_loop(move || {
             if let Some(tray) = tray_weak.upgrade() {
                 tray.set_is_dictating(snap.is_dictating);
+                tray.set_dictation_allowed(snap.dictation_allowed);
                 tray.set_toggle_label(
                     if snap.is_dictating {
                         "Stop Dictation"
@@ -144,7 +205,12 @@ impl AppUiSink {
                     .into(),
                 );
                 tray.set_has_recovery(snap.recovery_text.is_some());
-                tray.set_tray_tooltip(status_summary_title(snap.is_dictating, &snap.hotkey).into());
+                let tooltip = if snap.dictation_allowed {
+                    status_summary_title(snap.is_dictating, &snap.hotkey)
+                } else {
+                    "Your trial has ended.".to_owned()
+                };
+                tray.set_tray_tooltip(tooltip.into());
                 if let Ok((w, h, rgba)) = build_tray_icon_rgba(snap.light_taskbar, snap.is_dictating) {
                     tray.set_tray_icon(rgba_to_slint_image(w, h, &rgba));
                 }
@@ -465,9 +531,51 @@ struct AppController {
     hotkey_capture_cancel: Option<Arc<AtomicBool>>,
     error_log: ErrorLog,
     ui_sink: Arc<AppUiSink>,
+    #[cfg(feature = "store")]
+    license_state: LicenseState,
+    #[cfg(feature = "store")]
+    license_now: jiff::Timestamp,
+    #[cfg(feature = "store")]
+    demo_license_active: bool,
 }
 
 impl AppController {
+    #[cfg(feature = "store")]
+    fn sync_license_to_dash(&self) {
+        let Some(dash) = &self.dashboard else {
+            return;
+        };
+        let resolved = self.license_state.resolve_at(self.license_now);
+        let days_left = resolved.trial_days_left(self.license_now);
+        let texts = StoreLicenseTexts::for_days(days_left);
+        dash.set_store_build(STORE_FEATURE_ENABLED);
+        dash.set_license_state(resolved.ui_state_tag().into());
+        dash.set_trial_days_left(resolved.trial_days_left_i32(self.license_now));
+        dash.set_trial_ended_title(texts.trial_ended_title.into());
+        dash.set_trial_ended_body(texts.trial_ended_body.into());
+        dash.set_buy_label(texts.buy_label.into());
+        dash.set_trial_days_left_text(texts.trial_days_left_text.into());
+        dash.set_made_with_slint_label(texts.made_with_slint_label.into());
+    }
+
+    #[cfg(feature = "store")]
+    fn apply_license_state(&mut self, state: LicenseState, now: jiff::Timestamp) {
+        let resolved = state.resolve_at(now);
+        self.license_state = resolved;
+        self.license_now = now;
+        let allowed = resolved.allows_dictation();
+        self.coordinator.set_dictation_suspended(!allowed);
+        {
+            let mut snap = self.snapshot.lock().unwrap_or_else(|e| e.into_inner());
+            snap.dictation_allowed = allowed;
+            if !allowed {
+                snap.is_dictating = false;
+            }
+        }
+        self.ui_sink.refresh_tray();
+        self.sync_license_to_dash();
+    }
+
     fn save_settings(&self, reload_model: bool) {
         let s = self.settings.lock().unwrap_or_else(|e| e.into_inner()).clone();
         if let Err(err) = s.save_to_path(&self.settings_path) {
@@ -907,6 +1015,8 @@ fn ensure_dashboard(ctrl: &Rc<RefCell<AppController>>, tab: Option<&str>) {
             c.refresh_models();
             c.refresh_onboarding_models(Some(&initial_model_key));
             c.refresh_history();
+            #[cfg(feature = "store")]
+            c.sync_license_to_dash();
         }
 
         wire_dashboard_callbacks(ctrl);
@@ -957,6 +1067,25 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
             if let Some(d) = dash_w.upgrade() {
                 d.set_recovery_text("".into());
             }
+        });
+    }
+    #[cfg(feature = "store")]
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_buy_clicked(move || {
+            let (is_demo, error_log) = {
+                let c = ctrl_w.borrow();
+                (c.demo_license_active, c.error_log.clone())
+            };
+            if is_demo {
+                error_log.log(Some("demo_purchase"), "demo: purchase skipped");
+                return;
+            }
+            let hwnd = dash_w
+                .upgrade()
+                .and_then(|d| raw_win32_hwnd(d.window()));
+            store_license::trigger_purchase(hwnd);
         });
     }
     {
@@ -1813,15 +1942,20 @@ fn spawn_hotkey_capture(
                     coordinator.apply_settings(new_settings, false);
                     let ok = coordinator.register_hotkey().is_ok();
 
-                    {
+                    let dictation_allowed = {
                         let mut snap = snapshot.lock().unwrap_or_else(|e| e.into_inner());
                         snap.hotkey = combo.clone();
-                    }
+                        snap.dictation_allowed
+                    };
 
                     let weak = dash_weak.clone();
                     let tray_w = tray_weak.clone();
                     let display = format_hotkey_display(&combo);
-                    let tooltip = status_summary_title(false, &combo);
+                    let tooltip = if dictation_allowed {
+                        status_summary_title(false, &combo)
+                    } else {
+                        "Your trial has ended.".to_owned()
+                    };
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(d) = weak.upgrade() {
                             d.set_hotkey_capturing(false);
@@ -1920,8 +2054,31 @@ pub fn run_desktop_app(
     open_dashboard: bool,
     initial_tab: Option<String>,
     dll_dir_override: Option<PathBuf>,
+    demo_dashboard: bool,
+    demo_license: Option<DemoLicense>,
 ) -> ExitCode {
-    let mut guard: SingleInstanceGuard = match SingleInstance::acquire(SINGLE_INSTANCE_ID) {
+    let is_isolated = demo_dashboard;
+    let honoured_demo_license = if let Some(demo) = demo_license {
+        if demo_license_is_honoured(is_isolated) {
+            Some(demo)
+        } else {
+            eprintln!(
+                "--demo-license needs an isolated demo run of the Store build (pass --demo-dashboard); ignoring."
+            );
+            None
+        }
+    } else {
+        None
+    };
+    #[cfg(not(feature = "store"))]
+    let _ = honoured_demo_license;
+
+    let instance_id = if is_isolated {
+        format!("{SINGLE_INSTANCE_ID}.demo.{}", std::process::id())
+    } else {
+        SINGLE_INSTANCE_ID.to_owned()
+    };
+    let mut guard: SingleInstanceGuard = match SingleInstance::acquire(&instance_id) {
         Acquire::First(g) => g,
         Acquire::AlreadyRunning => {
             println!("Eqho is already running.");
@@ -1929,7 +2086,25 @@ pub fn run_desktop_app(
         }
     };
 
-    let paths = resolve_runtime_paths();
+    let (paths, temp_demo_dir) = if is_isolated {
+        let dir = std::env::temp_dir().join(format!("eqho-demo-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let demo_paths = RuntimePaths {
+            settings_path: dir.join("settings.json"),
+            history_path: dir.join("history.jsonl"),
+            log_dir: dir.clone(),
+            config_dir: dir.clone(),
+        };
+        (demo_paths, Some(dir))
+    } else {
+        (resolve_runtime_paths(), None)
+    };
+    let cleanup_demo_dir = |dir: &Option<PathBuf>| {
+        if let Some(d) = dir {
+            let _ = std::fs::remove_dir_all(d);
+        }
+    };
+
     let error_log = ErrorLog::new(&paths.log_dir, "eqho");
     install_panic_hook(error_log.clone());
 
@@ -1939,14 +2114,18 @@ pub fn run_desktop_app(
     {
         error_log.log_error("slint_backend_select", &err);
         eprintln!("failed to select Slint software renderer: {err}");
+        cleanup_demo_dir(&temp_demo_dir);
         return ExitCode::from(1);
     }
 
-    let settings = Settings::load_from_path(&paths.settings_path);
+    let mut settings = Settings::load_from_path(&paths.settings_path);
+    if is_isolated {
+        settings.onboarding_done = true;
+    }
     let history = TranscriptHistory::with_default_cap(&paths.history_path);
 
     let platform = Arc::new(EqhoPlatformImpl::default());
-    let damt_platform = Arc::new(build_damt_platform());
+    let damt_platform = Arc::new(build_damt_platform(is_isolated, &error_log));
     let hw_class = detect_hardware_class(platform.as_ref());
 
     let is_dark = resolve_theme_is_dark(
@@ -1971,6 +2150,7 @@ pub fn run_desktop_app(
         Err(err) => {
             error_log.log_error("EqhoTray::new", &err);
             overlay.shutdown();
+            cleanup_demo_dir(&temp_demo_dir);
             return ExitCode::from(1);
         }
     };
@@ -1980,10 +2160,12 @@ pub fn run_desktop_app(
     }
     tray.set_tray_tooltip(status_summary_title(false, &settings.hotkey).into());
     tray.set_toggle_label("Start Dictation".into());
+    tray.set_dictation_allowed(true);
     tray.set_has_recovery(false);
 
     let snapshot = Arc::new(Mutex::new(UiSyncSnapshot {
         is_dictating: false,
+        dictation_allowed: true,
         recovery_text: None,
         downloading_key: None,
         download_progress: 0.0,
@@ -2017,18 +2199,27 @@ pub fn run_desktop_app(
         ui_sink.clone(),
     );
 
-    let hotkey_ok = match coordinator.register_hotkey() {
-        Ok(()) => true,
-        Err(err) => {
-            error_log.log(Some("register_hotkey"), &err);
-            false
+    let hotkey_ok = if is_isolated {
+        true
+    } else {
+        match coordinator.register_hotkey() {
+            Ok(()) => true,
+            Err(err) => {
+                error_log.log(Some("register_hotkey"), &err);
+                false
+            }
         }
     };
+
+    #[cfg(feature = "store")]
+    let store_clock: Arc<dyn Clock> = Arc::new(SystemClock);
+    #[cfg(feature = "store")]
+    let startup_now = store_clock.now().timestamp();
 
     let ctrl = Rc::new(RefCell::new(AppController {
         settings: settings_arc,
         settings_path: paths.settings_path,
-        config_dir: paths.config_dir,
+        config_dir: paths.config_dir.clone(),
         history: TranscriptHistory::with_default_cap(&paths.history_path),
         coordinator: coordinator.clone(),
         overlay: Arc::clone(&overlay),
@@ -2044,7 +2235,44 @@ pub fn run_desktop_app(
         hotkey_capture_cancel: None,
         error_log: error_log.clone(),
         ui_sink,
+        #[cfg(feature = "store")]
+        license_state: LicenseState::Unknown,
+        #[cfg(feature = "store")]
+        license_now: startup_now,
+        #[cfg(feature = "store")]
+        demo_license_active: honoured_demo_license.is_some(),
     }));
+
+    #[cfg(feature = "store")]
+    let _store_recheck_timer: Option<slint::Timer> = if !is_isolated {
+        let cache_path = paths.config_dir.join(LICENSE_CACHE_FILE_NAME);
+        let initial_license = store_license::init(
+            Rc::downgrade(&ctrl),
+            cache_path,
+            Arc::clone(&store_clock),
+            error_log.clone(),
+        );
+        ctrl.borrow_mut()
+            .apply_license_state(initial_license, store_clock.now().timestamp());
+        store_license::refresh();
+        let timer = slint::Timer::default();
+        timer.start(
+            slint::TimerMode::Repeated,
+            std::time::Duration::from_secs(15 * 60),
+            store_license::maybe_periodic_recheck,
+        );
+        Some(timer)
+    } else if let Some(demo) = honoured_demo_license {
+        // Honoured `--demo-license` run: set the state directly before the dashboard paints.
+        // Isolated runs never call `store_license::init` / `refresh`, so no Store API call runs
+        // and `license.json` is never written.
+        let now = store_clock.now().timestamp();
+        let state = demo_license_state(demo, now);
+        ctrl.borrow_mut().apply_license_state(state, now);
+        None
+    } else {
+        None
+    };
 
     // Wire tray callbacks
     {
@@ -2081,6 +2309,8 @@ pub fn run_desktop_app(
             c.stop_mic_test();
             c.coordinator.shutdown();
             c.overlay.shutdown();
+            #[cfg(feature = "store")]
+            store_license::clear();
             let _ = slint::quit_event_loop();
         });
     }
@@ -2106,13 +2336,14 @@ pub fn run_desktop_app(
         });
     }
 
-    // Lazy dashboard: only create at startup if onboarding is incomplete or --open-dashboard was passed.
-    if !settings.onboarding_done || open_dashboard {
+    // Lazy dashboard: only create at startup if onboarding is incomplete, --open-dashboard was
+    // passed, or this is an isolated --demo-dashboard run.
+    if !settings.onboarding_done || open_dashboard || is_isolated {
         ensure_dashboard(&ctrl, initial_tab.as_deref());
     }
 
-    // Preload model in background if onboarding is done and the model file is already cached.
-    if settings.onboarding_done {
+    // Preload model in background if onboarding is done (non-demo runs) and the model is cached.
+    if settings.onboarding_done && !is_isolated {
         let model_dir = settings.resolve_model_dir();
         if whispercpp_model_path(&model_dir, &settings.model_size).is_file() {
             let coord = coordinator.clone();
@@ -2124,15 +2355,244 @@ pub fn run_desktop_app(
         }
     }
 
-    if let Err(err) = slint::run_event_loop_until_quit() {
-        error_log.log_error("run_event_loop_until_quit", &err);
-        coordinator.shutdown();
-        overlay.shutdown();
-        return ExitCode::from(1);
+    let run_result = slint::run_event_loop_until_quit();
+    if let Err(err) = &run_result {
+        error_log.log_error("run_event_loop_until_quit", err);
     }
 
+    #[cfg(feature = "store")]
+    store_license::clear();
     coordinator.shutdown();
     overlay.shutdown();
+    drop(ctrl);
     drop(guard);
-    ExitCode::SUCCESS
+    cleanup_demo_dir(&temp_demo_dir);
+
+    if run_result.is_ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
+}
+
+#[cfg(feature = "store")]
+mod store_license {
+    use std::cell::RefCell;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    use damt_app::ErrorLog;
+    use damt_platform::Clock;
+    use damt_platform_win::{RawStoreLicense, StorePurchaseOutcome};
+
+    use crate::license::{LicenseManager, LicenseState};
+
+    use super::{AppController, RcWeak};
+
+    struct StoreLicenseRuntime {
+        ctrl: RcWeak<RefCell<AppController>>,
+        manager: LicenseManager,
+        last_applied: LicenseState,
+        in_flight: bool,
+        error_logged: bool,
+        error_log: ErrorLog,
+        clock: Arc<dyn Clock>,
+    }
+
+    thread_local! {
+        static RUNTIME: RefCell<Option<StoreLicenseRuntime>> = const { RefCell::new(None) };
+    }
+
+    pub fn init(
+        ctrl: RcWeak<RefCell<AppController>>,
+        cache_path: PathBuf,
+        clock: Arc<dyn Clock>,
+        error_log: ErrorLog,
+    ) -> LicenseState {
+        let manager = LicenseManager::new(Some(cache_path), Arc::clone(&clock));
+        let initial = manager.state();
+        RUNTIME.with(|slot| {
+            *slot.borrow_mut() = Some(StoreLicenseRuntime {
+                ctrl,
+                manager,
+                last_applied: initial,
+                in_flight: false,
+                error_logged: false,
+                error_log,
+                clock,
+            });
+        });
+        initial
+    }
+
+    pub fn clear() {
+        RUNTIME.with(|slot| {
+            *slot.borrow_mut() = None;
+        });
+    }
+
+    fn push_state(ctrl: &RcWeak<RefCell<AppController>>, state: LicenseState, now: jiff::Timestamp) {
+        if let Some(rc) = ctrl.upgrade()
+            && let Ok(mut c) = rc.try_borrow_mut()
+        {
+            c.apply_license_state(state, now);
+        }
+    }
+
+    pub fn maybe_periodic_recheck() {
+        let (local_update, should_refresh) = RUNTIME.with(|slot| {
+            let mut borrow = slot.borrow_mut();
+            let Some(rt) = borrow.as_mut() else {
+                return (None, false);
+            };
+            let current = rt.manager.state();
+            let now = rt.clock.now().timestamp();
+            let update = if current != rt.last_applied {
+                rt.last_applied = current;
+                Some((rt.ctrl.clone(), current, now))
+            } else {
+                None
+            };
+            let due = !rt.in_flight && rt.manager.is_recheck_due();
+            (update, due)
+        });
+        if let Some((ctrl, state, now)) = local_update {
+            push_state(&ctrl, state, now);
+        }
+        if should_refresh {
+            refresh();
+        }
+    }
+
+    pub fn refresh() {
+        let can_start = RUNTIME.with(|slot| {
+            let mut borrow = slot.borrow_mut();
+            let Some(rt) = borrow.as_mut() else {
+                return false;
+            };
+            if rt.in_flight {
+                return false;
+            }
+            rt.in_flight = true;
+            rt.manager.mark_check_started();
+            true
+        });
+        if !can_start {
+            return;
+        }
+
+        #[cfg(windows)]
+        {
+            damt_platform_win::query_app_license_async(|res| {
+                let mapped = res.map_err(|err| err.to_string());
+                let _ = slint::invoke_from_event_loop(move || {
+                    on_query_completed(mapped);
+                });
+            });
+        }
+        #[cfg(not(windows))]
+        {
+            on_query_completed(Err(
+                "Microsoft Store licensing is only available on Windows".to_owned(),
+            ));
+        }
+    }
+
+    fn on_query_completed(res: Result<RawStoreLicense, String>) {
+        let update = RUNTIME.with(|slot| {
+            let mut borrow = slot.borrow_mut();
+            let rt = borrow.as_mut()?;
+            rt.in_flight = false;
+            let state = rt.manager.on_query_result(res);
+            rt.last_applied = state;
+            if let Some(err) = rt.manager.last_error() {
+                if !rt.error_logged {
+                    rt.error_logged = true;
+                    rt.error_log.log(Some("store_license"), err);
+                }
+            } else {
+                rt.error_logged = false;
+            }
+            Some((rt.ctrl.clone(), state, rt.clock.now().timestamp()))
+        });
+
+        if let Some((ctrl, state, now)) = update {
+            push_state(&ctrl, state, now);
+        }
+    }
+
+    pub fn trigger_purchase(owner_hwnd: Option<isize>) {
+        let Some(hwnd) = owner_hwnd else {
+            RUNTIME.with(|slot| {
+                if let Some(rt) = slot.borrow().as_ref() {
+                    rt.error_log.log(
+                        Some("store_purchase"),
+                        "Dashboard window HWND unavailable for Store purchase",
+                    );
+                }
+            });
+            return;
+        };
+
+        #[cfg(windows)]
+        {
+            if let Err(err) =
+                damt_platform_win::request_purchase_async(crate::license::STORE_ID, hwnd, |res| {
+                    let mapped = res.map_err(|err| err.to_string());
+                    let _ = slint::invoke_from_event_loop(move || {
+                        on_purchase_completed(mapped);
+                    });
+                })
+            {
+                RUNTIME.with(|slot| {
+                    if let Some(rt) = slot.borrow().as_ref() {
+                        rt.error_log.log_error("store_purchase_start", &err);
+                    }
+                });
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = hwnd;
+            on_purchase_completed(Err(
+                "Microsoft Store purchase is only available on Windows".to_owned(),
+            ));
+        }
+    }
+
+    fn on_purchase_completed(res: Result<StorePurchaseOutcome, String>) {
+        match res {
+            Ok(outcome) if outcome.is_owned() => {
+                let update = RUNTIME.with(|slot| {
+                    let mut borrow = slot.borrow_mut();
+                    let rt = borrow.as_mut()?;
+                    let state = rt.manager.on_purchase_succeeded();
+                    rt.last_applied = state;
+                    Some((rt.ctrl.clone(), state, rt.clock.now().timestamp()))
+                });
+                if let Some((ctrl, state, now)) = update {
+                    push_state(&ctrl, state, now);
+                }
+                refresh();
+            }
+            Ok(StorePurchaseOutcome::NotPurchased) => {}
+            Ok(other) => {
+                RUNTIME.with(|slot| {
+                    if let Some(rt) = slot.borrow().as_ref() {
+                        rt.error_log.log(
+                            Some("store_purchase"),
+                            &format!("Store purchase did not complete: {other:?}"),
+                        );
+                    }
+                });
+            }
+            Err(err) => {
+                RUNTIME.with(|slot| {
+                    if let Some(rt) = slot.borrow().as_ref() {
+                        rt.error_log.log(Some("store_purchase"), &err);
+                    }
+                });
+            }
+        }
+    }
 }

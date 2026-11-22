@@ -66,3 +66,40 @@ When switching over to `0.9.0` on `dev`:
 2. Change `SINGLE_INSTANCE_ID` to `"xyz.damt.eqho"` and `build_damt_platform()` names to `"Eqho"`.
 3. Bump workspace version in `rust/Cargo.toml` from `0.9.0-dev` to `0.9.0`.
 4. Verify clean upgrade on Windows over an existing `0.8.11` `%APPDATA%\Eqho` profile.
+
+## 5. Microsoft Store Build & 15-Day Free Trial
+
+Direct-download builds (default features) compile **zero licensing code** and show no trial or purchase UI. The Microsoft Store build opts in via the Cargo feature `store` (`store = ["damt-platform-win/store"]`):
+
+```bash
+# Cross-compile Microsoft Store binary from Linux/WSL:
+CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=4 \
+  cargo xwin build --manifest-path rust/Cargo.toml -p eqho-app --features store \
+  --target x86_64-pc-windows-msvc --release
+```
+
+### Licensing Behavior
+- **Four states:** `Full`, `Trial { ends_at }`, `TrialExpired`, and `Unknown`. Only a definite `TrialExpired` suspends dictation (quietly unregisters the global hotkey, disables tray `Start Dictation`, and shows a calm top banner with `Buy Eqho`). Offline errors and `Unknown` states never lock a user out.
+- **Offline cache:** Atomic `<config_dir>/license.json` (`*.tmp` → `rename`), never storing `Unknown`.
+- **Check cadence:** Startup (immediately after reading cache), every 4 hours (`LICENSE_RECHECK_INTERVAL`) with an in-flight guard, on OS resume (`SessionEvent::Resumed`), and right after purchase.
+- **Purchase dialog:** `StoreContext::RequestPurchaseAsync(STORE_ID)` initialized with the dashboard Win32 HWND via `IInitializeWithWindow`. `Succeeded` / `AlreadyPurchased` immediately unlock `Full`; `NotPurchased` (cancel) is a silent no-op.
+- **Attribution & compliance:** Zero GitHub links in the Store build; `"Made with Slint"` attribution is shown in the trial footer and `Settings → About Eqho` (required by Slint's royalty-free license).
+
+### Testing All Trial States Without a Store Package
+In Store builds (`--features store`), combine `--demo-dashboard` (which creates an isolated temporary config dir and never touches `%APPDATA%` or `license.json`) with `--demo-license`:
+
+```powershell
+.\Eqho.exe --demo-dashboard --demo-license=trial
+.\Eqho.exe --demo-dashboard --demo-license=trial-last-day
+.\Eqho.exe --demo-dashboard --demo-license=trial-ended
+.\Eqho.exe --demo-dashboard --demo-license=full
+.\Eqho.exe --demo-dashboard --demo-license=unknown
+```
+
+In isolated demo runs, the Store API is never called, `license.json` is never written, and clicking **Buy Eqho** logs a no-op (`demo: purchase skipped`). Outside an isolated demo run (or in direct-download builds), `--demo-license` is ignored with one warning line on `stderr`.
+
+### Partner Center Pre-Submission Checklist
+1. Reserve Eqho's product name in Partner Center and replace placeholder `STORE_ID` (`"9NBLGGH4XXXX"`) in `rust/apps/eqho/eqho-app/src/license.rs` before building the Store `.msix`.
+2. Configure **MSIX** package with `runFullTrust` capability and `desktop:StartupTask` (`TaskId="EqhoStartup"`).
+3. Set a **paid base price** and enable a **15-day free trial** (managed by the Microsoft Store).
+4. In Partner Center privacy/commerce declarations: **Uses the Microsoft commerce platform = Yes**, **Collects personal information = No**.

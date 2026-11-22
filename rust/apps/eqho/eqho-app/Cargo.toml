@@ -11,6 +11,10 @@ authors.workspace = true
 name = "Eqho"
 path = "src/main.rs"
 
+[features]
+default = []
+store = ["damt-platform-win/store"]
+
 [dependencies]
 damt-app.workspace = true
 damt-platform.workspace = true
@@ -22,7 +26,9 @@ eqho-overlay.workspace = true
 eqho-platform.workspace = true
 eqho-platform-win.workspace = true
 eqho-ui.workspace = true
+jiff.workspace = true
 png.workspace = true
+raw-window-handle.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 slint.workspace = true

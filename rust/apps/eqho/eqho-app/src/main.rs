@@ -71,7 +71,16 @@ fn main() -> ExitCode {
             open_dashboard,
             tab,
             dll_dir,
-        }) => run_desktop_app(open_dashboard, tab, dll_dir),
+            demo_dashboard,
+            demo_license,
+        }) => {
+            if demo_license.is_some()
+                && !eqho_app::license::demo_license_is_honoured(demo_dashboard)
+            {
+                attach_parent_console();
+            }
+            run_desktop_app(open_dashboard, tab, dll_dir, demo_dashboard, demo_license)
+        }
         Err(err) => {
             attach_parent_console();
             eprintln!("error: {err}\n\n{}", help_text());

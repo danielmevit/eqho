@@ -28,6 +28,8 @@ export component SettingsTab inherits Rectangle {
     in-out property <int> overlay-font-size: 14;
 
     in property <string> app-version: "0.9.0-dev";
+    in property <bool> store-build: false;
+    in property <string> made-with-slint-label: "Made with Slint";
 
     callback theme-mode-changed(int);
     callback ui-scale-changed(int);
@@ -472,7 +474,9 @@ export component SettingsTab inherits Rectangle {
                 }
 
                 Text {
-                    text: "Powered by whisper.cpp · Slint · Rust";
+                    text: root.store-build
+                        ? root.made-with-slint-label + " · Powered by whisper.cpp · Rust"
+                        : "Powered by whisper.cpp · Slint · Rust";
                     font-size: Theme.font-size-xs;
                     color: Theme.text-subtle;
                     wrap: word-wrap;

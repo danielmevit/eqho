@@ -143,6 +143,140 @@ export component SectionCard inherits Card {
     }
 }
 
+// Calm banner shown in Microsoft Store builds when the 15-day trial has ended.
+export component StoreTrialBanner inherits Card {
+    in property <string> title: "Your trial has ended.";
+    in property <string> body: "If you'd like to keep using Eqho, please buy it.";
+    in property <string> buy-label: "Buy Eqho";
+    callback buy-clicked();
+
+    shadow: false;
+    border-color: Theme.border;
+    min-height: lay.preferred-height;
+
+    accessible-role: groupbox;
+    accessible-label: root.title;
+
+    lay := HorizontalLayout {
+        padding-left: Theme.space-14;
+        padding-right: Theme.space-14;
+        padding-top: Theme.space-10;
+        padding-bottom: Theme.space-10;
+        spacing: Theme.space-12;
+        alignment: space-between;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.title;
+                font-size: Theme.font-size-base;
+                font-weight: 600;
+                color: Theme.text;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.body;
+                font-size: Theme.font-size-sm;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 0;
+            alignment: center;
+            Button {
+                text: root.buy-label;
+                kind: ButtonKind.accent;
+                accessible-name: root.buy-label;
+                clicked => { root.buy-clicked(); }
+            }
+        }
+    }
+}
+
+// Quiet one-line footer shown in Microsoft Store builds while a trial is active.
+export component StoreTrialFooter inherits Rectangle {
+    in property <string> days-left-text: "";
+    in property <string> buy-label: "Buy Eqho";
+    in property <string> made-with-slint-label: "Made with Slint";
+    callback buy-clicked();
+
+    vertical-stretch: 0;
+    height: lay.preferred-height;
+    background: Theme.surface;
+
+    Rectangle {
+        y: 0;
+        width: parent.width;
+        height: 1px;
+        background: Theme.border-subtle;
+    }
+
+    lay := HorizontalLayout {
+        padding-left: Theme.space-16;
+        padding-right: Theme.space-16;
+        padding-top: 6px;
+        padding-bottom: 6px;
+        spacing: Theme.space-8;
+        alignment: space-between;
+
+        HorizontalLayout {
+            spacing: Theme.space-8;
+            alignment: start;
+
+            Text {
+                text: root.days-left-text;
+                font-size: Theme.font-size-help;
+                color: Theme.text-muted;
+                vertical-alignment: center;
+            }
+
+            Text {
+                text: "·";
+                font-size: Theme.font-size-help;
+                color: Theme.text-subtle;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+
+            buy-link := Rectangle {
+                min-width: buy-txt.preferred-width + 6px;
+                min-height: buy-txt.preferred-height + 2px;
+                accessible-role: button;
+                accessible-label: root.buy-label;
+                accessible-action-default => { root.buy-clicked(); }
+
+                buy-txt := Text {
+                    text: root.buy-label;
+                    font-size: Theme.font-size-help;
+                    font-weight: 600;
+                    color: buy-touch.pressed ? Theme.accent-text-pressed
+                        : buy-touch.has-hover ? Theme.accent-text-pressed
+                        : Theme.accent-text;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                    accessible-role: none;
+                }
+
+                buy-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.buy-clicked(); }
+                }
+            }
+        }
+
+        if root.made-with-slint-label != "" : Text {
+            text: root.made-with-slint-label;
+            font-size: Theme.font-size-help;
+            color: Theme.text-subtle;
+            vertical-alignment: center;
+        }
+    }
+}
+
 // Recovery banner shown when an automatic paste failed.
 export component RecoveryBanner inherits Rectangle {
     in property <string> text;

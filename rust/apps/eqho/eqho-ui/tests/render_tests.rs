@@ -235,4 +235,46 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
     let onboarding_try = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
     assert_non_uniform_and_valid_png(&onboarding_try, 940, 560);
     maybe_save_png(dump_dir.as_ref(), "11_onboarding_step6_checklist", &onboarding_try, 940, 560);
+
+    // 6. Microsoft Store trial states (trial active footer, last-day light footer, trial-ended banner)
+    win.set_onboarding_active(false);
+    win.set_active_tab("general".into());
+    win.set_logo_image(dark_logo.clone());
+    win.set_store_build(true);
+    win.set_license_state("trial".into());
+    win.set_trial_days_left(12);
+    win.set_trial_days_left_text("12 days left in your trial".into());
+    let store_trial_dark = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
+    assert_non_uniform_and_valid_png(&store_trial_dark, 940, 560);
+    maybe_save_png(dump_dir.as_ref(), "12_store_trial_footer_dark", &store_trial_dark, 940, 560);
+
+    win.set_logo_image(decode_logo(LOGO_LIGHT_PNG));
+    win.set_trial_days_left(1);
+    win.set_trial_days_left_text("1 day left in your trial".into());
+    let store_trial_last_light = render_dashboard_rgba(&window_adapter, &win, 940, 560, false);
+    assert_non_uniform_and_valid_png(&store_trial_last_light, 940, 560);
+    maybe_save_png(
+        dump_dir.as_ref(),
+        "13_store_trial_last_day_light",
+        &store_trial_last_light,
+        940,
+        560,
+    );
+
+    win.set_logo_image(dark_logo);
+    win.set_license_state("trial-expired".into());
+    win.set_trial_days_left(0);
+    let store_expired_dark = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
+    assert_non_uniform_and_valid_png(&store_expired_dark, 940, 560);
+    assert_ne!(
+        store_trial_dark, store_expired_dark,
+        "trial-expired banner render must differ from active trial footer render"
+    );
+    maybe_save_png(
+        dump_dir.as_ref(),
+        "14_store_trial_ended_banner_dark",
+        &store_expired_dark,
+        940,
+        560,
+    );
 }

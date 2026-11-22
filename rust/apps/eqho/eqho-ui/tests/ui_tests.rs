@@ -170,9 +170,23 @@ fn recovery_banner_and_tray_callbacks_fire() {
     let tray = EqhoTray::new().unwrap();
     tray.set_has_recovery(true);
     tray.set_is_dictating(true);
+    tray.set_dictation_allowed(false);
     tray.set_toggle_label("Stop Dictation".into());
     assert!(tray.get_has_recovery());
     assert!(tray.get_is_dictating());
+    assert!(!tray.get_dictation_allowed());
+
+    // Store UI properties default off (direct-download build has no Buy UI).
+    assert!(!win.get_store_build());
+    let bought = Rc::new(RefCell::new(false));
+    let bought_c = Rc::clone(&bought);
+    win.on_buy_clicked(move || {
+        *bought_c.borrow_mut() = true;
+    });
+    win.set_store_build(true);
+    win.set_license_state("trial-expired".into());
+    win.invoke_buy_clicked();
+    assert!(*bought.borrow());
 }
 
 #[test]

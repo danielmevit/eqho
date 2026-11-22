@@ -3,6 +3,8 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
+use crate::license::DemoLicense;
+
 /// Parsed CLI command for `Eqho.exe`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CliCommand {
@@ -28,6 +30,8 @@ pub enum CliCommand {
         open_dashboard: bool,
         tab: Option<String>,
         dll_dir: Option<PathBuf>,
+        demo_dashboard: bool,
+        demo_license: Option<DemoLicense>,
     },
     /// Print CLI usage help and exit 0.
     Help,
@@ -85,6 +89,8 @@ where
     let mut open_dashboard = false;
     let mut tab: Option<String> = None;
     let mut dll_dir: Option<PathBuf> = None;
+    let mut demo_dashboard = false;
+    let mut demo_license: Option<DemoLicense> = None;
     let mut model: Option<String> = None;
     let mut model_dir: Option<PathBuf> = None;
     let mut gpu: Option<bool> = None;
@@ -104,6 +110,20 @@ where
             }
             "--open-dashboard" => {
                 open_dashboard = true;
+            }
+            "--demo-dashboard" => {
+                demo_dashboard = true;
+                open_dashboard = true;
+            }
+            "--demo-license" => {
+                i += 1;
+                let val = raw
+                    .get(i)
+                    .ok_or_else(|| {
+                        "--demo-license requires a state (full|trial|trial-last-day|trial-ended|unknown)"
+                            .to_owned()
+                    })?;
+                demo_license = Some(validate_demo_license(val)?);
             }
             "--dll-dir" => {
                 i += 1;
@@ -165,6 +185,8 @@ where
                     tab = Some(validate_tab(val)?);
                 } else if let Some(val) = arg.strip_prefix("--dll-dir=") {
                     dll_dir = Some(PathBuf::from(val));
+                } else if let Some(val) = arg.strip_prefix("--demo-license=") {
+                    demo_license = Some(validate_demo_license(val)?);
                 } else if let Some(val) = arg.strip_prefix("--model=") {
                     model = Some(val.to_owned());
                 } else if let Some(val) = arg.strip_prefix("--model-dir=") {
@@ -215,6 +237,8 @@ where
         open_dashboard,
         tab,
         dll_dir,
+        demo_dashboard,
+        demo_license,
     })
 }
 
@@ -227,6 +251,14 @@ fn validate_tab(raw: &str) -> Result<String, String> {
             "invalid --tab value '{raw}' (expected one of: general, models, history, settings)"
         ))
     }
+}
+
+fn validate_demo_license(raw: &str) -> Result<DemoLicense, String> {
+    DemoLicense::parse(raw).ok_or_else(|| {
+        format!(
+            "invalid --demo-license value '{raw}' (expected one of: full, trial, trial-last-day, trial-ended, unknown)"
+        )
+    })
 }
 
 fn parse_bool_flag(flag: &str, raw: &str) -> Result<bool, String> {
@@ -308,6 +340,8 @@ mod tests {
                 open_dashboard: true,
                 tab: Some("models".to_owned()),
                 dll_dir: None,
+                demo_dashboard: false,
+                demo_license: None,
             }
         );
         assert!(parse_args(["--tab=bogus"]).is_err());

@@ -6,4 +6,7 @@ pub mod app;
 pub mod assets;
 pub mod cli;
 pub mod headless;
+pub mod license;
 pub mod paths;
+
+pub use license::STORE_FEATURE_ENABLED;

@@ -232,6 +232,7 @@ export component OnboardingView inherits Rectangle {
     in-out property <string> hotkey-display: "Alt + Q";
     in property <int> hotkey-mode-index: 0;
     in-out property <bool> hotkey-ok: true;
+    in property <bool> trial-ended: false;
     in-out property <bool> model-ready: false;
     in-out property <bool> model-loading: false;
     in-out property <bool> is-dictating: false;
@@ -688,7 +689,7 @@ export component OnboardingView inherits Rectangle {
                             horizontal-stretch: 0;
                             text: root.is-dictating ? "Stop listening" : "Start test";
                             kind: root.is-dictating ? ButtonKind.outline : ButtonKind.accent;
-                            enabled: root.model-cached || root.model-ready || root.bg-download-done;
+                            enabled: !root.trial-ended && (root.model-cached || root.model-ready || root.bg-download-done);
                             clicked => { root.toggle-test-dictation(); }
                         }
                     }
