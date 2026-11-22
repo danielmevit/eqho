@@ -2,7 +2,7 @@
 
 use std::ffi::c_void;
 
-use windows::Win32::Foundation::{RPC_E_CHANGED_MODE, S_FALSE, S_OK};
+use windows::Win32::Foundation::{E_POINTER, RPC_E_CHANGED_MODE, S_FALSE, S_OK};
 use windows::Win32::Media::Audio::IMMDevice;
 use windows::Win32::System::Com::{
     CLSCTX, COINIT_APARTMENTTHREADED, COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize,
@@ -76,7 +76,9 @@ pub fn activate_mm_device<T: Interface>(
     // SAFETY: `raw` is valid, `&T::IID` is a valid GUID, `p_activation_params` is null, and `out` is a valid out-pointer.
     let hr = unsafe { activate(raw, &T::IID, clsctx, std::ptr::null(), &mut out) };
     hr.ok()?;
-    // SAFETY: `Activate` succeeded and wrote a non-null `T` COM interface pointer to `out`.
-    unsafe { T::from_raw_borrowed(&out).cloned() }
-        .ok_or_else(|| windows::core::Error::from(windows::Win32::Foundation::E_POINTER))
+    if out.is_null() {
+        return Err(windows::core::Error::from(E_POINTER));
+    }
+    // SAFETY: `Activate` succeeded and wrote a non-null owned `T` COM interface pointer (refcount = 1) to `out`.
+    Ok(unsafe { T::from_raw(out) })
 }

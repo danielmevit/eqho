@@ -9,8 +9,8 @@ pub mod pure;
 
 pub use pure::{
     HotkeyModifiers, ParsedHotkey, classify_mic_consent, downmix_f32_to_mono, downmix_i16_to_mono,
-    from_utf16_nul, has_discrete_gpu, is_software_adapter, linear_resample_mono,
-    parse_hotkey_combo, utf16_with_nul,
+    from_utf16_nul, has_discrete_gpu, is_async_key_down, is_software_adapter, json_escape,
+    linear_resample_mono, parse_hotkey_combo, utf16_with_nul,
 };
 
 #[cfg(windows)]

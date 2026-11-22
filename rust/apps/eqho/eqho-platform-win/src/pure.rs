@@ -273,6 +273,36 @@ pub fn from_utf16_nul(buf: &[u16]) -> String {
     String::from_utf16_lossy(&buf[..end])
 }
 
+/// Returns `true` if a Win32 `GetAsyncKeyState` return value indicates the key is currently down.
+#[must_use]
+pub const fn is_async_key_down(state: i16) -> bool {
+    (state as u16 & 0x8000) != 0
+}
+
+/// Escapes `input` for inclusion inside a JSON string literal (without surrounding quotes).
+#[must_use]
+pub fn json_escape(input: &str) -> String {
+    use std::fmt::Write as _;
+
+    let mut out = String::with_capacity(input.len());
+    for ch in input.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\x08' => out.push_str("\\b"),
+            '\x0c' => out.push_str("\\f"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => {
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -396,5 +426,49 @@ mod tests {
 
         let with_garbage = [b'A' as u16, b'B' as u16, 0, b'C' as u16];
         assert_eq!(from_utf16_nul(&with_garbage), "AB");
+    }
+
+    #[test]
+    fn modifier_and_async_key_checks() {
+        assert!(!is_async_key_down(0));
+        assert!(!is_async_key_down(1)); // low bit = pressed since last call, not currently held
+        assert!(is_async_key_down(i16::MIN)); // 0x8000
+        assert!(is_async_key_down(-32767)); // 0x8001
+
+        let required = HotkeyModifiers {
+            ctrl: true,
+            alt: true,
+            shift: false,
+            win: false,
+        };
+        assert!(!required.satisfied_by(HotkeyModifiers::default()));
+        assert!(!required.satisfied_by(HotkeyModifiers {
+            ctrl: true,
+            ..Default::default()
+        }));
+        assert!(required.satisfied_by(HotkeyModifiers {
+            ctrl: true,
+            alt: true,
+            shift: false,
+            win: false,
+        }));
+        assert!(required.satisfied_by(HotkeyModifiers {
+            ctrl: true,
+            alt: true,
+            shift: true,
+            win: true,
+        }));
+    }
+
+    #[test]
+    fn json_escape_handles_special_chars() {
+        assert_eq!(json_escape("plain text 123"), "plain text 123");
+        assert_eq!(
+            json_escape(r#"NVIDIA "RTX" \Device\0"#),
+            r#"NVIDIA \"RTX\" \\Device\\0"#
+        );
+        assert_eq!(json_escape("line1\nline2\r\t\x08\x0c"), r"line1\nline2\r\t\b\f");
+        assert_eq!(json_escape("\x01\x1f"), r"\u0001\u001f");
+        assert_eq!(json_escape("Mikrofon (Realtek® Audio)"), "Mikrofon (Realtek® Audio)");
     }
 }
