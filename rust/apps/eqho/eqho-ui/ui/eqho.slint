@@ -115,7 +115,9 @@ export component DashboardWindow inherits Window {
     in-out property <int> volume-duck-index: 0;
     in-out property <bool> start-with-windows: false;
     in-out property <bool> overlay-enabled: true;
+    in-out property <bool> overlay-show-text: true;
     in-out property <bool> overlay-show-level: true;
+    in-out property <int> overlay-monitor-index: 0;
     in-out property <int> overlay-position-index: 0;
     in-out property <int> overlay-pill-scale-pct: 80;
     in-out property <int> overlay-see-through-pct: 15;
@@ -132,7 +134,9 @@ export component DashboardWindow inherits Window {
     callback volume-duck-selected(int);
     callback start-with-windows-toggled(bool);
     callback overlay-enabled-toggled(bool);
+    callback overlay-show-text-toggled(bool);
     callback overlay-show-level-toggled(bool);
+    callback overlay-monitor-selected(int);
     callback overlay-position-selected(int);
     callback overlay-pill-scale-changed(int);
     callback overlay-see-through-changed(int);
@@ -355,7 +359,9 @@ export component DashboardWindow inherits Window {
                 volume-duck-index <=> root.volume-duck-index;
                 start-with-windows <=> root.start-with-windows;
                 overlay-enabled <=> root.overlay-enabled;
+                overlay-show-text <=> root.overlay-show-text;
                 overlay-show-level <=> root.overlay-show-level;
+                overlay-monitor-index <=> root.overlay-monitor-index;
                 overlay-position-index <=> root.overlay-position-index;
                 overlay-pill-scale-pct <=> root.overlay-pill-scale-pct;
                 overlay-see-through-pct <=> root.overlay-see-through-pct;
@@ -374,7 +380,9 @@ export component DashboardWindow inherits Window {
                 volume-duck-selected(i) => { root.volume-duck-selected(i); }
                 start-with-windows-toggled(b) => { root.start-with-windows-toggled(b); }
                 overlay-enabled-toggled(b) => { root.overlay-enabled-toggled(b); }
+                overlay-show-text-toggled(b) => { root.overlay-show-text-toggled(b); }
                 overlay-show-level-toggled(b) => { root.overlay-show-level-toggled(b); }
+                overlay-monitor-selected(i) => { root.overlay-monitor-selected(i); }
                 overlay-position-selected(i) => { root.overlay-position-selected(i); }
                 overlay-pill-scale-changed(v) => { root.overlay-pill-scale-changed(v); }
                 overlay-see-through-changed(v) => { root.overlay-see-through-changed(v); }

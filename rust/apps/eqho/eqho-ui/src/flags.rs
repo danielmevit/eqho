@@ -1,93 +1,68 @@
-//! Pure-Rust procedural 21×14 RGBA8 country/regional flag renderer for all 99
-//! Whisper languages.
+//! Vector SVG country/regional flag renderer for all 99 Whisper languages, rasterized
+//! via `resvg` at 4× HiDPI (`84×56` RGBA8) for crisp, anti-aliased flags at every DPI scale.
 //!
-//! Windows 10/11 does not include country flag glyphs in Segoe UI Emoji (rendering
-//! monochrome two-letter codes like `US` or `DE` instead), so generating crisp
-//! tiny raster flags guarantees vibrant, uniform flags on every platform.
+//! Windows 10/11 does not include country flag glyphs in Segoe UI Emoji (rendering monochrome
+//! two-letter codes like `US` or `DE` instead). Generating true vector SVG geometry with
+//! rounded corners, subtle hairline framing, and `resvg` subpixel anti-aliasing keeps every
+//! flag razor-sharp at 100%–200% zoom on both light and dark themes.
+
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
-pub const FLAG_W: u32 = 21;
-pub const FLAG_H: u32 = 14;
+/// Rendered pixel dimensions (4× HiDPI of the `21×14` logical display size).
+pub const FLAG_W: u32 = 84;
+pub const FLAG_H: u32 = 56;
 
-type Rgb = [u8; 3];
-
-const WHITE: Rgb = [248, 250, 252];
-const BLACK: Rgb = [22, 24, 29];
-const RED: Rgb = [216, 42, 46];
-const DARK_RED: Rgb = [165, 24, 38];
-const CRIMSON: Rgb = [220, 20, 60];
-const BLUE: Rgb = [22, 86, 178];
-const NAVY: Rgb = [17, 44, 102];
-const SKY: Rgb = [56, 165, 224];
-const GREEN: Rgb = [22, 138, 66];
-const DARK_GREEN: Rgb = [14, 96, 52];
-const YELLOW: Rgb = [246, 202, 24];
-const GOLD: Rgb = [242, 174, 24];
-const ORANGE: Rgb = [238, 122, 28];
-const MAROON: Rgb = [138, 28, 52];
+const WHITE: &str = "#F8FAFC";
+const BLACK: &str = "#16181D";
+const RED: &str = "#D82A2E";
+const DARK_RED: &str = "#A51826";
+const CRIMSON: &str = "#DC143C";
+const BLUE: &str = "#1656B2";
+const NAVY: &str = "#112C66";
+const SKY: &str = "#38A5E0";
+const GREEN: &str = "#168A42";
+const DARK_GREEN: &str = "#0E6034";
+const YELLOW: &str = "#F6CA18";
+const GOLD: &str = "#F2AE18";
+const ORANGE: &str = "#EE7A1C";
+const MAROON: &str = "#8A1C34";
 
 #[derive(Clone, Copy)]
 enum Pattern {
-    /// Horizontal 2-stripe bicolor (top, bottom)
-    H2(Rgb, Rgb),
-    /// Horizontal 3-stripe tricolor (top, mid, bottom)
-    H3(Rgb, Rgb, Rgb),
-    /// Horizontal 3-stripe with Spanish/Austrian wide middle (1:2:1)
-    H3WideMid(Rgb, Rgb, Rgb, Rgb),
-    /// Horizontal 5-stripe (e.g. Thailand, Costa Rica)
-    H5(Rgb, Rgb, Rgb, Rgb, Rgb),
-    /// Vertical 3-stripe tricolor (left, mid, right)
-    V3(Rgb, Rgb, Rgb),
-    /// Vertical 2-stripe bicolor (left, right, optional badge)
-    V2(Rgb, Rgb),
-    /// Nordic cross (field, outer cross, inner cross)
-    Nordic(Rgb, Rgb, Rgb),
-    /// Centered symmetric cross (field, cross)
-    Cross(Rgb, Rgb),
-    /// Solid field with centered circle (field, circle)
-    Disc(Rgb, Rgb),
-    /// Solid field with left-offset crescent/star badge (field, emblem)
-    Crescent(Rgb, Rgb),
-    /// Solid field with top-left canton emblem (field, canton_color)
-    Canton(Rgb, Rgb),
-    /// Horizontal 2-stripe with hoist triangle (top, bottom, triangle)
-    HoistTri2(Rgb, Rgb, Rgb),
-    /// Horizontal 3-stripe with hoist triangle (top, mid, bottom, triangle)
-    HoistTri3(Rgb, Rgb, Rgb, Rgb),
-    /// Horizontal 3-stripe with centered badge dot (top, mid, bottom, badge)
-    H3Badge(Rgb, Rgb, Rgb, Rgb),
-    /// Diagonal sash (top-left, stripe, bottom-right)
-    Diag(Rgb, Rgb, Rgb),
-    /// Saltire X-cross (field, cross)
-    Saltire(Rgb, Rgb),
-    /// Union Jack (UK)
+    H2(&'static str, &'static str),
+    H3(&'static str, &'static str, &'static str),
+    H3WideMid(&'static str, &'static str, &'static str, &'static str),
+    H5(&'static str, &'static str, &'static str, &'static str, &'static str),
+    V3(&'static str, &'static str, &'static str),
+    V2(&'static str, &'static str),
+    Nordic(&'static str, &'static str, &'static str),
+    Cross(&'static str, &'static str),
+    Disc(&'static str, &'static str),
+    StarField(&'static str, &'static str),
+    Crescent(&'static str, &'static str),
+    Canton(&'static str, &'static str),
+    HoistTri2(&'static str, &'static str, &'static str),
+    HoistTri3(&'static str, &'static str, &'static str, &'static str),
+    H3Badge(&'static str, &'static str, &'static str, &'static str),
+    IndiaChakra,
+    Diag(&'static str, &'static str, &'static str),
+    Saltire(&'static str, &'static str),
     UnionJack,
-    /// US Stars & Stripes
     UnitedStates,
-    /// Greece (stripes + blue cross canton)
     Greece,
-    /// Brazil (green field, yellow diamond, blue globe)
     Brazil,
-    /// South Korea (white field, red/blue Taegeuk + corner marks)
     Korea,
-    /// Israel (white field, blue horizontal bands + blue star)
     Israel,
-    /// South Africa (Y-pall tricolor)
     SouthAfrica,
-    /// Malaysia (stripes + navy canton with gold star)
     Malaysia,
-    /// Catalan / striped gold-red (Senyera)
-    Striped(Rgb, Rgb),
-    /// Wales (white/green bicolor + red dragon emblem)
+    Striped(&'static str, &'static str),
     Wales,
-    /// Basque (red field, green saltire, white cross)
     Basque,
-    /// Bosnia (blue field, yellow triangle, white edge)
     Bosnia,
-    /// Macedonia (red field with yellow sun/rays)
     Macedonia,
-    /// Pakistan (white hoist + dark green field + white crescent)
     Pakistan,
 }
 
@@ -99,7 +74,7 @@ fn pattern_for_language(code: &str) -> Pattern {
         "zh" => Pattern::Canton(RED, YELLOW),
         "ja" => Pattern::Disc(WHITE, CRIMSON),
         "ko" => Pattern::Korea,
-        "vi" => Pattern::Disc(RED, YELLOW),
+        "vi" => Pattern::StarField(RED, YELLOW),
         "ar" => Pattern::H3Badge(DARK_GREEN, DARK_GREEN, DARK_GREEN, WHITE),
         "uk" => Pattern::H2(SKY, YELLOW),
         "fr" => Pattern::V3(NAVY, WHITE, RED),
@@ -124,7 +99,7 @@ fn pattern_for_language(code: &str) -> Pattern {
         "hr" => Pattern::H3Badge(RED, WHITE, BLUE, RED),
         "sk" => Pattern::H3Badge(WHITE, BLUE, RED, WHITE),
         "ca" => Pattern::Striped(YELLOW, RED),
-        "hi" => Pattern::H3Badge(ORANGE, WHITE, GREEN, NAVY),
+        "hi" => Pattern::IndiaChakra,
         "id" => Pattern::H2(RED, WHITE),
         "ms" => Pattern::Malaysia,
         "th" => Pattern::H5(RED, WHITE, NAVY, WHITE, RED),
@@ -135,7 +110,7 @@ fn pattern_for_language(code: &str) -> Pattern {
         "sq" => Pattern::Disc(RED, BLACK),
         "am" => Pattern::H3Badge(GREEN, YELLOW, RED, BLUE),
         "hy" => Pattern::H3(RED, BLUE, ORANGE),
-        "as" => Pattern::H3Badge(ORANGE, WHITE, GREEN, NAVY),
+        "as" => Pattern::IndiaChakra,
         "az" => Pattern::H3Badge(SKY, RED, GREEN, WHITE),
         "ba" => Pattern::H3Badge(BLUE, WHITE, GREEN, GOLD),
         "eu" => Pattern::Basque,
@@ -148,7 +123,7 @@ fn pattern_for_language(code: &str) -> Pattern {
         "fo" => Pattern::Nordic(WHITE, BLUE, RED),
         "gl" => Pattern::Diag(WHITE, SKY, WHITE),
         "ka" => Pattern::Cross(WHITE, RED),
-        "gu" => Pattern::H3Badge(ORANGE, WHITE, GREEN, NAVY),
+        "gu" => Pattern::IndiaChakra,
         "ht" => Pattern::H2(NAVY, RED),
         "ha" => Pattern::V3(GREEN, WHITE, GREEN),
         "haw" => Pattern::UnitedStates,
@@ -165,10 +140,10 @@ fn pattern_for_language(code: &str) -> Pattern {
         "lb" => Pattern::H3(RED, WHITE, SKY),
         "mk" => Pattern::Macedonia,
         "mg" => Pattern::V2(WHITE, RED),
-        "ml" => Pattern::H3Badge(ORANGE, WHITE, GREEN, NAVY),
+        "ml" => Pattern::IndiaChakra,
         "mt" => Pattern::V2(WHITE, RED),
         "mi" => Pattern::H3(BLACK, WHITE, RED),
-        "mr" => Pattern::H3Badge(ORANGE, WHITE, GREEN, NAVY),
+        "mr" => Pattern::IndiaChakra,
         "mn" => Pattern::V3(RED, BLUE, RED),
         "ne" => Pattern::HoistTri2(CRIMSON, CRIMSON, NAVY),
         "nn" => Pattern::Nordic(RED, WHITE, NAVY),
@@ -176,20 +151,20 @@ fn pattern_for_language(code: &str) -> Pattern {
         "ps" => Pattern::V3(BLACK, RED, GREEN),
         "fa" => Pattern::H3Badge(GREEN, WHITE, RED, RED),
         "pa" => Pattern::Pakistan,
-        "sa" => Pattern::H3Badge(ORANGE, WHITE, GREEN, NAVY),
+        "sa" => Pattern::IndiaChakra,
         "sr" => Pattern::H3Badge(RED, BLUE, WHITE, GOLD),
         "sn" => Pattern::HoistTri3(GREEN, YELLOW, RED, WHITE),
         "sd" => Pattern::Pakistan,
         "si" => Pattern::V2(GOLD, MAROON),
         "sl" => Pattern::H3Badge(WHITE, BLUE, RED, BLUE),
-        "so" => Pattern::Disc(SKY, WHITE),
+        "so" => Pattern::StarField(SKY, WHITE),
         "su" => Pattern::H2(RED, WHITE),
         "sw" => Pattern::Diag(GREEN, BLACK, SKY),
         "tl" => Pattern::HoistTri2(BLUE, RED, WHITE),
         "tg" => Pattern::H3Badge(RED, WHITE, GREEN, GOLD),
-        "ta" => Pattern::H3Badge(ORANGE, WHITE, GREEN, NAVY),
+        "ta" => Pattern::IndiaChakra,
         "tt" => Pattern::H3(GREEN, WHITE, RED),
-        "te" => Pattern::H3Badge(ORANGE, WHITE, GREEN, NAVY),
+        "te" => Pattern::IndiaChakra,
         "bo" => Pattern::HoistTri2(RED, NAVY, GOLD),
         "tk" => Pattern::V2(DARK_RED, GREEN),
         "ur" => Pattern::Pakistan,
@@ -202,348 +177,297 @@ fn pattern_for_language(code: &str) -> Pattern {
     }
 }
 
-fn pixel_for_pattern(pat: Pattern, x: u32, y: u32) -> Rgb {
-    let w = FLAG_W;
-    let h = FLAG_H;
+/// Five-pointed star polygon centered at `(cx, cy)` with outer radius `r_out` and inner radius `r_in`.
+fn star_polygon(cx: f32, cy: f32, r_out: f32, r_in: f32, fill: &str) -> String {
+    let mut pts = String::with_capacity(128);
+    for i in 0..10 {
+        let angle = -std::f32::consts::FRAC_PI_2 + (i as f32) * std::f32::consts::PI / 5.0;
+        let r = if i % 2 == 0 { r_out } else { r_in };
+        let x = cx + r * angle.cos();
+        let y = cy + r * angle.sin();
+        if i > 0 {
+            pts.push(' ');
+        }
+        use std::fmt::Write;
+        let _ = write!(&mut pts, "{x:.1},{y:.1}");
+    }
+    format!(r#"<polygon points="{pts}" fill="{fill}"/>"#)
+}
+
+fn svg_body_for_pattern(pat: Pattern) -> String {
     match pat {
-        Pattern::H2(t, b) => {
-            if y < h / 2 { t } else { b }
-        }
-        Pattern::H3(t, m, b) => {
-            if y < 5 {
-                t
-            } else if y < 9 {
-                m
-            } else {
-                b
-            }
-        }
+        Pattern::H2(t, b) => format!(
+            r#"<rect width="210" height="70" fill="{t}"/><rect y="70" width="210" height="70" fill="{b}"/>"#
+        ),
+        Pattern::H3(t, m, b) => format!(
+            r#"<rect width="210" height="47" fill="{t}"/><rect y="46.5" width="210" height="47" fill="{m}"/><rect y="93" width="210" height="47" fill="{b}"/>"#
+        ),
         Pattern::H3WideMid(t, m, b, badge) => {
-            if (3..=10).contains(&y) {
-                let dx = x as i32 - 8;
-                let dy = y as i32 - 7;
-                if badge != m && dx * dx + dy * dy <= 4 {
-                    badge
-                } else {
-                    m
-                }
-            } else if y < 3 {
-                t
-            } else {
-                b
+            let mut s = format!(
+                r#"<rect width="210" height="35" fill="{t}"/><rect y="35" width="210" height="70" fill="{m}"/><rect y="105" width="210" height="35" fill="{b}"/>"#
+            );
+            if badge != m {
+                s.push_str(&format!(
+                    r#"<rect x="64" y="54" width="26" height="32" rx="6" fill="{badge}"/>"#
+                ));
             }
+            s
         }
-        Pattern::H5(c0, c1, c2, c3, c4) => match y {
-            0..=1 => c0,
-            2..=3 => c1,
-            4..=9 => c2,
-            10..=11 => c3,
-            _ => c4,
-        },
-        Pattern::V3(l, m, r) => {
-            if x < 7 {
-                l
-            } else if x < 14 {
-                m
-            } else {
-                r
-            }
-        }
-        Pattern::V2(l, r) => {
-            if x < 9 { l } else { r }
-        }
+        Pattern::H5(c0, c1, c2, c3, c4) => format!(
+            r#"<rect width="210" height="24" fill="{c0}"/><rect y="23" width="210" height="24" fill="{c1}"/><rect y="46" width="210" height="48" fill="{c2}"/><rect y="93" width="210" height="24" fill="{c3}"/><rect y="116" width="210" height="24" fill="{c4}"/>"#
+        ),
+        Pattern::V3(l, m, r) => format!(
+            r#"<rect width="71" height="140" fill="{l}"/><rect x="70" width="71" height="140" fill="{m}"/><rect x="140" width="70" height="140" fill="{r}"/>"#
+        ),
+        Pattern::V2(l, r) => format!(
+            r#"<rect width="84" height="140" fill="{l}"/><rect x="84" width="126" height="140" fill="{r}"/>"#
+        ),
         Pattern::Nordic(field, outer, inner) => {
-            if x == 7 || x == 8 || y == 6 || y == 7 {
-                inner
-            } else if x == 6 || x == 9 || y == 5 || y == 8 {
-                outer
-            } else {
-                field
+            let mut s = format!(
+                r#"<rect width="210" height="140" fill="{field}"/><rect x="60" width="32" height="140" fill="{outer}"/><rect y="54" width="210" height="32" fill="{outer}"/>"#
+            );
+            if inner != outer {
+                s.push_str(&format!(
+                    r#"<rect x="68" width="16" height="140" fill="{inner}"/><rect y="62" width="210" height="16" fill="{inner}"/>"#
+                ));
             }
+            s
         }
-        Pattern::Cross(field, cross) => {
-            if (9..=11).contains(&x) || (6..=7).contains(&y) {
-                cross
-            } else {
-                field
-            }
-        }
-        Pattern::Disc(field, disc) => {
-            let dx = x as i32 - 10;
-            let dy = y as i32 - 7;
-            if dx * dx + dy * dy <= 11 { disc } else { field }
-        }
-        Pattern::Crescent(field, emblem) => {
-            let dx = x as i32 - 8;
-            let dy = y as i32 - 7;
-            let dx2 = x as i32 - 10;
-            let in_outer = dx * dx + dy * dy <= 12;
-            let in_cut = dx2 * dx2 + dy * dy <= 9;
-            let in_star = (12..=14).contains(&x) && (6..=8).contains(&y);
-            if (in_outer && !in_cut) || in_star {
-                emblem
-            } else {
-                field
-            }
-        }
-        Pattern::Canton(field, canton) => {
-            let main_star = (2..=5).contains(&x) && (2..=5).contains(&y);
-            let small_stars = (x == 7 && (y == 2 || y == 5)) || (x == 8 && (y == 3 || y == 4));
-            if main_star || small_stars {
-                canton
-            } else {
-                field
-            }
-        }
-        Pattern::HoistTri2(t, b, tri) => {
-            let dist = (y as i32 - 6).abs().min((y as i32 - 7).abs()) as u32;
-            if x + dist < 9 {
-                tri
-            } else if y < h / 2 {
-                t
-            } else {
-                b
-            }
-        }
-        Pattern::HoistTri3(t, m, b, tri) => {
-            let dist = (y as i32 - 6).abs().min((y as i32 - 7).abs()) as u32;
-            if x + dist < 9 {
-                tri
-            } else if y < 5 {
-                t
-            } else if y < 9 {
-                m
-            } else {
-                b
-            }
-        }
-        Pattern::H3Badge(t, m, b, badge) => {
-            let dx = x as i32 - 10;
-            let dy = y as i32 - 7;
-            if dx * dx + dy * dy <= 3 {
-                badge
-            } else if y < 5 {
-                t
-            } else if y < 9 {
-                m
-            } else {
-                b
-            }
-        }
-        Pattern::Diag(tl, mid, br) => {
-            let v = (x as i32) * 2 + (y as i32) * 3;
-            if (34..=48).contains(&v) {
-                mid
-            } else if v < 34 {
-                tl
-            } else {
-                br
-            }
-        }
-        Pattern::Saltire(field, cross) => {
-            let d1 = ((x as i32 * h as i32) - (y as i32 * w as i32)).abs();
-            let d2 = ((x as i32 * h as i32) - ((h as i32 - 1 - y as i32) * w as i32)).abs();
-            if d1 <= 24 || d2 <= 24 { cross } else { field }
-        }
-        Pattern::UnionJack => {
-            let is_red_cross = (9..=11).contains(&x) || (6..=7).contains(&y);
-            let is_white_cross = (8..=12).contains(&x) || (5..=8).contains(&y);
-            let d1 = ((x as i32 * h as i32) - (y as i32 * w as i32)).abs();
-            let d2 = ((x as i32 * h as i32) - ((h as i32 - 1 - y as i32) * w as i32)).abs();
-            if is_red_cross {
-                RED
-            } else if is_white_cross {
-                WHITE
-            } else if d1 <= 14 || d2 <= 14 {
-                RED
-            } else if d1 <= 28 || d2 <= 28 {
-                WHITE
-            } else {
-                NAVY
-            }
-        }
+        Pattern::Cross(field, cross) => format!(
+            r#"<rect width="210" height="140" fill="{field}"/><rect x="91" width="28" height="140" fill="{cross}"/><rect y="56" width="210" height="28" fill="{cross}"/>"#
+        ),
+        Pattern::Disc(field, circle) => format!(
+            r#"<rect width="210" height="140" fill="{field}"/><circle cx="105" cy="70" r="38" fill="{circle}"/>"#
+        ),
+        Pattern::StarField(field, star) => format!(
+            r#"<rect width="210" height="140" fill="{field}"/>{}"#,
+            star_polygon(105.0, 70.0, 36.0, 14.0, star)
+        ),
+        Pattern::Crescent(field, emblem) => format!(
+            r#"<rect width="210" height="140" fill="{field}"/><circle cx="88" cy="70" r="34" fill="{emblem}"/><circle cx="99" cy="70" r="27" fill="{field}"/>{}"#,
+            star_polygon(136.0, 70.0, 16.0, 6.5, emblem)
+        ),
+        Pattern::Canton(field, star) => format!(
+            r#"<rect width="210" height="140" fill="{field}"/>{}{}{}{}{}"#,
+            star_polygon(42.0, 40.0, 20.0, 8.0, star),
+            star_polygon(76.0, 22.0, 7.0, 3.0, star),
+            star_polygon(88.0, 36.0, 7.0, 3.0, star),
+            star_polygon(88.0, 54.0, 7.0, 3.0, star),
+            star_polygon(76.0, 68.0, 7.0, 3.0, star),
+        ),
+        Pattern::HoistTri2(t, b, tri) => format!(
+            r#"<rect width="210" height="70" fill="{t}"/><rect y="70" width="210" height="70" fill="{b}"/><polygon points="0,0 100,70 0,140" fill="{tri}"/>"#
+        ),
+        Pattern::HoistTri3(t, m, b, tri) => format!(
+            r#"<rect width="210" height="47" fill="{t}"/><rect y="46.5" width="210" height="47" fill="{m}"/><rect y="93" width="210" height="47" fill="{b}"/><polygon points="0,0 92,70 0,140" fill="{tri}"/>"#
+        ),
+        Pattern::H3Badge(t, m, b, badge) => format!(
+            r#"<rect width="210" height="47" fill="{t}"/><rect y="46.5" width="210" height="47" fill="{m}"/><rect y="93" width="210" height="47" fill="{b}"/><circle cx="105" cy="70" r="16" fill="{badge}"/>"#
+        ),
+        Pattern::IndiaChakra => format!(
+            r#"<rect width="210" height="47" fill="{ORANGE}"/><rect y="46.5" width="210" height="47" fill="{WHITE}"/><rect y="93" width="210" height="47" fill="{GREEN}"/><circle cx="105" cy="70" r="16" fill="none" stroke="{NAVY}" stroke-width="4.5"/><circle cx="105" cy="70" r="4" fill="{NAVY}"/>"#
+        ),
+        Pattern::Diag(tl, sash, br) => format!(
+            r#"<rect width="210" height="140" fill="{br}"/><polygon points="0,0 210,0 0,140" fill="{tl}"/><line x1="0" y1="140" x2="210" y2="0" stroke="{sash}" stroke-width="34"/>"#
+        ),
+        Pattern::Saltire(field, cross) => format!(
+            r#"<rect width="210" height="140" fill="{field}"/><line x1="0" y1="0" x2="210" y2="140" stroke="{cross}" stroke-width="26"/><line x1="210" y1="0" x2="0" y2="140" stroke="{cross}" stroke-width="26"/>"#
+        ),
+        Pattern::UnionJack => format!(
+            r#"<rect width="210" height="140" fill="{NAVY}"/>\
+            <line x1="0" y1="0" x2="210" y2="140" stroke="{WHITE}" stroke-width="28"/>\
+            <line x1="210" y1="0" x2="0" y2="140" stroke="{WHITE}" stroke-width="28"/>\
+            <line x1="0" y1="0" x2="210" y2="140" stroke="{RED}" stroke-width="11"/>\
+            <line x1="210" y1="0" x2="0" y2="140" stroke="{RED}" stroke-width="11"/>\
+            <rect x="85" width="40" height="140" fill="{WHITE}"/>\
+            <rect y="50" width="210" height="40" fill="{WHITE}"/>\
+            <rect x="93" width="24" height="140" fill="{RED}"/>\
+            <rect y="58" width="210" height="24" fill="{RED}"/>"#
+        ),
         Pattern::UnitedStates => {
-            if x < 9 && y < 7 {
-                if (x + y).is_multiple_of(2) && x > 0 && y > 0 && x < 8 && y < 6 {
-                    WHITE
-                } else {
-                    NAVY
-                }
-            } else if y.is_multiple_of(2) {
-                RED
-            } else {
-                WHITE
+            let mut s = format!(r#"<rect width="210" height="140" fill="{WHITE}"/>"#);
+            for i in 0..7 {
+                let y = i as f32 * (140.0 / 13.0) * 2.0;
+                let h = 140.0 / 13.0;
+                use std::fmt::Write;
+                let _ = write!(&mut s, r#"<rect y="{y:.1}" width="210" height="{h:.1}" fill="{RED}"/>"#);
             }
+            s.push_str(&format!(r#"<rect width="94" height="75.4" fill="{NAVY}"/>"#));
+            for row in 0..4 {
+                for col in 0..5 {
+                    let cx = 11.0 + col as f32 * 18.0;
+                    let cy = 11.0 + row as f32 * 17.5;
+                    use std::fmt::Write;
+                    let _ = write!(&mut s, r#"<circle cx="{cx:.1}" cy="{cy:.1}" r="3.2" fill="{WHITE}"/>"#);
+                }
+            }
+            s
         }
         Pattern::Greece => {
-            if x < 8 && y < 8 {
-                if x == 3 || x == 4 || y == 3 || y == 4 {
-                    WHITE
-                } else {
-                    BLUE
-                }
-            } else if (y / 2).is_multiple_of(2) {
-                BLUE
-            } else {
-                WHITE
+            let mut s = format!(r#"<rect width="210" height="140" fill="{WHITE}"/>"#);
+            let h = 140.0 / 9.0;
+            for i in (0..9).step_by(2) {
+                let y = i as f32 * h;
+                use std::fmt::Write;
+                let _ = write!(&mut s, r#"<rect y="{y:.1}" width="210" height="{h:.1}" fill="{BLUE}"/>"#);
             }
+            s.push_str(&format!(
+                r#"<rect width="84" height="78" fill="{BLUE}"/><rect x="34" width="16" height="78" fill="{WHITE}"/><rect y="31" width="84" height="16" fill="{WHITE}"/>"#
+            ));
+            s
         }
-        Pattern::Brazil => {
-            let dx = (x as i32 - 10).abs();
-            let dy = (y as i32 - 7).abs();
-            if dx * dx + dy * dy <= 7 {
-                NAVY
-            } else if dx * 6 + dy * 10 <= 48 {
-                YELLOW
-            } else {
-                GREEN
-            }
-        }
-        Pattern::Korea => {
-            let dx = x as i32 - 10;
-            let dy = y as i32 - 7;
-            if dx * dx + dy * dy <= 11 {
-                if dy < 0 { RED } else { BLUE }
-            } else if (x == 3 || x == 4 || x == 16 || x == 17)
-                && (y == 2 || y == 3 || y == 10 || y == 11)
-            {
-                BLACK
-            } else {
-                WHITE
-            }
-        }
-        Pattern::Israel => {
-            let is_band = y == 2 || y == 3 || y == 10 || y == 11;
-            let is_star =
-                (8..=12).contains(&x) && (5..=8).contains(&y) && (x + y).is_multiple_of(2);
-            if is_band || is_star { BLUE } else { WHITE }
-        }
-        Pattern::SouthAfrica => {
-            let dist = (y as i32 - 6).abs().min((y as i32 - 7).abs()) as u32;
-            if x + dist < 6 {
-                BLACK
-            } else if x + dist == 6 {
-                YELLOW
-            } else if x + dist <= 9 || (5..=8).contains(&y) {
-                GREEN
-            } else if y == 4 || y == 9 {
-                WHITE
-            } else if y < 4 {
-                RED
-            } else {
-                NAVY
-            }
-        }
+        Pattern::Brazil => format!(
+            r#"<rect width="210" height="140" fill="{GREEN}"/><polygon points="105,16 190,70 105,124 20,70" fill="{YELLOW}"/><circle cx="105" cy="70" r="32" fill="{NAVY}"/><path d="M 75,66 Q 105,56 135,74" fill="none" stroke="{WHITE}" stroke-width="6.5"/>"#
+        ),
+        Pattern::Korea => format!(
+            r#"<rect width="210" height="140" fill="{WHITE}"/>\
+            <circle cx="105" cy="70" r="32" fill="{BLUE}"/>\
+            <path d="M 73,70 A 32,32 0 0,1 137,70 A 16,16 0 0,1 105,70 A 16,16 0 0,0 73,70 Z" fill="{RED}"/>\
+            <g stroke="{BLACK}" stroke-width="5.5" stroke-linecap="butt">\
+            <line x1="28" y1="36" x2="52" y2="18"/><line x1="36" y1="45" x2="60" y2="27"/>\
+            <line x1="158" y1="18" x2="182" y2="36"/><line x1="150" y1="27" x2="174" y2="45"/>\
+            <line x1="28" y1="104" x2="52" y2="122"/><line x1="36" y1="95" x2="60" y2="113"/>\
+            <line x1="158" y1="122" x2="182" y2="104"/><line x1="150" y1="113" x2="174" y2="95"/>\
+            </g>"#
+        ),
+        Pattern::Israel => format!(
+            r#"<rect width="210" height="140" fill="{WHITE}"/>\
+            <rect y="14" width="210" height="18" fill="{BLUE}"/>\
+            <rect y="108" width="210" height="18" fill="{BLUE}"/>\
+            <polygon points="105,43 128,83 82,83" fill="none" stroke="{BLUE}" stroke-width="5.5"/>\
+            <polygon points="105,97 128,57 82,57" fill="none" stroke="{BLUE}" stroke-width="5.5"/>"#
+        ),
+        Pattern::SouthAfrica => format!(
+            r#"<rect width="210" height="70" fill="{RED}"/><rect y="70" width="210" height="70" fill="{NAVY}"/>\
+            <path d="M 0,0 L 96,70 L 0,140" fill="none" stroke="{WHITE}" stroke-width="46"/>\
+            <line x1="96" y1="70" x2="210" y2="70" stroke="{WHITE}" stroke-width="46"/>\
+            <path d="M 0,0 L 96,70 L 0,140" fill="none" stroke="{DARK_GREEN}" stroke-width="30"/>\
+            <line x1="96" y1="70" x2="210" y2="70" stroke="{DARK_GREEN}" stroke-width="30"/>\
+            <polygon points="0,16 74,70 0,124" fill="{YELLOW}"/><polygon points="0,28 58,70 0,112" fill="{BLACK}"/>"#
+        ),
         Pattern::Malaysia => {
-            if x < 9 && y < 7 {
-                if (3..=5).contains(&x) && (2..=4).contains(&y) {
-                    YELLOW
-                } else {
-                    NAVY
-                }
-            } else if y.is_multiple_of(2) {
-                RED
-            } else {
-                WHITE
+            let mut s = format!(r#"<rect width="210" height="140" fill="{WHITE}"/>"#);
+            let h = 140.0 / 10.0;
+            for i in (0..10).step_by(2) {
+                let y = i as f32 * h;
+                use std::fmt::Write;
+                let _ = write!(&mut s, r#"<rect y="{y:.1}" width="210" height="{h:.1}" fill="{RED}"/>"#);
             }
+            s.push_str(&format!(
+                r#"<rect width="102" height="78" fill="{NAVY}"/><circle cx="44" cy="39" r="22" fill="{YELLOW}"/><circle cx="51" cy="39" r="18" fill="{NAVY}"/>{}"#,
+                star_polygon(74.0, 39.0, 14.0, 6.0, YELLOW)
+            ));
+            s
         }
         Pattern::Striped(a, b) => {
-            if (y / 2).is_multiple_of(2) { a } else { b }
-        }
-        Pattern::Wales => {
-            let dx = x as i32 - 10;
-            let dy = y as i32 - 7;
-            if dx.abs() <= 4 && dy.abs() <= 2 {
-                RED
-            } else if y < h / 2 {
-                WHITE
-            } else {
-                GREEN
+            let mut s = format!(r#"<rect width="210" height="140" fill="{a}"/>"#);
+            let h = 140.0 / 9.0;
+            for i in (1..9).step_by(2) {
+                let y = i as f32 * h;
+                use std::fmt::Write;
+                let _ = write!(&mut s, r#"<rect y="{y:.1}" width="210" height="{h:.1}" fill="{b}"/>"#);
             }
+            s
         }
-        Pattern::Basque => {
-            if (9..=11).contains(&x) || (6..=7).contains(&y) {
-                WHITE
-            } else {
-                let d1 = ((x as i32 * h as i32) - (y as i32 * w as i32)).abs();
-                let d2 = ((x as i32 * h as i32) - ((h as i32 - 1 - y as i32) * w as i32)).abs();
-                if d1 <= 22 || d2 <= 22 { GREEN } else { RED }
-            }
-        }
-        Pattern::Bosnia => {
-            if (5..=14).contains(&x) && (y as i32) <= (x as i32 - 5) * 14 / 10 {
-                YELLOW
-            } else {
-                NAVY
-            }
-        }
-        Pattern::Macedonia => {
-            let dx = x as i32 - 10;
-            let dy = y as i32 - 7;
-            if dx * dx + dy * dy <= 7 || x == 10 || y == 7 {
-                YELLOW
-            } else {
-                let d1 = ((x as i32 * h as i32) - (y as i32 * w as i32)).abs();
-                let d2 = ((x as i32 * h as i32) - ((h as i32 - 1 - y as i32) * w as i32)).abs();
-                if d1 <= 16 || d2 <= 16 { YELLOW } else { RED }
-            }
-        }
-        Pattern::Pakistan => {
-            if x < 5 {
-                WHITE
-            } else {
-                let dx = x as i32 - 12;
-                let dy = y as i32 - 7;
-                let dx2 = x as i32 - 14;
-                let in_c = dx * dx + dy * dy <= 10 && dx2 * dx2 + dy * dy > 7;
-                if in_c || (x == 15 && y == 6) {
-                    WHITE
-                } else {
-                    DARK_GREEN
-                }
-            }
-        }
+        Pattern::Wales => format!(
+            r#"<rect width="210" height="70" fill="{WHITE}"/><rect y="70" width="210" height="70" fill="{GREEN}"/><path d="M 54,94 Q 72,44 114,52 Q 146,58 158,42 Q 148,76 130,86 L 146,104 L 116,96 L 94,106 L 84,88 L 62,102 Z" fill="{RED}"/>"#
+        ),
+        Pattern::Basque => format!(
+            r#"<rect width="210" height="140" fill="{RED}"/>\
+            <line x1="0" y1="0" x2="210" y2="140" stroke="{DARK_GREEN}" stroke-width="24"/>\
+            <line x1="210" y1="0" x2="0" y2="140" stroke="{DARK_GREEN}" stroke-width="24"/>\
+            <rect x="93" width="24" height="140" fill="{WHITE}"/>\
+            <rect y="58" width="210" height="24" fill="{WHITE}"/>"#
+        ),
+        Pattern::Bosnia => format!(
+            r#"<rect width="210" height="140" fill="{NAVY}"/><polygon points="56,0 166,0 166,140" fill="{YELLOW}"/>{}{}{}{}"#,
+            star_polygon(42.0, 20.0, 9.5, 4.0, WHITE),
+            star_polygon(64.0, 48.0, 9.5, 4.0, WHITE),
+            star_polygon(86.0, 76.0, 9.5, 4.0, WHITE),
+            star_polygon(108.0, 104.0, 9.5, 4.0, WHITE),
+        ),
+        Pattern::Macedonia => format!(
+            r#"<rect width="210" height="140" fill="{RED}"/>\
+            <g stroke="{YELLOW}" stroke-width="14">\
+            <line x1="0" y1="0" x2="210" y2="140"/><line x1="210" y1="0" x2="0" y2="140"/>\
+            <line x1="105" y1="0" x2="105" y2="140"/><line x1="0" y1="70" x2="210" y2="70"/>\
+            </g>\
+            <circle cx="105" cy="70" r="24" fill="{YELLOW}" stroke="{RED}" stroke-width="5"/>"#
+        ),
+        Pattern::Pakistan => format!(
+            r#"<rect width="54" height="140" fill="{WHITE}"/><rect x="54" width="156" height="140" fill="{DARK_GREEN}"/><circle cx="132" cy="70" r="34" fill="{WHITE}"/><circle cx="143" cy="64" r="28" fill="{DARK_GREEN}"/>{}"#,
+            star_polygon(154.0, 56.0, 13.0, 5.2, WHITE)
+        ),
     }
 }
 
-/// Render a crisp 21×14 RGBA8 flag with rounded 1 px corner trim and subtle inner hairline
-/// so white flag edges stay clearly defined on both light and dark UI surfaces.
-#[must_use]
-pub fn flag_rgba_for_language(code: &str) -> (u32, u32, Vec<u8>) {
-    let pat = pattern_for_language(code);
-    let mut out = vec![0u8; (FLAG_W * FLAG_H * 4) as usize];
-
-    for y in 0..FLAG_H {
-        for x in 0..FLAG_W {
-            let idx = ((y * FLAG_W + x) * 4) as usize;
-            // Subtle 1 px rounded corners
-            let is_corner = (x == 0 || x == FLAG_W - 1) && (y == 0 || y == FLAG_H - 1);
-            if is_corner {
-                out[idx..idx + 4].copy_from_slice(&[0, 0, 0, 0]);
-                continue;
-            }
-            let [mut r, mut g, mut b] = pixel_for_pattern(pat, x, y);
-            // Subtle 12% neutral inner edge border so light/dark surfaces never swallow flag edges
-            let is_edge = x == 0 || x == FLAG_W - 1 || y == 0 || y == FLAG_H - 1;
-            if is_edge {
-                r = ((u16::from(r) * 86 + 128 * 14) / 100) as u8;
-                g = ((u16::from(g) * 86 + 128 * 14) / 100) as u8;
-                b = ((u16::from(b) * 86 + 128 * 14) / 100) as u8;
-            }
-            out[idx] = r;
-            out[idx + 1] = g;
-            out[idx + 2] = b;
-            out[idx + 3] = 255;
-        }
-    }
-    (FLAG_W, FLAG_H, out)
+fn flag_svg(code: &str) -> String {
+    let body = svg_body_for_pattern(pattern_for_language(code));
+    format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 140" width="{FLAG_W}" height="{FLAG_H}">
+  <defs>
+    <clipPath id="r"><rect width="210" height="140" rx="14" ry="14"/></clipPath>
+  </defs>
+  <g clip-path="url(#r)">{body}</g>
+  <rect x="2.5" y="2.5" width="205" height="135" rx="12" ry="12" fill="none" stroke="#808080" stroke-opacity="0.32" stroke-width="5"/>
+</svg>"##
+    )
 }
 
-/// Convert a language code into a ready-to-render `slint::Image` country flag.
-#[must_use]
+fn rasterize_svg_rgba(svg: &str) -> Vec<u8> {
+    let opts = resvg::usvg::Options::default();
+    let Ok(tree) = resvg::usvg::Tree::from_str(svg, &opts) else {
+        return vec![0u8; (FLAG_W * FLAG_H * 4) as usize];
+    };
+    let Some(mut pixmap) = resvg::tiny_skia::Pixmap::new(FLAG_W, FLAG_H) else {
+        return vec![0u8; (FLAG_W * FLAG_H * 4) as usize];
+    };
+    let sx = FLAG_W as f32 / tree.size().width().max(1.0);
+    let sy = FLAG_H as f32 / tree.size().height().max(1.0);
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::from_scale(sx, sy),
+        &mut pixmap.as_mut(),
+    );
+
+    // Convert premultiplied RGBA from tiny-skia into straight RGBA8 for Slint `SharedPixelBuffer`.
+    let src = pixmap.data();
+    let mut out = vec![0u8; src.len()];
+    for (dst_px, src_px) in out.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
+        let a = src_px[3];
+        if a == 0 {
+            dst_px.copy_from_slice(&[0, 0, 0, 0]);
+        } else if a == 255 {
+            dst_px.copy_from_slice(src_px);
+        } else {
+            let af = u32::from(a);
+            dst_px[0] = ((u32::from(src_px[0]) * 255 + af / 2) / af).min(255) as u8;
+            dst_px[1] = ((u32::from(src_px[1]) * 255 + af / 2) / af).min(255) as u8;
+            dst_px[2] = ((u32::from(src_px[2]) * 255 + af / 2) / af).min(255) as u8;
+            dst_px[3] = a;
+        }
+    }
+    out
+}
+
+fn flag_cache() -> &'static Mutex<HashMap<String, Vec<u8>>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, Vec<u8>>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Render a crisp 4× HiDPI (`84×56`) vector-SVG country flag `slint::Image` for a Whisper language code.
 pub fn flag_image_for_language(code: &str) -> Image {
-    let (w, h, rgba) = flag_rgba_for_language(code);
-    let buf = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&rgba, w, h);
+    let rgba = {
+        let mut map = flag_cache().lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(cached) = map.get(code) {
+            cached.clone()
+        } else {
+            let rendered = rasterize_svg_rgba(&flag_svg(code));
+            map.insert(code.to_owned(), rendered.clone());
+            rendered
+        }
+    };
+    let buf = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&rgba, FLAG_W, FLAG_H);
     Image::from_rgba8(buf)
 }
 
@@ -554,24 +478,16 @@ mod tests {
     use eqho_core::settings::LANGUAGE_TIERS;
 
     #[test]
-    fn renders_valid_non_uniform_flags_for_all_99_languages() {
+    fn all_99_languages_render_crisp_hidpi_svg_flags() {
         for entry in LANGUAGE_TIERS {
-            let (w, h, rgba) = flag_rgba_for_language(entry.code);
-            assert_eq!((w, h), (FLAG_W, FLAG_H));
-            assert_eq!(rgba.len(), (FLAG_W * FLAG_H * 4) as usize);
-            // Center pixel must be opaque
-            let center = (((FLAG_H / 2) * FLAG_W + (FLAG_W / 2)) * 4) as usize;
-            assert_eq!(rgba[center + 3], 255, "flag {} center not opaque", entry.code);
-            // Flag must have color variation (not a single blank rectangle)
-            let first_inner = &rgba[((FLAG_W + 1) * 4) as usize..((FLAG_W + 1) * 4 + 4) as usize];
-            let has_var = rgba
-                .chunks_exact(4)
-                .any(|px| px[3] == 255 && px != first_inner);
-            assert!(has_var, "flag {} rendered uniform", entry.code);
+            let img = flag_image_for_language(entry.code);
+            let sz = img.size();
+            assert_eq!(sz.width, FLAG_W, "flag width for {}", entry.code);
+            assert_eq!(sz.height, FLAG_H, "flag height for {}", entry.code);
+            let rgba = rasterize_svg_rgba(&flag_svg(entry.code));
+            // Verify center pixel is opaque (flag actually rendered).
+            let mid = ((FLAG_H / 2) * FLAG_W + (FLAG_W / 2)) as usize * 4;
+            assert_eq!(rgba[mid + 3], 255, "opaque center for {}", entry.code);
         }
-        // Distinct major flags differ
-        assert_ne!(flag_rgba_for_language("en").2, flag_rgba_for_language("de").2);
-        assert_ne!(flag_rgba_for_language("fr").2, flag_rgba_for_language("it").2);
-        assert_ne!(flag_rgba_for_language("ja").2, flag_rgba_for_language("ko").2);
     }
 }

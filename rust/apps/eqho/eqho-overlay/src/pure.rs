@@ -31,6 +31,8 @@ pub const FRAME_MS: u64 = 33;
 #[derive(Debug, Clone, PartialEq)]
 pub struct OverlayConfig {
     pub enabled: bool,
+    pub show_text: bool,
+    pub monitor: String,
     pub position: String,
     pub pill_scale: f64,
     pub pill_opacity: f64,
@@ -44,6 +46,8 @@ impl Default for OverlayConfig {
     fn default() -> Self {
         Self {
             enabled: true,
+            show_text: true,
+            monitor: "active".to_owned(),
             position: "bottom-center".to_owned(),
             pill_scale: 0.8,
             pill_opacity: 0.85,
@@ -74,8 +78,15 @@ impl OverlayConfig {
         } else {
             0.85
         };
+        let monitor = match settings.overlay_monitor.trim().to_ascii_lowercase().as_str() {
+            "cursor" => "cursor".to_owned(),
+            "primary" => "primary".to_owned(),
+            _ => "active".to_owned(),
+        };
         Self {
             enabled: settings.overlay_enabled,
+            show_text: settings.overlay_show_text,
+            monitor,
             position: settings.overlay_position.clone(),
             pill_scale,
             pill_opacity,
@@ -540,5 +551,32 @@ mod tests {
         assert_eq!(cfg.font_size, 28);
         assert!(!cfg.show_level);
         assert!(!cfg.dark_theme);
+        assert_eq!(cfg.monitor, "active");
+        assert!(cfg.show_text);
+    }
+
+    #[test]
+    fn multi_monitor_negative_work_area_places_pill_and_panel_inside_active_display() {
+        let left_monitor = WorkArea {
+            left: -3840,
+            top: 0,
+            right: -1920,
+            bottom: 1152,
+        };
+        let (px, py) = calc_pill_position("bottom-center", 224, 41, left_monitor);
+        assert!(px >= left_monitor.left && px + 224 <= left_monitor.right);
+        assert_eq!(px, -3840 + (1920 - 224) / 2);
+        assert_eq!(py, 1152 - 41 - MARGIN);
+
+        let pill = OverlayRect {
+            x: px,
+            y: py,
+            width: 224,
+            height: 41,
+        };
+        let panel = calc_panel_rect("bottom-center", pill, 420, 48, left_monitor);
+        assert!(panel.x >= left_monitor.left + 8);
+        assert!(panel.x + 420 <= left_monitor.right - 8);
+        assert_eq!(panel.y, py - GAP - 48);
     }
 }

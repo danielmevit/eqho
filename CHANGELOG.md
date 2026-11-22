@@ -17,6 +17,12 @@ Date format: `YYYY-MM-DD`.
   - **24-bit and 32-bit integer WASAPI PCM capture & chime playback** (for studio USB audio interfaces/mics alongside 16-bit PCM and 32-bit float).
   - **Full `0.8.11` settings & history parity:** UTF-8 BOM + lenient type coercion across all 31 settings keys, local-timezone History timestamps and day filters, Custom Vocabulary / Replacements / Paste Rules placeholders with inline save confirmation, one-time slow-model hint (`>6 s`), active model in window title, and DPI work-area window clamping above the taskbar.
   - **Microsoft Store 15-day free trial build (`--features store`):** compile-time feature gate keeping direct downloads 100% license-free; WinRT `StoreContext` MTA license queries, atomic offline `license.json` cache, 4-hour + OS-resume re-checks, flaky-Store guard, `IInitializeWithWindow` purchase dialog, quiet dictation suspension on `TrialExpired`, calm trial footer / expired banner UI with `"Made with Slint"` attribution and zero GitHub links, and isolated `--demo-dashboard --demo-license=<state>` testing.
+- **Reliability, speed & visual polish:**
+  - Fixed dropped dictations on stop (`worker_loop` drain no longer aborts when queued chunks cross `PARTIAL_INTERVAL_S`, and residual `<500 ms` `BlockAssembler` audio flushes cleanly on stop).
+  - Switched live turbo/distilled decoding to fast greedy (`beam_size = 1`, `best_of = 1`), cutting RTX 3060 latency from ~8 s down to ~250 ms; added chunked 16-char Unicode typing with `VK_RETURN`, 20 ms focus/modifier settle delay, 200 ms clipboard restore delay, and `AttachThreadInput` Win32 focus restoration.
+  - Added multi-monitor pill following (`Follow active window` / `Follow mouse cursor` / `Primary monitor`), `Live Text Preview` toggle, and immediate panel hide/clear so stale text never flashes above the pill.
+  - Replaced pixelated 21×14 flag bitmaps with 4× HiDPI (`84×56`) vector SVG flags rendered via `resvg`.
+  - Replaced full-fill semantic warning/status boxes with neutral cards + accent-only rails/dots, and codified the rule in `docs/ai/BRAND_STYLE_GUIDE.md`.
 - **Hardened reliability:** resolved re-entrant settings-lock deadlock on background model download completion; paused global hotkey during hotkey capture; swallowed matched `WH_KEYBOARD_LL` hotkey down/up events (`LLKHF_ALTDOWN`); short-circuited self-window focus restore for Step 6 testing.
 
 ## [0.8.11] - 2026-10-17

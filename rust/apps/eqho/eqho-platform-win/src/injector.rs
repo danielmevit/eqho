@@ -1,13 +1,20 @@
 //! Win32 keyboard input simulation via `GetAsyncKeyState` and `SendInput` (`EQ-MODS`).
 
 use std::mem::size_of;
+use std::thread;
+use std::time::Duration;
 
 use eqho_platform::{InputInjector, ModifierKey, PlatformError};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT,
     KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, SendInput, VIRTUAL_KEY, VK_BACK, VK_CONTROL, VK_LCONTROL,
-    VK_LMENU, VK_LSHIFT, VK_LWIN, VK_RCONTROL, VK_RMENU, VK_RSHIFT, VK_RWIN, VK_V,
+    VK_LMENU, VK_LSHIFT, VK_LWIN, VK_RCONTROL, VK_RETURN, VK_RMENU, VK_RSHIFT, VK_RWIN, VK_V,
 };
+
+/// Maximum characters per `SendInput` batch in Unicode typing mode so Electron/IDE message queues
+/// never overflow or drop characters on long dictations.
+const TYPING_BATCH_CHARS: usize = 16;
+const TYPING_BATCH_DELAY: Duration = Duration::from_millis(2);
 
 /// Windows keyboard input injector.
 #[derive(Debug, Default, Clone, Copy)]
@@ -116,12 +123,34 @@ impl InputInjector for WinInputInjector {
         if text.is_empty() {
             return Ok(());
         }
-        let mut inputs = Vec::with_capacity(text.len() * 2);
-        for unit in text.encode_utf16() {
-            inputs.push(unicode_input(unit, KEYEVENTF_UNICODE));
-            inputs.push(unicode_input(unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP));
+        let mut batch = Vec::with_capacity(TYPING_BATCH_CHARS * 2);
+        let mut chars_in_batch = 0usize;
+        for ch in text.chars() {
+            if ch == '\r' {
+                continue;
+            }
+            if ch == '\n' {
+                batch.push(vk_input(VK_RETURN, KEYBD_EVENT_FLAGS(0)));
+                batch.push(vk_input(VK_RETURN, KEYEVENTF_KEYUP));
+            } else {
+                let mut utf16 = [0u16; 2];
+                for &mut unit in ch.encode_utf16(&mut utf16) {
+                    batch.push(unicode_input(unit, KEYEVENTF_UNICODE));
+                    batch.push(unicode_input(unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP));
+                }
+            }
+            chars_in_batch += 1;
+            if chars_in_batch >= TYPING_BATCH_CHARS {
+                send_inputs(&batch)?;
+                batch.clear();
+                chars_in_batch = 0;
+                thread::sleep(TYPING_BATCH_DELAY);
+            }
         }
-        send_inputs(&inputs)
+        if !batch.is_empty() {
+            send_inputs(&batch)?;
+        }
+        Ok(())
     }
 
     fn send_backspaces(&self, count: usize) -> Result<(), PlatformError> {

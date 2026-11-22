@@ -520,6 +520,10 @@ impl WhisperEngine {
         full_params.suppress_nst = true;
         if beam_size > 1 {
             full_params.beam_search.beam_size = beam_size.min(i32::MAX as u32) as c_int;
+        } else {
+            // `whisper_full_default_params_by_ref(Greedy)` defaults `best_of` to 5, which multiplies
+            // decode latency on distilled/turbo models without improving live dictation accuracy.
+            full_params.greedy.best_of = 1;
         }
 
         // SAFETY: `self.ctx` is valid, `lang_cstr` and `prompt_cstr` outlive this call,

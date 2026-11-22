@@ -26,6 +26,8 @@ pub const OVERLAY_POSITIONS: [&str; 6] = [
     "bottom-right",
 ];
 
+pub const OVERLAY_MONITORS: [&str; 3] = ["active", "cursor", "primary"];
+
 pub const VOLUME_DUCK_OPTIONS: [(&str, Option<f32>); 5] = [
     ("off", None),
     ("50%", Some(0.5)),
@@ -195,6 +197,8 @@ pub struct Settings {
     pub audio_device: Option<i32>,
     pub auto_paste: bool,
     pub overlay_enabled: bool,
+    pub overlay_show_text: bool,
+    pub overlay_monitor: String,
     pub overlay_opacity: f64,
     pub overlay_font_size: i32,
     pub overlay_position: String,
@@ -231,6 +235,8 @@ impl Default for Settings {
             audio_device: None,
             auto_paste: true,
             overlay_enabled: true,
+            overlay_show_text: true,
+            overlay_monitor: "active".to_owned(),
             overlay_opacity: 0.85,
             overlay_font_size: 14,
             overlay_position: "bottom-center".to_owned(),
@@ -332,6 +338,15 @@ impl Settings {
         }
         if let Some(v) = obj.get("overlay_enabled") {
             s.overlay_enabled = coerce_bool(v, s.overlay_enabled);
+        }
+        if let Some(v) = obj.get("overlay_show_text") {
+            s.overlay_show_text = coerce_bool(v, s.overlay_show_text);
+        }
+        if let Some(v) = obj.get("overlay_monitor") {
+            let m = coerce_string(v, &s.overlay_monitor).trim().to_ascii_lowercase();
+            if OVERLAY_MONITORS.contains(&m.as_str()) {
+                s.overlay_monitor = m;
+            }
         }
         if let Some(v) = obj.get("overlay_opacity") {
             s.overlay_opacity = coerce_f64(v, s.overlay_opacity);

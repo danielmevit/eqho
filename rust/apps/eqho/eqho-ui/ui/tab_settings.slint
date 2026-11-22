@@ -20,7 +20,9 @@ export component SettingsTab inherits Rectangle {
     in-out property <bool> start-with-windows: false;
 
     in-out property <bool> overlay-enabled: true;
+    in-out property <bool> overlay-show-text: true;
     in-out property <bool> overlay-show-level: true;
+    in-out property <int> overlay-monitor-index: 0;
     in-out property <int> overlay-position-index: 0;
     in-out property <int> overlay-pill-scale-pct: 80;
     in-out property <int> overlay-see-through-pct: 15;
@@ -40,7 +42,9 @@ export component SettingsTab inherits Rectangle {
     callback volume-duck-selected(int);
     callback start-with-windows-toggled(bool);
     callback overlay-enabled-toggled(bool);
+    callback overlay-show-text-toggled(bool);
     callback overlay-show-level-toggled(bool);
+    callback overlay-monitor-selected(int);
     callback overlay-position-selected(int);
     callback overlay-pill-scale-changed(int);
     callback overlay-see-through-changed(int);
@@ -201,11 +205,20 @@ export component SettingsTab inherits Rectangle {
                         title: "OVERLAY";
                         CompactRow {
                             label: "Show Overlay";
-                            help: "Display transcription text while dictating";
+                            help: "Show floating pill while dictating";
                             Toggle {
                                 checked <=> root.overlay-enabled;
                                 accessible-name: "Show Overlay";
                                 toggled(v) => { root.overlay-enabled-toggled(v); }
+                            }
+                        }
+                        CompactRow {
+                            label: "Live Text Preview";
+                            help: "Show live words above the pill while speaking";
+                            Toggle {
+                                checked <=> root.overlay-show-text;
+                                accessible-name: "Live Text Preview";
+                                toggled(v) => { root.overlay-show-text-toggled(v); }
                             }
                         }
                         CompactRow {
@@ -215,6 +228,17 @@ export component SettingsTab inherits Rectangle {
                                 checked <=> root.overlay-show-level;
                                 accessible-name: "Audio Level Indicator";
                                 toggled(v) => { root.overlay-show-level-toggled(v); }
+                            }
+                        }
+                        StackedSettingRow {
+                            label: "Display Monitor";
+                            help: "Which screen shows the dictation pill";
+                            Dropdown {
+                                model: ["Follow active window", "Follow mouse cursor", "Primary monitor"];
+                                current-index <=> root.overlay-monitor-index;
+                                window-height: root.window-height;
+                                accessible-name: "Display Monitor";
+                                selected(i) => { root.overlay-monitor-selected(i); }
                             }
                         }
                         StackedSettingRow {
@@ -373,11 +397,20 @@ export component SettingsTab inherits Rectangle {
                     title: "OVERLAY";
                     CompactRow {
                         label: "Show Overlay";
-                        help: "Display transcription text while dictating";
+                        help: "Show floating pill while dictating";
                         Toggle {
                             checked <=> root.overlay-enabled;
                             accessible-name: "Show Overlay";
                             toggled(v) => { root.overlay-enabled-toggled(v); }
+                        }
+                    }
+                    CompactRow {
+                        label: "Live Text Preview";
+                        help: "Show live words above the pill while speaking";
+                        Toggle {
+                            checked <=> root.overlay-show-text;
+                            accessible-name: "Live Text Preview";
+                            toggled(v) => { root.overlay-show-text-toggled(v); }
                         }
                     }
                     CompactRow {
@@ -387,6 +420,17 @@ export component SettingsTab inherits Rectangle {
                             checked <=> root.overlay-show-level;
                             accessible-name: "Audio Level Indicator";
                             toggled(v) => { root.overlay-show-level-toggled(v); }
+                        }
+                    }
+                    StackedSettingRow {
+                        label: "Display Monitor";
+                        help: "Which screen shows the dictation pill";
+                        Dropdown {
+                            model: ["Follow active window", "Follow mouse cursor", "Primary monitor"];
+                            current-index <=> root.overlay-monitor-index;
+                            window-height: root.window-height;
+                            accessible-name: "Display Monitor";
+                            selected(i) => { root.overlay-monitor-selected(i); }
                         }
                     }
                     StackedSettingRow {

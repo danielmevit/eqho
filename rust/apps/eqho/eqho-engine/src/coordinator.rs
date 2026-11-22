@@ -33,7 +33,8 @@ use crate::traits::{EqhoPlatform, SpeechBackend, UiEventSink};
 use crate::wav_source::TestAudioStream;
 
 const AUDIO_QUEUE_CAPACITY: usize = 64;
-const CLIPBOARD_RESTORE_DELAY: Duration = Duration::from_millis(120);
+const CLIPBOARD_RESTORE_DELAY: Duration = Duration::from_millis(200);
+const INJECT_SETTLE_DELAY: Duration = Duration::from_millis(20);
 const DISCRETE_GPU_MIN_VRAM_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_BACKSPACE_CHARS: usize = 400;
 const SLOW_MODEL_HINT_SECS: f64 = 6.0;
@@ -90,6 +91,8 @@ struct CoordinatorInner {
     speech: Mutex<Box<dyn SpeechBackend>>,
     ui: Arc<dyn UiEventSink>,
     stream: Mutex<Option<Box<dyn AudioStreamHandle>>>,
+    assembler: Mutex<Option<Arc<Mutex<BlockAssembler>>>>,
+    audio_tx: Mutex<Option<mpsc::SyncSender<Vec<f32>>>>,
     stop_flag: Mutex<Option<Arc<AtomicBool>>>,
     worker_handle: Mutex<Option<JoinHandle<()>>>,
     finish_handle: Mutex<Option<JoinHandle<()>>>,
@@ -139,6 +142,8 @@ impl DictationCoordinator {
                 speech: Mutex::new(speech),
                 ui,
                 stream: Mutex::new(None),
+                assembler: Mutex::new(None),
+                audio_tx: Mutex::new(None),
                 stop_flag: Mutex::new(None),
                 worker_handle: Mutex::new(None),
                 finish_handle: Mutex::new(None),
@@ -307,7 +312,7 @@ impl CoordinatorInner {
             .map(PathBuf::from);
 
         let stream_res: Result<Box<dyn AudioStreamHandle>, String> = if let Some(path) = test_audio_path {
-            let cb = make_callback(tx, assembler, Arc::clone(&self.ui));
+            let cb = make_callback(tx.clone(), Arc::clone(&assembler), Arc::clone(&self.ui));
             TestAudioStream::start(&path, cb)
                 .map(|s| Box::new(s) as Box<dyn AudioStreamHandle>)
                 .map_err(|e| e.to_string())
@@ -318,7 +323,8 @@ impl CoordinatorInner {
                 Ok(s) => Ok(s),
                 Err(first_err) => {
                     if dev_idx.is_some() {
-                        let cb_fallback = make_callback(tx, assembler, Arc::clone(&self.ui));
+                        let cb_fallback =
+                            make_callback(tx.clone(), Arc::clone(&assembler), Arc::clone(&self.ui));
                         match self.platform.start_capture(None, cb_fallback) {
                             Ok(s) => {
                                 self.ui.notify("Selected mic unavailable, using default microphone.");
@@ -343,6 +349,8 @@ impl CoordinatorInner {
         };
 
         *lock_unpoisoned(&self.stream) = Some(stream);
+        *lock_unpoisoned(&self.assembler) = Some(assembler);
+        *lock_unpoisoned(&self.audio_tx) = Some(tx);
 
         // Chime BEFORE ducking (fixes race where mute swallows the start chime).
         if settings.sound_feedback {
@@ -387,6 +395,18 @@ impl CoordinatorInner {
 
             // Immediately close mic stream so the OS mic indicator turns off right away.
             *lock_unpoisoned(&self.stream) = None;
+
+            // Flush any residual < 500 ms audio buffered in BlockAssembler so the final word is
+            // never clipped off when the user presses the hotkey right after finishing a sentence.
+            if let (Some(asm), Some(tx)) = (
+                lock_unpoisoned(&self.assembler).take(),
+                lock_unpoisoned(&self.audio_tx).take(),
+            ) {
+                let tail = lock_unpoisoned(&asm).flush();
+                if !tail.is_empty() {
+                    let _ = tx.try_send(tail);
+                }
+            }
 
             if let Some(flag) = lock_unpoisoned(&self.stop_flag).take() {
                 flag.store(true, Ordering::Release);
@@ -482,7 +502,7 @@ impl CoordinatorInner {
 
         loop {
             if !self.is_session_current(sid) {
-                return;
+                break;
             }
             if stop_flag.load(Ordering::Acquire) {
                 break;
@@ -490,8 +510,20 @@ impl CoordinatorInner {
 
             match rx.recv_timeout(Duration::from_millis(50)) {
                 Ok(chunk) => {
-                    if !self.process_chunk(sid, &chunk, &mut segmenter, &settings) {
-                        return;
+                    // Drain any already-queued chunks before firing slow partial inference so
+                    // live partials never fall behind real-time speech.
+                    let mut batch = vec![chunk];
+                    while let Ok(next) = rx.try_recv() {
+                        batch.push(next);
+                    }
+                    let last_idx = batch.len().saturating_sub(1);
+                    for (idx, item) in batch.into_iter().enumerate() {
+                        let skip_partials =
+                            idx < last_idx || stop_flag.load(Ordering::Acquire);
+                        if !self.process_chunk(sid, &item, &mut segmenter, &settings, skip_partials)
+                        {
+                            return;
+                        }
                     }
                 }
                 Err(RecvTimeoutError::Timeout) => continue,
@@ -499,12 +531,13 @@ impl CoordinatorInner {
             }
         }
 
-        // Drain any remaining chunks queued before stream close.
+        // Drain any remaining chunks queued before stream close. Never run partial inference
+        // while draining (and never let a skipped partial abort the flush!).
         while let Ok(chunk) = rx.try_recv() {
             if !self.is_session_current_for_flush(sid) {
                 return;
             }
-            if !self.process_chunk(sid, &chunk, &mut segmenter, &settings) {
+            if !self.process_chunk(sid, &chunk, &mut segmenter, &settings, true) {
                 return;
             }
         }
@@ -513,7 +546,7 @@ impl CoordinatorInner {
             return;
         }
         if let Some(ev) = segmenter.flush_on_stop() {
-            let _ = self.handle_vad_event(sid, ev, &settings);
+            let _ = self.handle_vad_event(sid, ev, &settings, true);
         }
     }
 
@@ -523,6 +556,7 @@ impl CoordinatorInner {
         chunk: &[f32],
         segmenter: &mut PhraseSegmenter,
         settings: &Settings,
+        skip_partials: bool,
     ) -> bool {
         let rms = compute_rms(chunk);
         if self.is_session_current(sid) {
@@ -530,14 +564,20 @@ impl CoordinatorInner {
         }
 
         for ev in segmenter.push_chunk(chunk) {
-            if !self.handle_vad_event(sid, ev, settings) {
+            if !self.handle_vad_event(sid, ev, settings, skip_partials) {
                 return false;
             }
         }
         true
     }
 
-    fn handle_vad_event(self: &Arc<Self>, sid: u64, ev: VadEvent, settings: &Settings) -> bool {
+    fn handle_vad_event(
+        self: &Arc<Self>,
+        sid: u64,
+        ev: VadEvent,
+        settings: &Settings,
+        skip_partials: bool,
+    ) -> bool {
         let lang = if is_english_only_model(&settings.model_size) {
             "en"
         } else {
@@ -546,8 +586,10 @@ impl CoordinatorInner {
 
         match ev {
             VadEvent::PartialReady(audio) => {
-                if !self.is_session_current(sid) {
-                    return false;
+                // Skip partials cleanly during stop/drain or batch catch-up without aborting
+                // the phrase drain & final `flush_on_stop()`.
+                if skip_partials || !self.is_session_current(sid) {
+                    return true;
                 }
                 let (allowed, is_gpu) = {
                     let backend = lock_unpoisoned(&self.speech);
@@ -606,15 +648,21 @@ impl CoordinatorInner {
                     return true;
                 }
 
+                // Distilled and turbo Whisper models (`distil-*`, `*turbo*`) are tuned for greedy
+                // decoding (`beam_size = 1`, ~250 ms on RTX 3060 vs 5–8 s with 5-beam search).
+                // Keep live dictation snappy across all models by capping beam search.
                 let beam_size = {
-                    let backend = lock_unpoisoned(&self.speech);
-                    let gpu = backend
-                        .info()
-                        .is_some_and(|i| i.device == "cuda" || i.device == "gpu" || i.device == "vulkan");
-                    let fast = lock_unpoisoned(&self.state)
-                        .last_infer_s
-                        .is_some_and(|s| s <= PARTIAL_MAX_INFER_S);
-                    if gpu || fast { 5 } else { 1 }
+                    let is_fast_arch = settings.model_size.starts_with("distil")
+                        || settings.model_size.contains("turbo");
+                    if is_fast_arch {
+                        1
+                    } else {
+                        let backend = lock_unpoisoned(&self.speech);
+                        let gpu = backend.info().is_some_and(|i| {
+                            i.device == "cuda" || i.device == "gpu" || i.device == "vulkan"
+                        });
+                        if gpu { 2 } else { 1 }
+                    }
                 };
 
                 let t0 = Instant::now();
@@ -745,6 +793,8 @@ impl CoordinatorInner {
         }
 
         *lock_unpoisoned(&self.stream) = None;
+        *lock_unpoisoned(&self.assembler) = None;
+        *lock_unpoisoned(&self.audio_tx) = None;
         if let Some(flag) = lock_unpoisoned(&self.stop_flag).take() {
             flag.store(true, Ordering::Release);
         }
@@ -805,20 +855,29 @@ impl CoordinatorInner {
         }
 
         // Modifier hygiene (EQ-MODS).
+        let mut need_settle = false;
         if let Some(held) = self.platform.held_modifiers()
             && !held.is_empty()
         {
             let _ = self.platform.release_modifiers(&held);
+            need_settle = true;
         }
 
         // Verified focus restore.
         if target_hwnd.is_valid() {
+            let already_focused = self.platform.get_foreground_window() == target_hwnd;
             let restored = self.platform.restore_foreground_window(target_hwnd);
             if !restored && self.platform.get_foreground_window() != target_hwnd {
                 self.ui.on_recovery_available(Some(&full_text));
                 self.ui.notify(FOCUS_RESTORE_FAILED_TEXT);
                 return;
             }
+            if !already_focused {
+                need_settle = true;
+            }
+        }
+        if need_settle {
+            thread::sleep(INJECT_SETTLE_DELAY);
         }
 
         let inject_res = if use_clipboard {
@@ -1898,6 +1957,73 @@ mod tests {
 
         let persisted = Settings::load_from_path(&settings_path);
         assert_eq!(persisted.slow_hint_shown_for, "distil-large-v3");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stop_while_queued_chunks_trigger_partial_never_drops_dictation() {
+        // Regression test: previously, when chunks crossing `PARTIAL_INTERVAL_S` (1.0 s) were
+        // drained after `deactivate()` set `running = false`, `PartialReady` returned `false`
+        // and exited `worker_loop` BEFORE `segmenter.flush_on_stop()`, silently discarding the
+        // entire spoken utterance!
+        let dir = temp_dir("drain_partial");
+        let platform = Arc::new(FakePlatform::new(WindowHandle(42)));
+        let ui = Arc::new(RecordingUi::new());
+        // Supply 2 responses so whichever scheduling order occurs (0 partials + 1 final on drain,
+        // or 1 partial + 1 final), the final flush always receives its transcript.
+        let mut speech = FakeSpeech::with_responses(vec![
+            Ok(vec![seg("never drop this text")]),
+            Ok(vec![seg("never drop this text")]),
+        ]);
+        speech.delay = Duration::from_millis(10);
+        let hist = TranscriptHistory::with_default_cap(dir.join("history.jsonl"));
+        let coord = DictationCoordinator::new(
+            Settings::default(),
+            dir.join("settings.json"),
+            hist,
+            platform.clone(),
+            Box::new(speech),
+            ui.clone(),
+        );
+
+        // Direct invariant check: `PartialReady` while `running == false` / `skip_partials == true`
+        // MUST return `true` so the drain loop never aborts before `flush_on_stop()`.
+        assert!(coord.inner.handle_vad_event(
+            999,
+            VadEvent::PartialReady(vec![0.05; 16_000]),
+            &Settings::default(),
+            true,
+        ));
+        assert!(coord.inner.handle_vad_event(
+            999,
+            VadEvent::PartialReady(vec![0.05; 16_000]),
+            &Settings::default(),
+            false,
+        ));
+
+        coord.activate();
+        // Wait for capture stream to be installed, then push 3.5 chunks (1.75 s, including
+        // 250 ms residual in BlockAssembler!) and stop immediately with zero trailing silence.
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while lock_unpoisoned(&platform.audio_cb).is_none() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(5));
+        }
+        let speech_block = vec![0.06_f32; WAVE_BLOCK_SAMPLES];
+        for _ in 0..35 {
+            platform.push_block(&speech_block);
+        }
+        coord.deactivate();
+        wait_until_not_finishing(&coord);
+
+        let actions = platform.actions();
+        assert!(
+            actions.contains(&Action::SetClipboard {
+                text: "Never drop this text".to_owned(),
+                private: true,
+            }),
+            "utterance must NOT be dropped during drain: actions={actions:?}"
+        );
+        assert!(actions.contains(&Action::SendPaste));
         let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -278,39 +278,66 @@ export component StoreTrialFooter inherits Rectangle {
 }
 
 // Recovery banner shown when an automatic paste failed.
+// Follows docs/ai/BRAND_STYLE_GUIDE.md: neutral surface with a restrained 3px left accent rail
+// and status dot — never flood containers with solid/muted yellow, green, or red fills.
 export component RecoveryBanner inherits Rectangle {
     in property <string> text;
     callback copy-clicked();
     callback dismiss-clicked();
 
-    background: Theme.warning-muted;
+    background: Theme.surface;
     border-radius: Theme.radius-md;
     border-width: 1px;
-    border-color: Theme.warning;
+    border-color: Theme.border;
+    clip: true;
     min-height: lay.preferred-height;
 
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 3px;
+        height: parent.height;
+        background: Theme.warning;
+    }
+
     lay := HorizontalLayout {
-        padding-left: Theme.space-12;
+        padding-left: Theme.space-16;
         padding-right: Theme.space-12;
-        padding-top: Theme.space-8;
-        padding-bottom: Theme.space-8;
-        spacing: Theme.space-8;
+        padding-top: Theme.space-10;
+        padding-bottom: Theme.space-10;
+        spacing: Theme.space-12;
         alignment: space-between;
 
         VerticalLayout {
             horizontal-stretch: 1;
             alignment: center;
-            spacing: 2px;
-            Text {
-                text: "Dictation couldn't be pasted automatically";
-                font-size: Theme.font-size-sm;
-                font-weight: 600;
-                color: Theme.warning;
+            spacing: 4px;
+
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 7px;
+                        height: 7px;
+                        border-radius: 3.5px;
+                        background: Theme.warning;
+                    }
+                }
+                Text {
+                    text: "Dictation couldn't be pasted automatically";
+                    font-size: Theme.font-size-sm;
+                    font-weight: 600;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                }
             }
+
             Text {
                 text: root.text;
-                font-size: Theme.font-size-base;
-                color: Theme.text;
+                font-size: Theme.font-size-sm;
+                color: Theme.text-muted;
                 wrap: word-wrap;
             }
         }
@@ -708,6 +735,7 @@ export component FlagDropdown inherits Rectangle {
                     width: 21px;
                     height: 14px;
                     image-fit: contain;
+                    image-rendering: smooth;
                     accessible-role: none;
                 }
             }
@@ -839,6 +867,7 @@ export component FlagDropdown inherits Rectangle {
                                         width: 21px;
                                         height: 14px;
                                         image-fit: contain;
+                                        image-rendering: smooth;
                                         accessible-role: none;
                                     }
                                 }

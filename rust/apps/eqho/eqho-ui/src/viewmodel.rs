@@ -6,8 +6,8 @@ use eqho_core::history::{TranscriptEntry, format_timestamp_local, local_day_ordi
 use eqho_core::modelpick::{HardwareClass, recommend_model};
 use eqho_core::modelstore::{MODELS, model_info};
 use eqho_core::settings::{
-    LANGUAGE_TIERS, OVERLAY_POSITIONS, Settings, VOLUME_DUCK_OPTIONS, is_english_only_model,
-    supported_language_name,
+    LANGUAGE_TIERS, OVERLAY_MONITORS, OVERLAY_POSITIONS, Settings, VOLUME_DUCK_OPTIONS,
+    is_english_only_model, supported_language_name,
 };
 use slint::{ComponentHandle, ModelRc, VecModel};
 
@@ -429,6 +429,20 @@ pub fn overlay_position_key(idx: i32) -> &'static str {
         .unwrap_or("bottom-center")
 }
 
+pub fn overlay_monitor_index(monitor: &str) -> i32 {
+    OVERLAY_MONITORS
+        .iter()
+        .position(|&m| m == monitor)
+        .unwrap_or(0) as i32
+}
+
+pub fn overlay_monitor_key(idx: i32) -> &'static str {
+    OVERLAY_MONITORS
+        .get(idx.max(0) as usize)
+        .copied()
+        .unwrap_or("active")
+}
+
 pub fn volume_duck_index(opt: &str) -> i32 {
     VOLUME_DUCK_OPTIONS
         .iter()
@@ -545,7 +559,9 @@ pub fn apply_settings_to_window(
     window.set_start_with_windows(settings.start_with_windows);
 
     window.set_overlay_enabled(settings.overlay_enabled);
+    window.set_overlay_show_text(settings.overlay_show_text);
     window.set_overlay_show_level(settings.overlay_show_level);
+    window.set_overlay_monitor_index(overlay_monitor_index(&settings.overlay_monitor));
     window.set_overlay_position_index(overlay_position_index(&settings.overlay_position));
     window.set_overlay_pill_scale_pct((settings.overlay_pill_scale * 100.0).round() as i32);
     window.set_overlay_see_through_pct(((1.0 - settings.overlay_opacity) * 100.0).round() as i32);

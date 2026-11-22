@@ -13,19 +13,22 @@ use windows::Win32::Graphics::Gdi::{
     CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, CreateCompatibleDC, CreateDIBSection, CreateFontW,
     CreateSolidBrush, DEFAULT_CHARSET, DEFAULT_PITCH, DIB_RGB_COLORS, DT_CALCRECT, DT_LEFT,
     DT_NOPREFIX, DT_WORDBREAK, DeleteDC, DeleteObject, DrawTextW, EndPaint, FF_SWISS, FillRect,
-    GetDC, GetDeviceCaps, HBITMAP, HDC, HFONT, HGDIOBJ, InvalidateRect, LOGPIXELSY,
-    OUT_DEFAULT_PRECIS, PAINTSTRUCT, ReleaseDC, SelectObject, SetBkMode, SetTextColor, TRANSPARENT,
+    GetDC, GetDeviceCaps, GetMonitorInfoW, HBITMAP, HDC, HFONT, HGDIOBJ, InvalidateRect,
+    LOGPIXELSY, MONITOR_DEFAULTTOPRIMARY, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
+    MonitorFromWindow, OUT_DEFAULT_PRECIS, PAINTSTRUCT, ReleaseDC, SelectObject, SetBkMode,
+    SetTextColor, TRANSPARENT,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW,
-    GetSystemMetrics, HMENU, HWND_TOPMOST, KillTimer, LWA_ALPHA, MSG, PostMessageW,
-    PostQuitMessage, RegisterClassExW, SM_CXSCREEN, SM_CYSCREEN, SPI_GETWORKAREA, SW_HIDE,
-    SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_SHOWWINDOW, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
-    SetLayeredWindowAttributes, SetTimer, SetWindowPos, ShowWindow, SystemParametersInfoW,
-    TranslateMessage, ULW_ALPHA, UnregisterClassW, UpdateLayeredWindow, WM_APP, WM_DESTROY,
-    WM_ERASEBKGND, WM_PAINT, WM_TIMER, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetCursorPos,
+    GetForegroundWindow, GetMessageW, GetSystemMetrics, HMENU, HWND_TOPMOST, KillTimer, LWA_ALPHA,
+    MSG, PostMessageW, PostQuitMessage, RegisterClassExW, SM_CXSCREEN, SM_CYSCREEN,
+    SPI_GETWORKAREA, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+    SWP_SHOWWINDOW, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SetLayeredWindowAttributes, SetTimer,
+    SetWindowPos, ShowWindow, SystemParametersInfoW, TranslateMessage, ULW_ALPHA,
+    UnregisterClassW, UpdateLayeredWindow, WM_APP, WM_DESTROY, WM_ERASEBKGND, WM_PAINT, WM_TIMER,
+    WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    WS_EX_TRANSPARENT, WS_POPUP,
 };
 use windows::core::PCWSTR;
 
@@ -211,6 +214,7 @@ struct OverlayState {
     timer_running: bool,
     panel_shown: bool,
     panel_text: String,
+    active_work_area: WorkArea,
     pill_rect: OverlayRect,
     last_tick: Instant,
     font: Option<HFONT>,
@@ -302,10 +306,24 @@ impl OverlayState {
         should_quit
     }
 
+    fn hide_panel_now(&mut self) {
+        if self.panel_shown {
+            // SAFETY: Hiding panel window without activating.
+            unsafe {
+                let _ = ShowWindow(self.panel_hwnd, SW_HIDE);
+            }
+            self.panel_shown = false;
+        }
+        self.panel_text.clear();
+    }
+
     fn cmd_show(&mut self, text: String) {
         if !self.config.enabled {
             return;
         }
+        // Clear any leftover panel text from a previous session BEFORE rendering the pill frame
+        // so stale words can never flash above the pill on reactivation.
+        self.hide_panel_now();
         self.update_pill_geometry();
         if !self.visible {
             self.visible = true;
@@ -313,9 +331,19 @@ impl OverlayState {
             self.animator.fade_target = 1.0;
             self.last_tick = Instant::now();
             self.render_pill_frame(0.0);
-            // SAFETY: `SW_SHOWNOACTIVATE` displays the pill without stealing focus.
+            // SAFETY: `SW_SHOWNOACTIVATE` + `HWND_TOPMOST` surfaces the pill on the active monitor
+            // without stealing keyboard focus from the user's target app.
             unsafe {
                 let _ = ShowWindow(self.pill_hwnd, SW_SHOWNOACTIVATE);
+                let _ = SetWindowPos(
+                    self.pill_hwnd,
+                    Some(HWND_TOPMOST),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
+                );
             }
             self.start_timer();
         } else {
@@ -330,15 +358,8 @@ impl OverlayState {
         if !self.visible {
             return;
         }
-        if !pure::should_show_panel(&text) {
-            if self.panel_shown {
-                // SAFETY: Hiding panel window without activating.
-                unsafe {
-                    let _ = ShowWindow(self.panel_hwnd, SW_HIDE);
-                }
-                self.panel_shown = false;
-            }
-            self.panel_text.clear();
+        if !self.config.show_text || !pure::should_show_panel(&text) {
+            self.hide_panel_now();
             return;
         }
 
@@ -354,6 +375,9 @@ impl OverlayState {
             self.cmd_hide();
             return;
         }
+        if !self.config.show_text {
+            self.hide_panel_now();
+        }
         if self.visible {
             self.update_pill_geometry();
             self.render_pill_frame(0.0);
@@ -364,6 +388,8 @@ impl OverlayState {
     }
 
     fn cmd_hide(&mut self) {
+        // Always hide and clear the text panel immediately so it never lingers or reappears.
+        self.hide_panel_now();
         if !self.visible {
             return;
         }
@@ -379,7 +405,8 @@ impl OverlayState {
 
     fn update_pill_geometry(&mut self) {
         let (pw, ph) = eqho_core::pillfx::pill_size(self.config.pill_scale);
-        let area = query_work_area();
+        let area = query_work_area_for_mode(&self.config.monitor, self.pill_hwnd, self.panel_hwnd);
+        self.active_work_area = area;
         let (px, py) = pure::calc_pill_position(&self.config.position, pw, ph, area);
         self.pill_rect = OverlayRect {
             x: px,
@@ -431,7 +458,7 @@ impl OverlayState {
             .max(self.pill_rect.width as i32)
             .min(PANEL_MAX_W as i32) as u32;
         let panel_h = ((calc.bottom - calc.top) + 2 * PANEL_PADDING_Y).max(1) as u32;
-        let area = query_work_area();
+        let area = self.active_work_area;
         let rect = pure::calc_panel_rect(
             &self.config.position,
             self.pill_rect,
@@ -632,7 +659,76 @@ impl Drop for OverlayState {
     }
 }
 
-fn query_work_area() -> WorkArea {
+fn monitor_work_area(hmon: windows::Win32::Graphics::Gdi::HMONITOR) -> Option<WorkArea> {
+    if hmon.is_invalid() {
+        return None;
+    }
+    let mut info = MONITORINFO {
+        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: `info.cbSize` is initialized and `hmon` is a valid monitor handle.
+    if unsafe { GetMonitorInfoW(hmon, &mut info) }.as_bool() {
+        let r = info.rcWork;
+        if r.right > r.left && r.bottom > r.top {
+            return Some(WorkArea {
+                left: r.left,
+                top: r.top,
+                right: r.right,
+                bottom: r.bottom,
+            });
+        }
+    }
+    None
+}
+
+fn query_work_area_for_mode(mode: &str, own_pill: HWND, own_panel: HWND) -> WorkArea {
+    match mode {
+        "primary" => {
+            // SAFETY: Queries the primary display handle.
+            let hmon = unsafe { MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY) };
+            if let Some(area) = monitor_work_area(hmon) {
+                return area;
+            }
+        }
+        "cursor" => {
+            let mut pt = POINT::default();
+            // SAFETY: Writes current cursor screen coordinates into `pt`.
+            if unsafe { GetCursorPos(&mut pt) }.is_ok() {
+                // SAFETY: Resolves the monitor nearest to the cursor position.
+                let hmon = unsafe { MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST) };
+                if let Some(area) = monitor_work_area(hmon) {
+                    return area;
+                }
+            }
+        }
+        _ => {
+            // Default ("active"): follow the foreground working window's monitor, falling back to
+            // the monitor under the mouse cursor if no external window has focus.
+            // SAFETY: Queries the current foreground window handle.
+            let fg = unsafe { GetForegroundWindow() };
+            if !fg.is_invalid() && !fg.0.is_null() && fg != own_pill && fg != own_panel {
+                // SAFETY: Resolves the monitor hosting `fg`.
+                let hmon = unsafe { MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST) };
+                if let Some(area) = monitor_work_area(hmon) {
+                    return area;
+                }
+            }
+            let mut pt = POINT::default();
+            // SAFETY: Fallback to cursor monitor.
+            if unsafe { GetCursorPos(&mut pt) }.is_ok() {
+                // SAFETY: Resolves the monitor nearest to the cursor position.
+                let hmon = unsafe { MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST) };
+                if let Some(area) = monitor_work_area(hmon) {
+                    return area;
+                }
+            }
+        }
+    }
+    query_primary_work_area()
+}
+
+fn query_primary_work_area() -> WorkArea {
     let mut rect = RECT::default();
     // SAFETY: `SPI_GETWORKAREA` writes the primary monitor work area into `rect`.
     let ok = unsafe {
@@ -702,7 +798,7 @@ fn run_overlay_thread(
     }
 
     let (pw, ph) = eqho_core::pillfx::pill_size(config.pill_scale);
-    let area = query_work_area();
+    let area = query_primary_work_area();
     let (px, py) = pure::calc_pill_position(&config.position, pw, ph, area);
 
     let pill_ex =
@@ -784,6 +880,7 @@ fn run_overlay_thread(
         timer_running: false,
         panel_shown: false,
         panel_text: String::new(),
+        active_work_area: area,
         pill_rect: OverlayRect {
             x: px,
             y: py,

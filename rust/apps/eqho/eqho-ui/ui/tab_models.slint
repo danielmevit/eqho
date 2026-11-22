@@ -35,27 +35,46 @@ component ModelCard inherits Rectangle {
                 vertical-alignment: center;
             }
 
-            // Status pill
+            // Status pill (accent-only semantic color: neutral surface + tiny dot + crisp text)
             Rectangle {
                 horizontal-stretch: 0;
                 height: 22px;
-                min-width: status-lbl.preferred-width + 14px;
+                min-width: status-row.preferred-width + 16px;
                 border-radius: 11px;
-                background: root.item.has_error ? Theme.warning-muted
-                    : root.item.is_downloading ? Theme.accent-muted
-                    : root.item.is_cached ? Theme.success-muted
-                    : Theme.surface-tertiary;
+                background: Theme.surface-tertiary;
+                border-width: 1px;
+                border-color: root.item.has_error ? Theme.error
+                    : root.item.is_downloading ? Theme.accent
+                    : Theme.border-subtle;
 
-                status-lbl := Text {
-                    text: root.item.status_text;
-                    font-size: Theme.font-size-xs;
-                    font-weight: 600;
-                    color: root.item.has_error ? Theme.error
-                        : root.item.is_downloading ? Theme.accent-text
-                        : root.item.is_cached ? Theme.success
-                        : Theme.text-muted;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                status-row := HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 5px;
+                    alignment: center;
+
+                    if root.item.has_error || root.item.is_downloading || root.item.is_cached : VerticalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: 6px;
+                            height: 6px;
+                            border-radius: 3px;
+                            background: root.item.has_error ? Theme.error
+                                : root.item.is_downloading ? Theme.accent
+                                : Theme.success;
+                        }
+                    }
+
+                    Text {
+                        text: root.item.status_text;
+                        font-size: Theme.font-size-xs;
+                        font-weight: 600;
+                        color: root.item.has_error ? Theme.error
+                            : root.item.is_downloading ? Theme.accent-text
+                            : root.item.is_cached ? Theme.text
+                            : Theme.text-muted;
+                        vertical-alignment: center;
+                    }
                 }
             }
         }

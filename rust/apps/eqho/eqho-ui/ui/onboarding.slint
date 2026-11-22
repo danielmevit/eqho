@@ -19,9 +19,7 @@ component CheckBadge inherits Rectangle {
     border-radius: 9px;
     border-width: root.checked ? 0px : 1.5px;
     border-color: root.pending ? Theme.warning : Theme.border;
-    background: root.checked ? Theme.accent
-        : root.pending ? Theme.warning-muted
-        : transparent;
+    background: root.checked ? Theme.accent : transparent;
 
     if root.checked : Path {
         width: 11px;

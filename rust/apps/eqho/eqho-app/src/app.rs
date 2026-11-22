@@ -29,9 +29,9 @@ use eqho_ui::{
     DashboardWindow, EqhoTray, Theme, apply_settings_to_window, build_history_rows,
     build_model_cards, build_onboarding_model_options, dashboard_window_title, engine_backend_key,
     filter_history_entries, language_code_for_index, language_warning_text, model_short_name,
-    onboarding_model_copy_for_key, overlay_position_key, parse_paste_rules_text,
-    parse_replacements_text, split_model_cards, status_summary_title, theme_mode_key,
-    ui_scale_value, volume_duck_key,
+    onboarding_model_copy_for_key, overlay_monitor_key, overlay_position_key,
+    parse_paste_rules_text, parse_replacements_text, split_model_cards, status_summary_title,
+    theme_mode_key, ui_scale_value, volume_duck_key,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
@@ -1561,12 +1561,36 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     }
     {
         let ctrl_w = Rc::clone(ctrl);
+        dash.on_overlay_show_text_toggled(move |v| {
+            let c = ctrl_w.borrow();
+            c.settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .overlay_show_text = v;
+            c.save_settings(false);
+            c.apply_theme_and_overlay();
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
         dash.on_overlay_show_level_toggled(move |v| {
             let c = ctrl_w.borrow();
             c.settings
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .overlay_show_level = v;
+            c.save_settings(false);
+            c.apply_theme_and_overlay();
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        dash.on_overlay_monitor_selected(move |idx| {
+            let c = ctrl_w.borrow();
+            c.settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .overlay_monitor = overlay_monitor_key(idx).to_owned();
             c.save_settings(false);
             c.apply_theme_and_overlay();
         });
