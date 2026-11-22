@@ -2,7 +2,7 @@
 import { Theme } from "@app-theme/theme.slint";
 import { Button, ButtonKind, Dropdown, Slider, TabList, Toggle, CompactRow } from "@damt-ui/kit.slint";
 import { LanguageOption } from "types.slint";
-import { FlagDropdown, ScrollArea, SectionHeader, SectionCard, StackedSettingRow, ThemedTextEdit } from "components.slint";
+import { FlagDropdown, ScrollArea, SectionCard, StackedSettingRow, ThemedTextEdit } from "components.slint";
 
 export component GeneralTab inherits Rectangle {
     in property <length> window-height: 560px;
@@ -58,8 +58,8 @@ export component GeneralTab inherits Rectangle {
                     spacing: Theme.space-12;
                     alignment: start;
 
-                    SectionHeader { text: "AUDIO INPUT"; }
                     SectionCard {
+                        title: "AUDIO INPUT";
                         StackedSettingRow {
                             label: "Microphone";
                             help: "Select your input device";
@@ -92,8 +92,8 @@ export component GeneralTab inherits Rectangle {
                         }
                     }
 
-                    SectionHeader { text: "HOTKEY"; }
                     SectionCard {
+                        title: "HOTKEY";
                         StackedSettingRow {
                             label: "Global Hotkey";
                             help: "Press to activate/deactivate dictation";
@@ -160,8 +160,8 @@ export component GeneralTab inherits Rectangle {
                     spacing: Theme.space-12;
                     alignment: start;
 
-                    SectionHeader { text: "SPEECH"; }
                     SectionCard {
+                        title: "SPEECH";
                         StackedSettingRow {
                             label: "Language";
                             help: "Transcription language";
@@ -191,8 +191,8 @@ export component GeneralTab inherits Rectangle {
                         }
                     }
 
-                    SectionHeader { text: "BEHAVIOR"; }
                     SectionCard {
+                        title: "BEHAVIOR";
                         CompactRow {
                             label: "Auto-format";
                             help: "Clean up punctuation and capitalization";
@@ -238,8 +238,8 @@ export component GeneralTab inherits Rectangle {
             if !root.two-col : VerticalLayout {
                 spacing: Theme.space-12;
 
-                SectionHeader { text: "AUDIO INPUT"; }
                 SectionCard {
+                    title: "AUDIO INPUT";
                     StackedSettingRow {
                         label: "Microphone";
                         help: "Select your input device";
@@ -272,8 +272,8 @@ export component GeneralTab inherits Rectangle {
                     }
                 }
 
-                SectionHeader { text: "HOTKEY"; }
                 SectionCard {
+                    title: "HOTKEY";
                     StackedSettingRow {
                         label: "Global Hotkey";
                         help: "Press to activate/deactivate dictation";
@@ -320,8 +320,8 @@ export component GeneralTab inherits Rectangle {
                     }
                 }
 
-                SectionHeader { text: "SPEECH"; }
                 SectionCard {
+                    title: "SPEECH";
                     StackedSettingRow {
                         label: "Language";
                         help: "Transcription language";
@@ -351,8 +351,8 @@ export component GeneralTab inherits Rectangle {
                     }
                 }
 
-                SectionHeader { text: "BEHAVIOR"; }
                 SectionCard {
+                    title: "BEHAVIOR";
                     CompactRow {
                         label: "Auto-format";
                         help: "Clean up punctuation and capitalization";

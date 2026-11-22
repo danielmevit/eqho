@@ -9,7 +9,8 @@ use eqho_platform::{
     HotkeyCallback, HotkeyEvent, HotkeyMode, HotkeyRegistration, HotkeyService, HotkeySpec,
     PlatformError,
 };
-use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU,
@@ -31,6 +32,7 @@ struct HookState {
     event_tx: mpsc::Sender<HotkeyEvent>,
     last_toggle: Option<Instant>,
     hold_active: bool,
+    suppressed_vk: Option<u16>,
 }
 
 thread_local! {
@@ -45,10 +47,11 @@ fn any_vk_down(vks: &[VIRTUAL_KEY]) -> bool {
     })
 }
 
-fn live_modifiers() -> HotkeyModifiers {
+fn live_modifiers(kb_flags: u32) -> HotkeyModifiers {
+    const LLKHF_ALTDOWN: u32 = 0x20;
     HotkeyModifiers {
         ctrl: any_vk_down(&[VK_CONTROL, VK_LCONTROL, VK_RCONTROL]),
-        alt: any_vk_down(&[VK_MENU, VK_LMENU, VK_RMENU]),
+        alt: (kb_flags & LLKHF_ALTDOWN) != 0 || any_vk_down(&[VK_MENU, VK_LMENU, VK_RMENU]),
         shift: any_vk_down(&[VK_SHIFT, VK_LSHIFT, VK_RSHIFT]),
         win: any_vk_down(&[VK_LWIN, VK_RWIN]),
     }
@@ -59,6 +62,7 @@ unsafe extern "system" fn low_level_keyboard_proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
+    let mut suppress = false;
     if code == i32::try_from(HC_ACTION).unwrap_or(0) {
         // SAFETY: For `HC_ACTION`, Win32 passes a valid `KBDLLHOOKSTRUCT` pointer in `lparam`.
         let kb = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
@@ -79,7 +83,9 @@ unsafe extern "system" fn low_level_keyboard_proc(
 
                 match state.mode {
                     HotkeyMode::Toggle => {
-                        if is_down && state.spec.modifiers.satisfied_by(live_modifiers()) {
+                        if is_down && state.spec.modifiers.satisfied_by(live_modifiers(kb.flags.0)) {
+                            suppress = true;
+                            state.suppressed_vk = Some(vk);
                             let now = Instant::now();
                             let debounced = state
                                 .last_toggle
@@ -89,18 +95,30 @@ unsafe extern "system" fn low_level_keyboard_proc(
                                 // Non-blocking send to the dispatcher thread keeps hook latency <1 ms.
                                 let _ = state.event_tx.send(HotkeyEvent::Toggle);
                             }
+                        } else if is_up && state.suppressed_vk == Some(vk) {
+                            state.suppressed_vk = None;
+                            suppress = true;
                         }
                     }
                     HotkeyMode::Hold => {
                         if is_down
-                            && !state.hold_active
-                            && state.spec.modifiers.satisfied_by(live_modifiers())
+                            && state.spec.modifiers.satisfied_by(live_modifiers(kb.flags.0))
                         {
-                            state.hold_active = true;
-                            let _ = state.event_tx.send(HotkeyEvent::HoldPressed);
-                        } else if is_up && state.hold_active {
-                            state.hold_active = false;
-                            let _ = state.event_tx.send(HotkeyEvent::HoldReleased);
+                            suppress = true;
+                            state.suppressed_vk = Some(vk);
+                            if !state.hold_active {
+                                state.hold_active = true;
+                                let _ = state.event_tx.send(HotkeyEvent::HoldPressed);
+                            }
+                        } else if is_up && (state.hold_active || state.suppressed_vk == Some(vk)) {
+                            if state.suppressed_vk == Some(vk) {
+                                state.suppressed_vk = None;
+                                suppress = true;
+                            }
+                            if state.hold_active {
+                                state.hold_active = false;
+                                let _ = state.event_tx.send(HotkeyEvent::HoldReleased);
+                            }
                         }
                     }
                 }
@@ -108,7 +126,13 @@ unsafe extern "system" fn low_level_keyboard_proc(
         }
     }
 
-    // SAFETY: Pass all events down the hook chain per Win32 `LowLevelKeyboardProc` contract.
+    if suppress {
+        // Swallow the matched hotkey keydown so Alt+Q never triggers a Windows system beep
+        // or menu-bar focus steal in the active window (including Onboarding Step 6).
+        return LRESULT(1);
+    }
+
+    // SAFETY: Pass all other events down the hook chain per Win32 `LowLevelKeyboardProc` contract.
     unsafe { CallNextHookEx(None, code, wparam, lparam) }
 }
 
@@ -171,13 +195,17 @@ impl HotkeyService for WinHotkeyService {
                         event_tx,
                         last_toggle: None,
                         hold_active: false,
+                        suppressed_vk: None,
                     });
                 });
 
-                // SAFETY: `low_level_keyboard_proc` is a valid `HOOKPROC` for `WH_KEYBOARD_LL`;
-                // `hmod` is `None` and `dwThreadId` is `0` for a global low-level hook.
+                // SAFETY: `GetModuleHandleW(None)` retrieves the current executable's module handle,
+                // and `low_level_keyboard_proc` is a valid `HOOKPROC` for global `WH_KEYBOARD_LL`.
+                let hmod: Option<HINSTANCE> = unsafe { GetModuleHandleW(None) }
+                    .ok()
+                    .map(Into::into);
                 let hook = unsafe {
-                    SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), None, 0)
+                    SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), hmod, 0)
                 };
                 let hook = match hook {
                     Ok(h) => h,

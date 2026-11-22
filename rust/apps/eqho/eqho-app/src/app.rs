@@ -23,10 +23,11 @@ use eqho_overlay::{OverlayConfig, OverlayHandle};
 use eqho_platform::{AudioBackend, AudioDeviceInfo, AudioStreamHandle, ClipboardService, GpuProbe, MicPrivacyProbe};
 use eqho_ui::{
     DashboardWindow, EqhoTray, Theme, apply_settings_to_window, build_history_rows,
-    build_model_cards, filter_history_entries, language_code_for_index,
-    language_warning_text, model_short_name, onboarding_model_copy, overlay_position_key,
-    parse_paste_rules_text, parse_replacements_text, split_model_cards, status_summary_title,
-    theme_mode_key, ui_scale_value, volume_duck_key,
+    build_model_cards, build_onboarding_model_options, filter_history_entries,
+    language_code_for_index, language_warning_text, model_short_name,
+    onboarding_model_copy_for_key, overlay_position_key, parse_paste_rules_text,
+    parse_replacements_text, split_model_cards, status_summary_title, theme_mode_key,
+    ui_scale_value, volume_duck_key,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
@@ -190,15 +191,69 @@ impl AppUiSink {
             }
         });
     }
+    fn set_step6_hint(&self, text: &str) {
+        let dash_weak_opt = self
+            .dash_weak
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(dash_weak) = dash_weak_opt {
+            let owned = text.to_owned();
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(dash) = dash_weak.upgrade()
+                    && dash.get_onboarding_active()
+                    && dash.get_onboarding_step() == 5
+                {
+                    dash.set_onboarding_try_hint(owned.into());
+                }
+            });
+        }
+    }
+
+    fn append_step6_text(&self, text: &str, hint: Option<&str>) {
+        if text.trim().is_empty() {
+            return;
+        }
+        let dash_weak_opt = self
+            .dash_weak
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(dash_weak) = dash_weak_opt {
+            let owned = text.to_owned();
+            let hint_owned = hint.map(str::to_owned);
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(dash) = dash_weak.upgrade()
+                    && dash.get_onboarding_active()
+                    && dash.get_onboarding_step() == 5
+                {
+                    let cur = dash.get_onboarding_try_text().to_string();
+                    if !cur.ends_with(&owned) && !cur.contains(&owned) {
+                        let next = if cur.trim().is_empty() {
+                            owned
+                        } else {
+                            format!("{cur} {owned}")
+                        };
+                        dash.set_onboarding_try_text(next.into());
+                    }
+                    if let Some(h) = hint_owned {
+                        dash.set_onboarding_try_hint(h.into());
+                    }
+                }
+            });
+        }
+    }
 }
 
 impl UiEventSink for AppUiSink {
     fn show_overlay(&self, text: &str) {
         self.overlay.show(text);
+        self.set_step6_hint(text);
     }
 
     fn update_overlay_text(&self, text: &str) {
         self.overlay.update_text(text);
+        self.set_step6_hint(text);
     }
 
     fn set_overlay_level(&self, level: f32) {
@@ -211,6 +266,27 @@ impl UiEventSink for AppUiSink {
 
     fn hide_overlay(&self) {
         self.overlay.hide();
+        let dash_weak_opt = self
+            .dash_weak
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(dash_weak) = dash_weak_opt {
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(dash) = dash_weak.upgrade()
+                    && dash.get_onboarding_active()
+                    && dash.get_onboarding_step() == 5
+                {
+                    let cur = dash.get_onboarding_try_hint().to_string();
+                    if matches!(
+                        cur.as_str(),
+                        "Listening..." | "Loading model…" | "Writing it down…"
+                    ) {
+                        dash.set_onboarding_try_hint("".into());
+                    }
+                }
+            });
+        }
     }
 
     fn set_tray_active(&self, active: bool) {
@@ -219,11 +295,24 @@ impl UiEventSink for AppUiSink {
             snap.is_dictating = active;
         }
         self.refresh_tray();
+        let dash_weak_opt = self
+            .dash_weak
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(dash_weak) = dash_weak_opt {
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(dash) = dash_weak.upgrade() {
+                    dash.set_onboarding_is_dictating(active);
+                }
+            });
+        }
     }
 
     fn notify(&self, message: &str) {
         self.error_log.log(Some("notify"), message);
         let _ = self.damt_platform.notifier().notify("Eqho", message);
+        self.set_step6_hint(message);
     }
 
     fn on_model_progress(&self, model_key: &str, message: &str, fraction: Option<f32>) {
@@ -280,6 +369,8 @@ impl UiEventSink for AppUiSink {
                     dash.set_bg_download_detail(detail_text.into());
                     if is_ready {
                         dash.set_onboarding_model_cached(true);
+                        dash.set_onboarding_model_ready(true);
+                        dash.set_onboarding_model_loading(false);
                     }
                 }
             });
@@ -292,6 +383,13 @@ impl UiEventSink for AppUiSink {
             snap.recovery_text = text.map(str::to_owned);
         }
         self.refresh_tray();
+
+        if let Some(t) = text {
+            self.append_step6_text(
+                t,
+                Some("✓ Dictation worked! Try another sentence or click Finish."),
+            );
+        }
 
         let dash_weak_opt = self
             .dash_weak
@@ -306,6 +404,13 @@ impl UiEventSink for AppUiSink {
                 }
             });
         }
+    }
+
+    fn on_dictation_committed(&self, text: &str) {
+        self.append_step6_text(
+            text,
+            Some("✓ Dictation worked! Try another sentence or click Finish."),
+        );
     }
 
     fn on_history_changed(&self) {
@@ -345,6 +450,7 @@ struct AppController {
     snapshot: Arc<Mutex<UiSyncSnapshot>>,
     mic_devices: Vec<AudioDeviceInfo>,
     mic_test_stream: Option<Box<dyn AudioStreamHandle>>,
+    hotkey_ok: bool,
     hotkey_capture_cancel: Option<Arc<AtomicBool>>,
     error_log: ErrorLog,
     ui_sink: Arc<AppUiSink>,
@@ -420,6 +526,87 @@ impl AppController {
         let (en_cards, multi_cards) = split_model_cards(cards);
         dash.set_english_models(ModelRc::new(VecModel::from(en_cards)));
         dash.set_multilingual_models(ModelRc::new(VecModel::from(multi_cards)));
+        self.refresh_onboarding_models(None);
+    }
+
+    fn refresh_onboarding_models(&self, selected_override: Option<&str>) {
+        let Some(dash) = &self.dashboard else {
+            return;
+        };
+        let s = self.settings.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let model_dir = s.resolve_model_dir();
+        let cached = cached_model_keys(&model_dir);
+        let desired = selected_override
+            .map(str::to_owned)
+            .unwrap_or_else(|| {
+                let cur = dash.get_onboarding_selected_model().to_string();
+                if cur.is_empty() {
+                    eqho_core::modelpick::recommend_model(self.hw_class, &s.language).to_owned()
+                } else {
+                    cur
+                }
+            });
+        let options = build_onboarding_model_options(self.hw_class, &s.language, &desired, &cached);
+        let active_key = options
+            .iter()
+            .find(|o| o.is_selected)
+            .map(|o| o.key.to_string())
+            .unwrap_or(desired);
+        let is_cached = cached.contains(&active_key.as_str());
+        let (summary, url) = onboarding_model_copy_for_key(&active_key);
+        dash.set_onboarding_model_options(ModelRc::new(VecModel::from(options)));
+        dash.set_onboarding_selected_model(active_key.clone().into());
+        dash.set_onboarding_selected_model_name(model_short_name(&active_key).into());
+        dash.set_onboarding_model_summary(summary.into());
+        dash.set_onboarding_model_url(url.into());
+        dash.set_onboarding_model_cached(is_cached);
+    }
+
+    fn preload_for_onboarding_try(&self) {
+        let Some(dash) = &self.dashboard else {
+            return;
+        };
+        let is_downloading = self
+            .snapshot
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .downloading_key
+            .is_some();
+        if is_downloading {
+            return;
+        }
+        let selected_key = dash.get_onboarding_selected_model().to_string();
+        let (model_key, model_dir) = {
+            let mut s = self.settings.lock().unwrap_or_else(|e| e.into_inner());
+            if !selected_key.is_empty() && s.model_size != selected_key {
+                s.model_size = selected_key;
+            }
+            (s.model_size.clone(), s.resolve_model_dir())
+        };
+        let cached = whispercpp_model_path(&model_dir, &model_key)
+            .metadata()
+            .map(|m| m.is_file() && m.len() > 1_048_576)
+            .unwrap_or(false);
+        if !cached {
+            dash.set_onboarding_model_ready(false);
+            dash.set_onboarding_model_loading(false);
+            return;
+        }
+        self.save_settings(false);
+        dash.set_onboarding_model_loading(true);
+        let coord = self.coordinator.clone();
+        let dash_weak = dash.as_weak();
+        let _ = thread::Builder::new()
+            .name("eqho-onboarding-preload".into())
+            .spawn(move || {
+                let ok = coord.preload_model().is_ok();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(d) = dash_weak.upgrade() {
+                        d.set_onboarding_model_loading(false);
+                        d.set_onboarding_model_ready(ok);
+                    }
+                });
+            });
     }
 
     fn start_mic_test(&mut self) {
@@ -638,14 +825,25 @@ fn ensure_dashboard(ctrl: &Rc<RefCell<AppController>>, tab: Option<&str>) {
             let hw = c.hw_class;
             let model_dir = s.resolve_model_dir();
             let rec_key = eqho_core::modelpick::recommend_model(hw, &s.language);
-            let rec_cached = whispercpp_model_path(&model_dir, rec_key)
+            let s_cached = whispercpp_model_path(&model_dir, &s.model_size)
+                .metadata()
+                .map(|m| m.is_file() && m.len() > 1_048_576)
+                .unwrap_or(false);
+            let initial_model_key = if s_cached {
+                s.model_size.clone()
+            } else {
+                rec_key.to_owned()
+            };
+            let initial_cached = whispercpp_model_path(&model_dir, &initial_model_key)
                 .metadata()
                 .map(|m| m.is_file() && m.len() > 1_048_576)
                 .unwrap_or(false);
             if let Some(dash) = &c.dashboard {
                 dash.set_app_version(env!("CARGO_PKG_VERSION").into());
                 apply_settings_to_window(dash, &s, hw, is_dark);
-                dash.set_onboarding_model_cached(rec_cached);
+                dash.set_onboarding_model_cached(initial_cached);
+                dash.set_onboarding_hotkey_ok(c.hotkey_ok);
+                dash.set_onboarding_is_dictating(snap.is_dictating);
 
                 if let Ok((w, h, rgba)) = decode_png_rgba(LOGO_32) {
                     dash.set_window_icon(rgba_to_slint_image(w, h, &rgba));
@@ -682,6 +880,7 @@ fn ensure_dashboard(ctrl: &Rc<RefCell<AppController>>, tab: Option<&str>) {
                 dash.set_recovery_text(recovery.into());
             }
             c.refresh_models();
+            c.refresh_onboarding_models(Some(&initial_model_key));
             c.refresh_history();
         }
 
@@ -710,11 +909,14 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         let ctrl_w = Rc::clone(ctrl);
         let dash_w = dash.as_weak();
         dash.window().on_close_requested(move || {
-            ctrl_w.borrow_mut().stop_mic_test();
-            if let Some(cancel) = ctrl_w.borrow_mut().hotkey_capture_cancel.take() {
+            let mut c = ctrl_w.borrow_mut();
+            c.stop_mic_test();
+            if let Some(cancel) = c.hotkey_capture_cancel.take() {
                 cancel.store(true, Ordering::Release);
+                let _ = c.coordinator.register_hotkey();
             }
             if let Some(d) = dash_w.upgrade() {
+                d.set_hotkey_capturing(false);
                 let _ = d.hide();
             }
             slint::CloseRequestResponse::HideWindow
@@ -824,6 +1026,9 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
             if let Some(prev) = c.hotkey_capture_cancel.take() {
                 prev.store(true, Ordering::Release);
             }
+            // Pause the live global hotkey while capturing so pressing the current hotkey
+            // (e.g. Alt+Q) never activates dictation during capture.
+            c.coordinator.unregister_hotkey();
             if let Some(d) = dash_w.upgrade() {
                 d.set_hotkey_capturing(true);
             }
@@ -847,9 +1052,11 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
             let mut c = ctrl_w.borrow_mut();
             if let Some(cancel) = c.hotkey_capture_cancel.take() {
                 cancel.store(true, Ordering::Release);
+                c.hotkey_ok = c.coordinator.register_hotkey().is_ok();
             }
             if let Some(d) = dash_w.upgrade() {
                 d.set_hotkey_capturing(false);
+                d.set_onboarding_hotkey_ok(c.hotkey_ok);
             }
         });
     }
@@ -874,24 +1081,17 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         dash.on_language_selected(move |idx| {
             let c = ctrl_w.borrow();
             let code = language_code_for_index(idx);
-            let (model_size, model_dir) = {
+            let model_size = {
                 let mut s = c.settings.lock().unwrap_or_else(|e| e.into_inner());
                 s.language = code.to_owned();
-                (s.model_size.clone(), s.resolve_model_dir())
+                s.model_size.clone()
             };
             c.save_settings(false);
             if let Some(d) = dash_w.upgrade() {
                 d.set_language_warning(language_warning_text(code, &model_size, c.hw_class).into());
-                let (summary, url) = onboarding_model_copy(c.hw_class, code);
-                let rec_key = eqho_core::modelpick::recommend_model(c.hw_class, code);
-                let rec_cached = whispercpp_model_path(&model_dir, rec_key)
-                    .metadata()
-                    .map(|m| m.is_file() && m.len() > 1_048_576)
-                    .unwrap_or(false);
-                d.set_onboarding_model_summary(summary.into());
-                d.set_onboarding_model_url(url.into());
-                d.set_onboarding_model_cached(rec_cached);
             }
+            let rec_key = eqho_core::modelpick::recommend_model(c.hw_class, code);
+            c.refresh_onboarding_models(Some(rec_key));
         });
     }
     {
@@ -1232,9 +1432,27 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         });
     }
     {
+        let ctrl_w = Rc::clone(ctrl);
         let dash_w = dash.as_weak();
         dash.on_start_onboarding(move || {
+            let c = ctrl_w.borrow();
+            let s = c.settings.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            let model_dir = s.resolve_model_dir();
+            let s_cached = whispercpp_model_path(&model_dir, &s.model_size)
+                .metadata()
+                .map(|m| m.is_file() && m.len() > 1_048_576)
+                .unwrap_or(false);
+            let initial_key = if s_cached {
+                s.model_size.clone()
+            } else {
+                eqho_core::modelpick::recommend_model(c.hw_class, &s.language).to_owned()
+            };
+            c.refresh_onboarding_models(Some(&initial_key));
             if let Some(d) = dash_w.upgrade() {
+                d.set_onboarding_hotkey_ok(c.hotkey_ok);
+                d.set_onboarding_is_dictating(false);
+                d.set_onboarding_try_hint("".into());
+                d.set_onboarding_try_text("".into());
                 d.set_onboarding_step(0);
                 d.set_onboarding_active(true);
             }
@@ -1256,17 +1474,35 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     }
     {
         let ctrl_w = Rc::clone(ctrl);
+        dash.on_onboarding_select_model(move |key| {
+            let c = ctrl_w.borrow();
+            {
+                let mut s = c.settings.lock().unwrap_or_else(|e| e.into_inner());
+                s.model_size = key.to_string();
+            }
+            c.save_settings(false);
+            c.refresh_onboarding_models(Some(&key));
+            c.refresh_models();
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
         dash.on_onboarding_download_model(move || {
-            let key = {
-                let c = ctrl_w.borrow();
-                let lang = c
-                    .settings
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .language
-                    .clone();
-                eqho_core::modelpick::recommend_model(c.hw_class, &lang).to_owned()
-            };
+            let key = dash_w
+                .upgrade()
+                .map(|d| d.get_onboarding_selected_model().to_string())
+                .filter(|k| !k.is_empty())
+                .unwrap_or_else(|| {
+                    let c = ctrl_w.borrow();
+                    let lang = c
+                        .settings
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .language
+                        .clone();
+                    eqho_core::modelpick::recommend_model(c.hw_class, &lang).to_owned()
+                });
             ctrl_w.borrow().start_download(key);
         });
     }
@@ -1275,6 +1511,37 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         dash.on_onboarding_later_model(move || {
             if let Some(d) = dash_w.upgrade() {
                 d.set_onboarding_step(4);
+            }
+        });
+    }
+    {
+        let coord = ctrl.borrow().coordinator.clone();
+        dash.on_onboarding_toggle_test(move || {
+            let c = coord.clone();
+            let _ = thread::Builder::new()
+                .name("eqho-onboarding-test".into())
+                .spawn(move || c.toggle());
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_onboarding_go_to_step(move |target_step| {
+            if let Some(d) = dash_w.upgrade() {
+                d.set_onboarding_step(target_step);
+            }
+            let mut c = ctrl_w.borrow_mut();
+            if target_step == 2 {
+                c.refresh_mics(false);
+                c.start_mic_test();
+            } else {
+                c.stop_mic_test();
+                if target_step == 3 {
+                    c.refresh_onboarding_models(None);
+                } else if target_step == 5 {
+                    c.refresh_onboarding_models(None);
+                    c.preload_for_onboarding_try();
+                }
             }
         });
     }
@@ -1318,6 +1585,12 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
                 c.start_mic_test();
             } else {
                 c.stop_mic_test();
+                if step == 3 {
+                    c.refresh_onboarding_models(None);
+                } else if step == 5 {
+                    c.refresh_onboarding_models(None);
+                    c.preload_for_onboarding_try();
+                }
             }
         });
     }
@@ -1414,10 +1687,12 @@ fn spawn_hotkey_capture(
             thread::sleep(Duration::from_millis(120));
             while !cancel.load(Ordering::Acquire) {
                 if is_down(i32::from(VK_ESCAPE.0)) {
+                    let ok = coordinator.register_hotkey().is_ok();
                     let weak = dash_weak.clone();
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(d) = weak.upgrade() {
                             d.set_hotkey_capturing(false);
+                            d.set_onboarding_hotkey_ok(ok);
                         }
                     });
                     return;
@@ -1450,6 +1725,14 @@ fn spawn_hotkey_capture(
                     parts.push(key_name);
                     let combo = parts.join("+");
 
+                    // Wait briefly for the captured key to be released before re-installing the
+                    // global hook so the capture keypress itself never triggers dictation.
+                    let mut waited = 0_u32;
+                    while is_down(vk) && waited < 75 {
+                        thread::sleep(Duration::from_millis(20));
+                        waited += 1;
+                    }
+
                     let new_settings = {
                         let mut s = settings.lock().unwrap_or_else(|e| e.into_inner());
                         s.hotkey = combo.clone();
@@ -1457,6 +1740,7 @@ fn spawn_hotkey_capture(
                         s.clone()
                     };
                     coordinator.apply_settings(new_settings, false);
+                    let ok = coordinator.register_hotkey().is_ok();
 
                     {
                         let mut snap = snapshot.lock().unwrap_or_else(|e| e.into_inner());
@@ -1471,6 +1755,7 @@ fn spawn_hotkey_capture(
                         if let Some(d) = weak.upgrade() {
                             d.set_hotkey_capturing(false);
                             d.set_hotkey_display(display.into());
+                            d.set_onboarding_hotkey_ok(ok);
                         }
                         if let Some(t) = tray_w.upgrade() {
                             t.set_tray_tooltip(tooltip.into());
@@ -1661,9 +1946,13 @@ pub fn run_desktop_app(
         ui_sink.clone(),
     );
 
-    if let Err(err) = coordinator.register_hotkey() {
-        error_log.log(Some("register_hotkey"), &err);
-    }
+    let hotkey_ok = match coordinator.register_hotkey() {
+        Ok(()) => true,
+        Err(err) => {
+            error_log.log(Some("register_hotkey"), &err);
+            false
+        }
+    };
 
     let ctrl = Rc::new(RefCell::new(AppController {
         settings: settings_arc,
@@ -1680,6 +1969,7 @@ pub fn run_desktop_app(
         snapshot,
         mic_devices: Vec::new(),
         mic_test_stream: None,
+        hotkey_ok,
         hotkey_capture_cancel: None,
         error_log: error_log.clone(),
         ui_sink,

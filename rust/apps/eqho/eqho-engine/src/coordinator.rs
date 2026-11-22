@@ -810,6 +810,7 @@ impl CoordinatorInner {
         }
 
         lock_unpoisoned(&self.state).last_injected = full_text.clone();
+        self.ui.on_dictation_committed(&full_text);
         if settings.history_enabled {
             let _ = self.history.append(
                 &full_text,

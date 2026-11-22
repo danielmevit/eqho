@@ -211,9 +211,10 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
     win.set_onboarding_step(3);
     let onboarding_model = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
     assert_non_uniform_and_valid_png(&onboarding_model, 940, 560);
-    maybe_save_png(dump_dir.as_ref(), "09_onboarding_step4_trusted_link", &onboarding_model, 940, 560);
+    maybe_save_png(dump_dir.as_ref(), "09_onboarding_step4_models_link", &onboarding_model, 940, 560);
 
     win.set_onboarding_step(4);
+    win.set_onboarding_duck_mute(true);
     win.set_bg_download_active(true);
     win.set_bg_download_model("Distil Large v3".into());
     win.set_bg_download_progress(0.42);
@@ -221,5 +222,16 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
     win.set_bg_download_detail("Downloading 42% · 640 MB / 1.51 GB · 12.4 MB/s · ~1m 08s left".into());
     let onboarding_sound = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
     assert_non_uniform_and_valid_png(&onboarding_sound, 940, 560);
-    maybe_save_png(dump_dir.as_ref(), "10_onboarding_step5_bg_download", &onboarding_sound, 940, 560);
+    maybe_save_png(dump_dir.as_ref(), "10_onboarding_step5_checked_sound", &onboarding_sound, 940, 560);
+
+    win.set_onboarding_step(5);
+    win.set_bg_download_active(false);
+    win.set_bg_download_done(true);
+    win.set_bg_download_detail("Ready".into());
+    win.set_onboarding_model_ready(true);
+    win.set_onboarding_model_cached(true);
+    win.set_onboarding_hotkey_ok(true);
+    let onboarding_try = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
+    assert_non_uniform_and_valid_png(&onboarding_try, 940, 560);
+    maybe_save_png(dump_dir.as_ref(), "11_onboarding_step6_checklist", &onboarding_try, 940, 560);
 }

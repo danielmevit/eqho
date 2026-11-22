@@ -179,6 +179,18 @@ pub fn model_info(model_key: &str) -> Option<&'static ModelInfo> {
     MODELS.iter().find(|m| m.key == model_key)
 }
 
+impl ModelInfo {
+    /// Human-browsable Hugging Face model file page (`blob/main/...`) so clicking opens
+    /// a web page with file details/checksums rather than triggering a blind binary download.
+    #[must_use]
+    pub fn browse_url(&self) -> String {
+        format!(
+            "https://huggingface.co/ggerganov/whisper.cpp/blob/main/{}",
+            self.ggml_filename
+        )
+    }
+}
+
 pub fn whispercpp_name(model_key: &str) -> &'static str {
     model_info(model_key)
         .map(|m| m.ggml_name)
@@ -240,6 +252,10 @@ mod tests {
         assert_eq!(
             model_info("tiny").unwrap().download_url,
             "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"
+        );
+        assert_eq!(
+            model_info("distil-large-v3").unwrap().browse_url(),
+            "https://huggingface.co/ggerganov/whisper.cpp/blob/main/ggml-large-v3-turbo.bin"
         );
     }
 

@@ -100,14 +100,46 @@ export component StackedSettingRow inherits VerticalLayout {
     }
 }
 
-// Clean hairline card with standard 12px padding and 10px spacing.
+// Clean hairline card with an optional integrated header bar separated by a 1px divider line.
 export component SectionCard inherits Card {
+    in property <string> title: "";
     shadow: false;
     border-color: Theme.border-subtle;
+
     VerticalLayout {
-        padding: Theme.space-12;
-        spacing: Theme.space-10;
-        @children
+        spacing: 0px;
+
+        if root.title != "" : VerticalLayout {
+            spacing: 0px;
+            HorizontalLayout {
+                padding-left: Theme.space-12;
+                padding-right: Theme.space-12;
+                padding-top: Theme.space-10;
+                padding-bottom: Theme.space-8;
+                Text {
+                    text: root.title;
+                    font-size: Theme.font-size-sm;
+                    font-weight: 700;
+                    letter-spacing: 0.6px;
+                    color: Theme.text-muted;
+                    vertical-alignment: center;
+                }
+            }
+            HorizontalLayout {
+                padding-left: 1px;
+                padding-right: 1px;
+                Rectangle {
+                    height: 1px;
+                    background: Theme.border-subtle;
+                }
+            }
+        }
+
+        VerticalLayout {
+            padding: Theme.space-12;
+            spacing: Theme.space-10;
+            @children
+        }
     }
 }
 

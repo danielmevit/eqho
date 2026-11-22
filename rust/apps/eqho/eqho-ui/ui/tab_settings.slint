@@ -1,7 +1,7 @@
 // Settings Tab (Gear view): Appearance, Dictation Extras, System, Overlay, About.
 import { Theme } from "@app-theme/theme.slint";
 import { Button, ButtonKind, Dropdown, Slider, TabList, Toggle, CompactRow } from "@damt-ui/kit.slint";
-import { ScrollArea, SectionHeader, SectionCard, StackedSettingRow, ThemedTextEdit } from "components.slint";
+import { ScrollArea, SectionCard, StackedSettingRow, ThemedTextEdit } from "components.slint";
 
 export component SettingsTab inherits Rectangle {
     in property <length> window-height: 560px;
@@ -55,8 +55,8 @@ export component SettingsTab inherits Rectangle {
             spacing: Theme.space-12;
 
             // APPEARANCE
-            SectionHeader { text: "APPEARANCE"; }
             SectionCard {
+                title: "APPEARANCE";
                 StackedSettingRow {
                     label: "Theme";
                     help: "Light, dark, or follow Windows";
@@ -89,8 +89,8 @@ export component SettingsTab inherits Rectangle {
                     spacing: Theme.space-12;
                     alignment: start;
 
-                    SectionHeader { text: "DICTATION EXTRAS"; }
                     SectionCard {
+                        title: "DICTATION EXTRAS";
                         CompactRow {
                             label: "Remove Filler Words";
                             help: "\"um\", \"uh\", \"er\" (needs auto-format)";
@@ -151,8 +151,8 @@ export component SettingsTab inherits Rectangle {
                     spacing: Theme.space-12;
                     alignment: start;
 
-                    SectionHeader { text: "SYSTEM"; }
                     SectionCard {
+                        title: "SYSTEM";
                         StackedSettingRow {
                             label: "Volume While Speaking";
                             help: "System volume during dictation";
@@ -175,8 +175,8 @@ export component SettingsTab inherits Rectangle {
                         }
                     }
 
-                    SectionHeader { text: "OVERLAY"; }
                     SectionCard {
+                        title: "OVERLAY";
                         CompactRow {
                             label: "Show Overlay";
                             help: "Display transcription text while dictating";
@@ -249,8 +249,8 @@ export component SettingsTab inherits Rectangle {
             if !root.two-col : VerticalLayout {
                 spacing: Theme.space-12;
 
-                SectionHeader { text: "DICTATION EXTRAS"; }
                 SectionCard {
+                    title: "DICTATION EXTRAS";
                     CompactRow {
                         label: "Remove Filler Words";
                         help: "\"um\", \"uh\", \"er\" (needs auto-format)";
@@ -305,8 +305,8 @@ export component SettingsTab inherits Rectangle {
                     }
                 }
 
-                SectionHeader { text: "SYSTEM"; }
                 SectionCard {
+                    title: "SYSTEM";
                     StackedSettingRow {
                         label: "Volume While Speaking";
                         help: "System volume during dictation";
@@ -329,8 +329,8 @@ export component SettingsTab inherits Rectangle {
                     }
                 }
 
-                SectionHeader { text: "OVERLAY"; }
                 SectionCard {
+                    title: "OVERLAY";
                     CompactRow {
                         label: "Show Overlay";
                         help: "Display transcription text while dictating";
@@ -400,8 +400,8 @@ export component SettingsTab inherits Rectangle {
             }
 
             // ABOUT EQHO
-            SectionHeader { text: "ABOUT EQHO"; }
             SectionCard {
+                title: "ABOUT EQHO";
                 for row in [
                     { label: "Version", val: root.app-version },
                     { label: "Engine", val: "whisper.cpp 1.8.4 (Vulkan / CPU)" },

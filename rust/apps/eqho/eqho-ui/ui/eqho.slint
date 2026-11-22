@@ -1,6 +1,6 @@
 // Eqho Slint 1.19 Root UI: DashboardWindow & EqhoTray.
 import { Theme } from "@app-theme/theme.slint";
-import { ModelCardItem, HistoryRowItem, LanguageOption } from "types.slint";
+import { ModelCardItem, HistoryRowItem, LanguageOption, OnboardingModelOption } from "types.slint";
 import { TopBar, RecoveryBanner } from "components.slint";
 import { GeneralTab } from "tab_general.slint";
 import { ModelsTab } from "tab_models.slint";
@@ -8,14 +8,14 @@ import { HistoryTab } from "tab_history.slint";
 import { SettingsTab } from "tab_settings.slint";
 import { OnboardingView } from "onboarding.slint";
 
-export { Theme, ModelCardItem, HistoryRowItem, LanguageOption }
+export { Theme, ModelCardItem, HistoryRowItem, LanguageOption, OnboardingModelOption }
 
 export component DashboardWindow inherits Window {
     min-width: 600px;
     min-height: 420px;
     preferred-width: 940px;
     preferred-height: 560px;
-    title: root.window-title;
+    title: root.onboarding-active ? "Eqho Onboarding" : root.window-title;
     icon: root.window-icon;
     background: Theme.bg;
 
@@ -125,9 +125,16 @@ export component DashboardWindow inherits Window {
     in-out property <float> onboarding-mic-level: 0.0;
     in-out property <string> onboarding-mic-error: "";
     in-out property <string> onboarding-mic-status: "";
+    in property <[OnboardingModelOption]> onboarding-model-options: [];
+    in-out property <string> onboarding-selected-model: "distil-large-v3";
+    in-out property <string> onboarding-selected-model-name: "Distil Large v3";
     in-out property <string> onboarding-model-summary: "";
     in-out property <string> onboarding-model-url: "";
     in-out property <bool> onboarding-model-cached: false;
+    in-out property <bool> onboarding-model-ready: false;
+    in-out property <bool> onboarding-model-loading: false;
+    in-out property <bool> onboarding-hotkey-ok: true;
+    in-out property <bool> onboarding-is-dictating: false;
 
     // Persistent background download state (shared across onboarding steps)
     in-out property <bool> bg-download-active: false;
@@ -144,11 +151,14 @@ export component DashboardWindow inherits Window {
 
     callback onboarding-open-mic-settings();
     callback onboarding-retry-mic();
+    callback onboarding-select-model(string);
     callback onboarding-download-model();
     callback onboarding-later-model();
     callback open-url(string);
     callback copy-text(string);
     callback onboarding-sound-chosen(bool);
+    callback onboarding-toggle-test();
+    callback onboarding-go-to-step(int);
     callback onboarding-step-changed(int);
     callback onboarding-skip();
     callback onboarding-finish();
@@ -165,9 +175,18 @@ export component DashboardWindow inherits Window {
         mic-status <=> root.onboarding-mic-status;
         mic-level <=> root.onboarding-mic-level;
         mic-error <=> root.onboarding-mic-error;
+        model-options: root.onboarding-model-options;
+        selected-model-key <=> root.onboarding-selected-model;
+        selected-model-name <=> root.onboarding-selected-model-name;
         model-summary <=> root.onboarding-model-summary;
         model-url <=> root.onboarding-model-url;
         model-cached <=> root.onboarding-model-cached;
+        model-ready <=> root.onboarding-model-ready;
+        model-loading <=> root.onboarding-model-loading;
+        hotkey-display: root.hotkey-display;
+        hotkey-mode-index: root.hotkey-mode-index;
+        hotkey-ok: root.onboarding-hotkey-ok;
+        is-dictating: root.onboarding-is-dictating;
         bg-download-active <=> root.bg-download-active;
         bg-download-done <=> root.bg-download-done;
         bg-download-error <=> root.bg-download-error;
@@ -184,11 +203,14 @@ export component DashboardWindow inherits Window {
         refresh-mics => { root.refresh-mics(); }
         open-mic-settings => { root.onboarding-open-mic-settings(); }
         retry-mic => { root.onboarding-retry-mic(); }
+        select-model(k) => { root.onboarding-select-model(k); }
         download-model => { root.onboarding-download-model(); }
         later-model => { root.onboarding-later-model(); }
         open-url(u) => { root.open-url(u); }
         copy-text(t) => { root.copy-text(t); }
         sound-chosen(m) => { root.onboarding-sound-chosen(m); }
+        toggle-test-dictation => { root.onboarding-toggle-test(); }
+        go-to-step(s) => { root.onboarding-go-to-step(s); }
         step-changed(s) => { root.onboarding-step-changed(s); }
         skip-clicked => { root.onboarding-skip(); }
         finish-clicked => { root.onboarding-finish(); }

@@ -1,10 +1,199 @@
-// 6-Step First-Time Onboarding View with country flags, microphone refresh,
-// trusted model download source link, persistent background download indicator
-// (0-100% + ETA across steps), and a 6-segment blue step progress strip.
+// 6-Step First-Time Onboarding View:
+//   Step 1: Welcome
+//   Step 2: Language picker with 21x14 full-color country flags
+//   Step 3: Microphone picker + Refresh devices + live level bar
+//   Step 4: Curated light-to-heavy model picker + clickable blob/main Hugging Face link (↗)
+//   Step 5: Exclusive checkmarked audio ducking choice (always one checked)
+//   Step 6: Live readiness checklist ("Everything is set — let's try it") + test dictation box
 import { Theme } from "@app-theme/theme.slint";
 import { Button, ButtonKind, Dropdown, ProgressLine } from "@damt-ui/kit.slint";
-import { LanguageOption } from "types.slint";
+import { LanguageOption, OnboardingModelOption } from "types.slint";
 import { FlagDropdown, ScrollArea, SectionCard, ThemedTextEdit } from "components.slint";
+
+component CheckBadge inherits Rectangle {
+    in property <bool> checked: false;
+    in property <bool> pending: false;
+
+    width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    border-width: root.checked ? 0px : 1.5px;
+    border-color: root.pending ? Theme.warning : Theme.border;
+    background: root.checked ? Theme.accent
+        : root.pending ? Theme.warning-muted
+        : transparent;
+
+    if root.checked : Path {
+        width: 11px;
+        height: 11px;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: "M4 12.5 L9.5 18 L20 6.5";
+        stroke: Theme.on-accent;
+        stroke-width: 1.8px;
+        fill: transparent;
+    }
+
+    if !root.checked && root.pending : Rectangle {
+        width: 6px;
+        height: 6px;
+        border-radius: 3px;
+        background: Theme.warning;
+    }
+}
+
+component SoundOptionCard inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <bool> checked: false;
+    callback clicked();
+
+    border-radius: Theme.radius-card;
+    border-width: root.checked ? 2px : 1px;
+    border-color: root.checked ? Theme.accent
+        : touch.has-hover ? Theme.border
+        : Theme.border-subtle;
+    background: root.checked ? Theme.accent-muted
+        : touch.has-hover ? Theme.surface-hover
+        : Theme.surface;
+    min-height: lay.preferred-height;
+    horizontal-stretch: 1;
+
+    accessible-role: checkbox;
+    accessible-label: root.title;
+    accessible-checked: root.checked;
+    accessible-action-default => { root.clicked(); }
+
+    lay := HorizontalLayout {
+        padding: Theme.space-14;
+        spacing: Theme.space-12;
+        alignment: start;
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            CheckBadge { checked: root.checked; }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 3px;
+            Text {
+                text: root.title;
+                font-size: Theme.font-size-base;
+                font-weight: 600;
+                color: Theme.text;
+            }
+            Text {
+                text: root.subtitle;
+                font-size: Theme.font-size-sm;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component OnboardingModelCard inherits Rectangle {
+    in property <OnboardingModelOption> item;
+    callback clicked(string);
+
+    border-radius: Theme.radius-card;
+    border-width: root.item.is_selected ? 2px : 1px;
+    border-color: root.item.is_selected ? Theme.accent
+        : touch.has-hover ? Theme.border
+        : Theme.border-subtle;
+    background: root.item.is_selected ? Theme.accent-muted
+        : touch.has-hover ? Theme.surface-hover
+        : Theme.surface;
+    min-height: lay.preferred-height;
+
+    accessible-role: checkbox;
+    accessible-label: root.item.name + " " + root.item.size_label;
+    accessible-checked: root.item.is_selected;
+    accessible-action-default => { root.clicked(root.item.key); }
+
+    lay := VerticalLayout {
+        padding: Theme.space-12;
+        spacing: 5px;
+
+        HorizontalLayout {
+            spacing: Theme.space-8;
+            alignment: space-between;
+
+            HorizontalLayout {
+                spacing: Theme.space-8;
+                horizontal-stretch: 1;
+                alignment: start;
+
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 0;
+                    CheckBadge { checked: root.item.is_selected; }
+                }
+
+                Text {
+                    text: root.item.name;
+                    font-size: Theme.font-size-base;
+                    font-weight: 600;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 0;
+                height: 20px;
+                min-width: sz-lbl.preferred-width + 12px;
+                border-radius: 10px;
+                background: Theme.surface-tertiary;
+                sz-lbl := Text {
+                    text: root.item.size_label;
+                    font-size: Theme.font-size-xs;
+                    font-weight: 600;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        Text {
+            text: root.item.tagline;
+            font-size: Theme.font-size-sm;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+
+        if root.item.is_recommended || root.item.is_cached : HorizontalLayout {
+            spacing: Theme.space-8;
+            alignment: start;
+            if root.item.is_recommended : Text {
+                text: "Recommended for this PC";
+                font-size: Theme.font-size-xs;
+                font-weight: 600;
+                color: Theme.accent-text;
+            }
+            if root.item.is_cached : Text {
+                text: "✓ Downloaded";
+                font-size: Theme.font-size-xs;
+                font-weight: 600;
+                color: Theme.success;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(root.item.key); }
+    }
+}
 
 export component OnboardingView inherits Rectangle {
     in property <length> window-height: 560px;
@@ -18,6 +207,11 @@ export component OnboardingView inherits Rectangle {
 
     in-out property <float> mic-level: 0.0;
     in-out property <string> mic-error: "";
+
+    // Step 4: multi-model choice & browseable Hugging Face source URL
+    in property <[OnboardingModelOption]> model-options: [];
+    in-out property <string> selected-model-key: "distil-large-v3";
+    in-out property <string> selected-model-name: "Distil Large v3";
     in-out property <string> model-summary: "";
     in-out property <string> model-url: "";
     in-out property <bool> model-cached: false;
@@ -31,7 +225,16 @@ export component OnboardingView inherits Rectangle {
     in-out property <int> bg-download-pct: 0;
     in-out property <string> bg-download-detail: "";
 
+    // Step 5: Audio ducking choice (exclusive — one always checked)
     in-out property <bool> duck-mute: false;
+
+    // Step 6: Readiness checklist & live dictation test
+    in-out property <string> hotkey-display: "Alt + Q";
+    in property <int> hotkey-mode-index: 0;
+    in-out property <bool> hotkey-ok: true;
+    in-out property <bool> model-ready: false;
+    in-out property <bool> model-loading: false;
+    in-out property <bool> is-dictating: false;
     in-out property <string> try-hint: "";
     in-out property <string> try-text: "";
 
@@ -40,14 +243,20 @@ export component OnboardingView inherits Rectangle {
     callback refresh-mics();
     callback open-mic-settings();
     callback retry-mic();
+    callback select-model(string);
     callback download-model();
     callback later-model();
     callback open-url(string);
     callback copy-text(string);
     callback sound-chosen(bool);
+    callback toggle-test-dictation();
+    callback go-to-step(int);
     callback step-changed(int);
     callback skip-clicked();
     callback finish-clicked();
+
+    property <bool> two-col-models: root.width >= 680px;
+    property <bool> all-checks-ready: root.hotkey-ok && (root.model-ready || root.model-cached || root.bg-download-done) && !root.bg-download-active;
 
     background: Theme.bg;
 
@@ -178,95 +387,114 @@ export component OnboardingView inherits Rectangle {
                     }
                 }
 
-                // Step 4 (index 3): Model + trusted open-source download link
+                // Step 4 (index 3): Curated lighter-to-heavier model picker + clickable blob/main source link
                 if root.step == 3 : VerticalLayout {
                     spacing: Theme.space-12;
                     Text {
-                        text: "The speech model";
+                        text: "Choose a speech model";
                         font-size: Theme.font-size-title;
                         font-weight: 700;
                         color: Theme.text;
                     }
                     Text {
-                        text: root.model-summary != ""
-                            ? root.model-summary
-                            : "Eqho needs to download its speech model once. It stays on this computer.";
-                        font-size: Theme.font-size-base;
-                        color: Theme.text;
+                        text: "Lighter models download quickly and run fast on CPU; heavier models are more accurate. Downloaded once and kept offline on this PC.";
+                        font-size: Theme.font-size-sm;
+                        color: Theme.text-muted;
                         wrap: word-wrap;
                     }
 
-                    // Trusted download source card with direct HTTPS URL
-                    SectionCard {
-                        HorizontalLayout {
+                    // 2x2 grid of 4 light-to-heavy models
+                    if root.two-col-models : VerticalLayout {
+                        spacing: Theme.space-8;
+                        for row-idx in Math.ceil(root.model-options.length / 2) : HorizontalLayout {
                             spacing: Theme.space-8;
-                            alignment: start;
-                            VerticalLayout {
-                                alignment: center;
-                                horizontal-stretch: 0;
-                                Rectangle {
-                                    width: 8px;
-                                    height: 8px;
-                                    border-radius: 4px;
-                                    background: Theme.success;
-                                }
+                            OnboardingModelCard {
+                                width: (parent.width - Theme.space-8) / 2;
+                                item: root.model-options[row-idx * 2];
+                                clicked(k) => { root.select-model(k); }
                             }
-                            Text {
-                                text: "Trusted open-source download (HTTPS · Hugging Face)";
-                                font-size: Theme.font-size-sm;
-                                font-weight: 600;
-                                color: Theme.success;
-                                horizontal-stretch: 1;
-                                vertical-alignment: center;
-                                wrap: word-wrap;
+                            if row-idx * 2 + 1 < root.model-options.length : OnboardingModelCard {
+                                width: (parent.width - Theme.space-8) / 2;
+                                item: root.model-options[row-idx * 2 + 1];
+                                clicked(k) => { root.select-model(k); }
                             }
                         }
-                        Text {
-                            text: "Downloaded directly from the official open-source whisper.cpp repository (ggerganov/whisper.cpp, MIT license) hosted on Hugging Face. No telemetry, no account required — the file stays 100% offline on this PC.";
-                            font-size: Theme.font-size-sm;
-                            color: Theme.text-muted;
-                            wrap: word-wrap;
+                    }
+                    if !root.two-col-models : VerticalLayout {
+                        spacing: Theme.space-8;
+                        for m in root.model-options : OnboardingModelCard {
+                            item: m;
+                            clicked(k) => { root.select-model(k); }
                         }
-                        if root.model-url != "" : Rectangle {
-                            border-radius: Theme.radius-sm;
-                            background: Theme.surface-tertiary;
-                            border-width: 1px;
-                            border-color: Theme.border-subtle;
-                            min-height: url-lay.preferred-height;
+                    }
 
-                            url-lay := HorizontalLayout {
+                    // Clean, understated clickable source URL row (opens Hugging Face blob/main page) + diagonal ↗ icon + Copy
+                    if root.model-url != "" : HorizontalLayout {
+                        spacing: Theme.space-8;
+
+                        link-box := Rectangle {
+                            horizontal-stretch: 1;
+                            min-height: 30px;
+                            border-radius: Theme.radius-sm;
+                            background: link-touch.has-hover ? Theme.surface-hover : Theme.surface;
+                            border-width: 1px;
+                            border-color: link-touch.has-hover ? Theme.accent : Theme.border-subtle;
+
+                            accessible-role: button;
+                            accessible-label: "Open model source page on Hugging Face";
+                            accessible-action-default => { root.open-url(root.model-url); }
+
+                            HorizontalLayout {
                                 padding-left: Theme.space-10;
-                                padding-right: Theme.space-8;
-                                padding-top: Theme.space-6;
-                                padding-bottom: Theme.space-6;
+                                padding-right: Theme.space-10;
+                                padding-top: 5px;
+                                padding-bottom: 5px;
                                 spacing: Theme.space-8;
-                                alignment: space-between;
 
                                 Text {
+                                    horizontal-stretch: 0;
+                                    text: "Source:";
+                                    font-size: Theme.font-size-xs;
+                                    color: Theme.text-muted;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    horizontal-stretch: 1;
                                     text: root.model-url;
                                     font-size: Theme.font-size-xs;
-                                    color: Theme.accent-text;
-                                    horizontal-stretch: 1;
+                                    color: link-touch.has-hover ? Theme.accent-text-pressed : Theme.accent-text;
                                     vertical-alignment: center;
-                                    wrap: word-wrap;
+                                    overflow: elide;
                                 }
 
-                                HorizontalLayout {
-                                    horizontal-stretch: 0;
-                                    spacing: 4px;
+                                // Crisp 45-degree diagonal top-right external-link arrow (↗)
+                                VerticalLayout {
                                     alignment: center;
-                                    Button {
-                                        text: "Open";
-                                        kind: ButtonKind.outline;
-                                        clicked => { root.open-url(root.model-url); }
-                                    }
-                                    Button {
-                                        text: "Copy";
-                                        kind: ButtonKind.outline;
-                                        clicked => { root.copy-text(root.model-url); }
+                                    horizontal-stretch: 0;
+                                    Path {
+                                        width: 12px;
+                                        height: 12px;
+                                        viewbox-width: 24;
+                                        viewbox-height: 24;
+                                        commands: "M6 18 L18 6 M9 6 L18 6 L18 15";
+                                        stroke: link-touch.has-hover ? Theme.accent-text-pressed : Theme.accent-text;
+                                        stroke-width: 1.6px;
+                                        fill: transparent;
                                     }
                                 }
                             }
+
+                            link-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.open-url(root.model-url); }
+                            }
+                        }
+
+                        Button {
+                            horizontal-stretch: 0;
+                            text: "Copy link";
+                            kind: ButtonKind.outline;
+                            clicked => { root.copy-text(root.model-url); }
                         }
                     }
 
@@ -276,11 +504,11 @@ export component OnboardingView inherits Rectangle {
                         Button {
                             text: root.bg-download-active
                                 ? "Downloading (" + root.bg-download-pct + "%)…"
-                                : root.model-cached || root.bg-download-done
-                                    ? "✓ Already downloaded"
-                                    : "Download now";
+                                : root.model-cached
+                                    ? "✓ " + root.selected-model-name + " ready"
+                                    : "Download " + root.selected-model-name;
                             kind: ButtonKind.accent;
-                            enabled: !root.bg-download-active && !(root.model-cached || root.bg-download-done);
+                            enabled: !root.bg-download-active && !root.model-cached;
                             clicked => { root.download-model(); }
                         }
                         Button {
@@ -289,16 +517,9 @@ export component OnboardingView inherits Rectangle {
                             clicked => { root.later-model(); }
                         }
                     }
-
-                    if root.bg-download-active : Text {
-                        text: "You can click Next or Continue in background — progress stays visible at the bottom.";
-                        font-size: Theme.font-size-sm;
-                        color: Theme.text-muted;
-                        wrap: word-wrap;
-                    }
                 }
 
-                // Step 5 (index 4): Sound
+                // Step 5 (index 4): Exclusive checkmarked audio ducking choice (always one checked)
                 if root.step == 4 : VerticalLayout {
                     spacing: Theme.space-12;
                     Text {
@@ -310,23 +531,24 @@ export component OnboardingView inherits Rectangle {
                     Text {
                         text: "Turn other sounds off while you dictate? It helps Eqho hear you.";
                         font-size: Theme.font-size-base;
-                        color: Theme.text;
+                        color: Theme.text-muted;
                         wrap: word-wrap;
                     }
                     HorizontalLayout {
-                        spacing: Theme.space-8;
-                        alignment: start;
-                        Button {
-                            text: "Yes, turn them off";
-                            kind: root.duck-mute ? ButtonKind.accent : ButtonKind.outline;
+                        spacing: Theme.space-12;
+                        SoundOptionCard {
+                            title: "Yes, turn them off";
+                            subtitle: "Mutes music and notifications while you speak, then restores them automatically.";
+                            checked: root.duck-mute;
                             clicked => {
                                 root.duck-mute = true;
                                 root.sound-chosen(true);
                             }
                         }
-                        Button {
-                            text: "No, leave them";
-                            kind: !root.duck-mute ? ButtonKind.accent : ButtonKind.outline;
+                        SoundOptionCard {
+                            title: "No, leave them";
+                            subtitle: "Keeps system audio playing at its current volume during dictation.";
+                            checked: !root.duck-mute;
                             clicked => {
                                 root.duck-mute = false;
                                 root.sound-chosen(false);
@@ -335,33 +557,153 @@ export component OnboardingView inherits Rectangle {
                     }
                 }
 
-                // Step 6 (index 5): Try it
+                // Step 6 (index 5): Readiness checklist + live Try It sandbox
                 if root.step == 5 : VerticalLayout {
                     spacing: Theme.space-12;
                     Text {
-                        text: "Try it";
+                        text: root.all-checks-ready
+                            ? "Everything is set — let's try it"
+                            : "Setup checklist";
                         font-size: Theme.font-size-title;
                         font-weight: 700;
                         color: Theme.text;
                     }
-                    Text {
-                        text: root.try-hint != ""
-                            ? root.try-hint
-                            : "Press Alt + Q, say a sentence, press Alt + Q again. Your words appear where your cursor is.";
-                        font-size: Theme.font-size-base;
-                        color: Theme.text;
-                        wrap: word-wrap;
+
+                    // 4-item readiness checklist
+                    SectionCard {
+                        title: "READINESS CHECKLIST";
+                        // 1. Language
+                        HorizontalLayout {
+                            spacing: Theme.space-10;
+                            alignment: space-between;
+                            HorizontalLayout {
+                                spacing: Theme.space-8;
+                                horizontal-stretch: 1;
+                                VerticalLayout { alignment: center; CheckBadge { checked: true; } }
+                                Text {
+                                    text: "Language: " + (root.language-index >= 0 && root.language-index < root.language-options.length
+                                        ? root.language-options[root.language-index].label : "English");
+                                    font-size: Theme.font-size-sm;
+                                    color: Theme.text;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // 2. Microphone
+                        HorizontalLayout {
+                            spacing: Theme.space-10;
+                            alignment: space-between;
+                            HorizontalLayout {
+                                spacing: Theme.space-8;
+                                horizontal-stretch: 1;
+                                VerticalLayout { alignment: center; CheckBadge { checked: root.mic-error == ""; pending: root.mic-error != ""; } }
+                                Text {
+                                    text: "Microphone: " + (root.mic-index >= 0 && root.mic-index < root.mic-names.length
+                                        ? root.mic-names[root.mic-index] : "System Default");
+                                    font-size: Theme.font-size-sm;
+                                    color: Theme.text;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // 3. Speech model
+                        HorizontalLayout {
+                            spacing: Theme.space-10;
+                            alignment: space-between;
+                            HorizontalLayout {
+                                spacing: Theme.space-8;
+                                horizontal-stretch: 1;
+                                VerticalLayout {
+                                    alignment: center;
+                                    CheckBadge {
+                                        checked: root.model-ready || (root.model-cached && !root.model-loading && !root.bg-download-active);
+                                        pending: root.bg-download-active || root.model-loading;
+                                    }
+                                }
+                                Text {
+                                    text: root.bg-download-active
+                                        ? "Speech model: Downloading " + root.bg-download-model + " (" + root.bg-download-pct + "%)…"
+                                        : root.model-loading
+                                            ? "Speech model: Warming up " + root.selected-model-name + "…"
+                                            : root.model-ready || root.model-cached || root.bg-download-done
+                                                ? "Speech model: " + root.selected-model-name + " ready"
+                                                : "Speech model: Not downloaded yet";
+                                    font-size: Theme.font-size-sm;
+                                    color: Theme.text;
+                                    vertical-alignment: center;
+                                    wrap: word-wrap;
+                                }
+                            }
+                            if !root.model-cached && !root.bg-download-active && !root.bg-download-done : Button {
+                                text: "Choose model";
+                                kind: ButtonKind.outline;
+                                clicked => { root.go-to-step(3); }
+                            }
+                        }
+
+                        // 4. Global hotkey
+                        HorizontalLayout {
+                            spacing: Theme.space-10;
+                            alignment: space-between;
+                            HorizontalLayout {
+                                spacing: Theme.space-8;
+                                horizontal-stretch: 1;
+                                VerticalLayout { alignment: center; CheckBadge { checked: root.hotkey-ok; pending: !root.hotkey-ok; } }
+                                Text {
+                                    text: root.hotkey-ok
+                                        ? "Shortcut: " + root.hotkey-display + (root.hotkey-mode-index == 1
+                                            ? " active globally (Hold mode — hold down while speaking)"
+                                            : " active globally (Toggle mode — press to start/stop)")
+                                        : "Shortcut: Could not register " + root.hotkey-display + " (use button below or change in General)";
+                                    font-size: Theme.font-size-sm;
+                                    color: Theme.text;
+                                    vertical-alignment: center;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
                     }
+
+                    // Action row: hotkey hint + direct Start/Stop test button
+                    HorizontalLayout {
+                        spacing: Theme.space-10;
+                        alignment: space-between;
+
+                        Text {
+                            text: root.is-dictating
+                                ? "Listening… speak a sentence, then press " + root.hotkey-display + " or click Stop."
+                                : root.try-hint != ""
+                                    ? root.try-hint
+                                    : "Click inside the box below and press " + root.hotkey-display + " — or click Start test.";
+                            font-size: Theme.font-size-sm;
+                            color: root.is-dictating ? Theme.accent-text : Theme.text-muted;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            wrap: word-wrap;
+                        }
+
+                        Button {
+                            horizontal-stretch: 0;
+                            text: root.is-dictating ? "Stop listening" : "Start test";
+                            kind: root.is-dictating ? ButtonKind.outline : ButtonKind.accent;
+                            enabled: root.model-cached || root.model-ready || root.bg-download-done;
+                            clicked => { root.toggle-test-dictation(); }
+                        }
+                    }
+
                     ThemedTextEdit {
-                        height: 140px;
+                        height: 112px;
                         text <=> root.try-text;
-                        font-size: Theme.font-size-lg;
+                        placeholder-text: "Click here, press " + root.hotkey-display + " (or Start test), speak a sentence, then stop…";
+                        font-size: Theme.font-size-base;
                     }
                 }
             }
         }
 
-        // Persistent background download bar (visible across all steps while downloading / done / error)
+        // Persistent background download bar (compact, visible across all steps while downloading / done / error)
         if root.bg-download-active || root.bg-download-done || root.bg-download-error : Rectangle {
             background: Theme.surface;
             vertical-stretch: 0;
@@ -425,9 +767,11 @@ export component OnboardingView inherits Rectangle {
                         alignment: end;
 
                         Text {
-                            text: root.bg-download-detail != ""
-                                ? root.bg-download-detail
-                                : root.bg-download-active ? root.bg-download-pct + "%" : "";
+                            text: root.bg-download-done
+                                ? "Ready"
+                                : root.bg-download-detail != ""
+                                    ? root.bg-download-detail
+                                    : root.bg-download-active ? root.bg-download-pct + "%" : "";
                             font-size: Theme.font-size-xs;
                             font-weight: 500;
                             color: root.bg-download-error ? Theme.error : Theme.text-muted;
@@ -452,7 +796,6 @@ export component OnboardingView inherits Rectangle {
         }
 
         // 6-part segmented blue step progress strip directly above the bottom navigation bar.
-        // Dynamically spans the exact popup width: step 1 = 1/6, step 2 = 2/6, step 3 = 3/6 (half), ..., step 6 = 6/6.
         Rectangle {
             vertical-stretch: 0;
             height: 4px;
@@ -470,6 +813,7 @@ export component OnboardingView inherits Rectangle {
 
         // Bottom nav bar
         Rectangle {
+            vertical-stretch: 0;
             height: 58px;
             background: Theme.bg;
 

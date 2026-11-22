@@ -12,7 +12,9 @@ use eqho_core::settings::{
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::flags::flag_image_for_language;
-use crate::{DashboardWindow, HistoryRowItem, LanguageOption, ModelCardItem, Theme};
+use crate::{
+    DashboardWindow, HistoryRowItem, LanguageOption, ModelCardItem, OnboardingModelOption, Theme,
+};
 
 const UI_SCALE_LEVELS: [f64; 5] = [1.0, 1.25, 1.5, 1.75, 2.0];
 const THEME_MODES: [&str; 3] = ["light", "dark", "system"];
@@ -326,21 +328,72 @@ pub fn build_language_options() -> Vec<LanguageOption> {
         .collect()
 }
 
-/// Build onboarding Step 4 recommended model copy: `(summary, direct_download_url)`.
+/// Build onboarding Step 4 recommended model copy: `(summary, browser_viewable_url)`.
 pub fn onboarding_model_copy(hw: HardwareClass, lang: &str) -> (String, String) {
     let rec_key = recommend_model(hw, lang);
-    let rec_info = model_info(rec_key);
-    let rec_size = rec_info
+    onboarding_model_copy_for_key(rec_key)
+}
+
+/// Build onboarding Step 4 summary + Hugging Face `blob/main/...` URL for a specific model key.
+pub fn onboarding_model_copy_for_key(model_key: &str) -> (String, String) {
+    let info = model_info(model_key);
+    let size = info
         .map(|m| model_size_label(m.size_mb))
         .unwrap_or_default();
-    let rec_url = rec_info
-        .map(|m| m.download_url.to_owned())
-        .unwrap_or_default();
+    let url = info.map(eqho_core::modelstore::ModelInfo::browse_url).unwrap_or_default();
     let summary = format!(
-        "Eqho needs to download its speech model once: {}, about {rec_size}. It stays on this computer.",
-        model_short_name(rec_key)
+        "Selected: {} (~{size}). Downloads once and stays offline on this computer.",
+        model_short_name(model_key)
     );
-    (summary, rec_url)
+    (summary, url)
+}
+
+/// Build 4 curated light-to-heavy model choices for Onboarding Step 4 tailored to language & hardware.
+pub fn build_onboarding_model_options(
+    hw: HardwareClass,
+    lang: &str,
+    selected_key: &str,
+    cached_keys: &[&str],
+) -> Vec<OnboardingModelOption> {
+    let recommended = recommend_model(hw, lang);
+    let picks: [(&str, &str); 4] = if lang == "en" {
+        [
+            ("base-q5", "Lightest & fastest — works on any CPU"),
+            ("small.en-q5", "Fast & accurate on CPU, small footprint"),
+            ("large-v3-turbo-q5", "Balanced — near-top accuracy, 3× lighter"),
+            ("distil-large-v3", "Highest accuracy — best with a GPU"),
+        ]
+    } else {
+        [
+            ("base-q5", "Lightest & fastest multilingual — any CPU"),
+            ("small-q5", "Fast multilingual on CPU, small footprint"),
+            ("large-v3-turbo-q5", "Balanced — high accuracy, 3× lighter"),
+            ("large-v3-turbo", "Highest multilingual accuracy — best with GPU"),
+        ]
+    };
+
+    let active_key = if picks.iter().any(|(k, _)| *k == selected_key) {
+        selected_key
+    } else {
+        recommended
+    };
+
+    picks
+        .iter()
+        .filter_map(|&(key, tagline)| {
+            let info = model_info(key)?;
+            Some(OnboardingModelOption {
+                key: info.key.into(),
+                name: model_short_name(info.key).into(),
+                size_label: model_size_label(info.size_mb).into(),
+                tagline: tagline.into(),
+                browse_url: info.browse_url().into(),
+                is_recommended: info.key == recommended,
+                is_selected: info.key == active_key,
+                is_cached: cached_keys.contains(&info.key),
+            })
+        })
+        .collect()
 }
 
 /// Find the dropdown index for a language code (defaults to `0` = English).
@@ -470,9 +523,20 @@ pub fn apply_settings_to_window(
 
     window.set_onboarding_active(!settings.onboarding_done);
     window.set_onboarding_duck_mute(settings.volume_duck == "mute");
-    let (model_summary, model_url) = onboarding_model_copy(hw, &settings.language);
+    let rec_key = recommend_model(hw, &settings.language);
+    let selected_key = if settings.onboarding_done {
+        settings.model_size.as_str()
+    } else {
+        rec_key
+    };
+    let (model_summary, model_url) = onboarding_model_copy_for_key(selected_key);
+    window.set_onboarding_selected_model(selected_key.into());
+    window.set_onboarding_selected_model_name(model_short_name(selected_key).into());
     window.set_onboarding_model_summary(model_summary.into());
     window.set_onboarding_model_url(model_url.into());
+    window.set_onboarding_model_options(ModelRc::new(VecModel::from(
+        build_onboarding_model_options(hw, &settings.language, selected_key, &[]),
+    )));
     let hk = format_hotkey_display(&settings.hotkey);
     let how = if settings.hotkey_mode == "hold" {
         format!("Hold {hk} down, say a sentence, then let go.")

@@ -2,7 +2,7 @@
 import { Theme } from "@app-theme/theme.slint";
 import { Button, ButtonKind, ProgressLine } from "@damt-ui/kit.slint";
 import { ModelCardItem } from "types.slint";
-import { ScrollArea, SectionHeader, SectionCard } from "components.slint";
+import { ScrollArea, SectionCard } from "components.slint";
 
 component ModelCard inherits Rectangle {
     in property <ModelCardItem> item;
@@ -10,7 +10,7 @@ component ModelCard inherits Rectangle {
     callback download-clicked(string);
     callback delete-clicked(string);
 
-    background: Theme.surface;
+    background: Theme.bg;
     border-radius: Theme.radius-card;
     border-width: root.item.is_selected ? 2px : 1px;
     border-color: root.item.is_selected ? Theme.accent : Theme.border-subtle;
@@ -142,78 +142,82 @@ export component ModelsTab inherits Rectangle {
             }
 
             // ENGLISH OPTIMIZED
-            SectionHeader { text: "ENGLISH OPTIMIZED"; }
-            if root.two-col : VerticalLayout {
-                spacing: Theme.space-10;
-                for row-idx in Math.ceil(root.english-models.length / 2) : HorizontalLayout {
+            SectionCard {
+                title: "ENGLISH OPTIMIZED";
+                if root.two-col : VerticalLayout {
                     spacing: Theme.space-10;
-                    ModelCard {
-                        width: (parent.width - Theme.space-10) / 2;
-                        item: root.english-models[row-idx * 2];
-                        select-clicked(k) => { root.select-model(k); }
-                        download-clicked(k) => { root.download-model(k); }
-                        delete-clicked(k) => { root.delete-model(k); }
-                    }
-                    if row-idx * 2 + 1 < root.english-models.length : ModelCard {
-                        width: (parent.width - Theme.space-10) / 2;
-                        item: root.english-models[row-idx * 2 + 1];
-                        select-clicked(k) => { root.select-model(k); }
-                        download-clicked(k) => { root.download-model(k); }
-                        delete-clicked(k) => { root.delete-model(k); }
-                    }
-                    if row-idx * 2 + 1 >= root.english-models.length : Rectangle {
-                        width: (parent.width - Theme.space-10) / 2;
+                    for row-idx in Math.ceil(root.english-models.length / 2) : HorizontalLayout {
+                        spacing: Theme.space-10;
+                        ModelCard {
+                            width: (parent.width - Theme.space-10) / 2;
+                            item: root.english-models[row-idx * 2];
+                            select-clicked(k) => { root.select-model(k); }
+                            download-clicked(k) => { root.download-model(k); }
+                            delete-clicked(k) => { root.delete-model(k); }
+                        }
+                        if row-idx * 2 + 1 < root.english-models.length : ModelCard {
+                            width: (parent.width - Theme.space-10) / 2;
+                            item: root.english-models[row-idx * 2 + 1];
+                            select-clicked(k) => { root.select-model(k); }
+                            download-clicked(k) => { root.download-model(k); }
+                            delete-clicked(k) => { root.delete-model(k); }
+                        }
+                        if row-idx * 2 + 1 >= root.english-models.length : Rectangle {
+                            width: (parent.width - Theme.space-10) / 2;
+                        }
                     }
                 }
-            }
-            if !root.two-col : VerticalLayout {
-                spacing: Theme.space-10;
-                for m in root.english-models : ModelCard {
-                    item: m;
-                    select-clicked(k) => { root.select-model(k); }
-                    download-clicked(k) => { root.download-model(k); }
-                    delete-clicked(k) => { root.delete-model(k); }
+                if !root.two-col : VerticalLayout {
+                    spacing: Theme.space-10;
+                    for m in root.english-models : ModelCard {
+                        item: m;
+                        select-clicked(k) => { root.select-model(k); }
+                        download-clicked(k) => { root.download-model(k); }
+                        delete-clicked(k) => { root.delete-model(k); }
+                    }
                 }
             }
 
             // MULTILINGUAL
-            SectionHeader { text: "MULTILINGUAL"; }
-            if root.two-col : VerticalLayout {
-                spacing: Theme.space-10;
-                for row-idx in Math.ceil(root.multilingual-models.length / 2) : HorizontalLayout {
+            SectionCard {
+                title: "MULTILINGUAL";
+                if root.two-col : VerticalLayout {
                     spacing: Theme.space-10;
-                    ModelCard {
-                        width: (parent.width - Theme.space-10) / 2;
-                        item: root.multilingual-models[row-idx * 2];
-                        select-clicked(k) => { root.select-model(k); }
-                        download-clicked(k) => { root.download-model(k); }
-                        delete-clicked(k) => { root.delete-model(k); }
-                    }
-                    if row-idx * 2 + 1 < root.multilingual-models.length : ModelCard {
-                        width: (parent.width - Theme.space-10) / 2;
-                        item: root.multilingual-models[row-idx * 2 + 1];
-                        select-clicked(k) => { root.select-model(k); }
-                        download-clicked(k) => { root.download-model(k); }
-                        delete-clicked(k) => { root.delete-model(k); }
-                    }
-                    if row-idx * 2 + 1 >= root.multilingual-models.length : Rectangle {
-                        width: (parent.width - Theme.space-10) / 2;
+                    for row-idx in Math.ceil(root.multilingual-models.length / 2) : HorizontalLayout {
+                        spacing: Theme.space-10;
+                        ModelCard {
+                            width: (parent.width - Theme.space-10) / 2;
+                            item: root.multilingual-models[row-idx * 2];
+                            select-clicked(k) => { root.select-model(k); }
+                            download-clicked(k) => { root.download-model(k); }
+                            delete-clicked(k) => { root.delete-model(k); }
+                        }
+                        if row-idx * 2 + 1 < root.multilingual-models.length : ModelCard {
+                            width: (parent.width - Theme.space-10) / 2;
+                            item: root.multilingual-models[row-idx * 2 + 1];
+                            select-clicked(k) => { root.select-model(k); }
+                            download-clicked(k) => { root.download-model(k); }
+                            delete-clicked(k) => { root.delete-model(k); }
+                        }
+                        if row-idx * 2 + 1 >= root.multilingual-models.length : Rectangle {
+                            width: (parent.width - Theme.space-10) / 2;
+                        }
                     }
                 }
-            }
-            if !root.two-col : VerticalLayout {
-                spacing: Theme.space-10;
-                for m in root.multilingual-models : ModelCard {
-                    item: m;
-                    select-clicked(k) => { root.select-model(k); }
-                    download-clicked(k) => { root.download-model(k); }
-                    delete-clicked(k) => { root.delete-model(k); }
+                if !root.two-col : VerticalLayout {
+                    spacing: Theme.space-10;
+                    for m in root.multilingual-models : ModelCard {
+                        item: m;
+                        select-clicked(k) => { root.select-model(k); }
+                        download-clicked(k) => { root.download-model(k); }
+                        delete-clicked(k) => { root.delete-model(k); }
+                    }
                 }
             }
 
             // STORAGE
-            SectionHeader { text: "STORAGE"; }
             SectionCard {
+                title: "STORAGE";
                 HorizontalLayout {
                     spacing: Theme.space-12;
                     alignment: space-between;

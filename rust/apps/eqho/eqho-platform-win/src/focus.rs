@@ -60,6 +60,11 @@ impl FocusTracker for WinFocusTracker {
             return false;
         }
         let target = HWND(window.0 as *mut c_void);
+        // SAFETY: If `target` is already the active foreground window (e.g. dictating into Eqho's
+        // own Onboarding test box), avoid calling `SetForegroundWindow` from a worker thread.
+        if unsafe { GetForegroundWindow() } == target {
+            return true;
+        }
         // SAFETY: `target` is a non-null `HWND` from `WindowHandle`.
         if !unsafe { SetForegroundWindow(target) }.as_bool() {
             return false;

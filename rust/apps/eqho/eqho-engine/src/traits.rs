@@ -53,6 +53,7 @@ pub trait UiEventSink: Send + Sync + 'static {
     fn notify(&self, message: &str);
     fn on_model_progress(&self, model_key: &str, message: &str, fraction: Option<f32>);
     fn on_recovery_available(&self, text: Option<&str>);
+    fn on_dictation_committed(&self, _text: &str) {}
     fn on_history_changed(&self);
 }
 
