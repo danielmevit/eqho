@@ -1,0 +1,1 @@
+- **R2a (`eqho-platform-win`):** Implemented pure-Rust helpers (`pure.rs`) and Windows OS-service implementations (`gpu`, `memory`, `mic_privacy`, `volume`, `focus`, `clipboard`, `injector`, `hotkey`, `audio`, and `WinEqhoPlatform`) satisfying all frozen `eqho-platform` contracts.
