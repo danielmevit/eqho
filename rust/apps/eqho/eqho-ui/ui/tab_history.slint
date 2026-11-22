@@ -15,7 +15,7 @@ export component HistoryTab inherits Rectangle {
     callback export-history();
     callback clear-history();
     callback copy-history-entry(string);
-    callback delete-history-entry(float);
+    callback delete-history-entry(string);
 
     ScrollArea {
         width: parent.width;
@@ -98,7 +98,7 @@ export component HistoryTab inherits Rectangle {
                         }
                         CloseButton {
                             accessible-name: "Delete entry";
-                            clicked => { root.delete-history-entry(row.ts); }
+                            clicked => { root.delete-history-entry(row.ts_key); }
                         }
                     }
                 }

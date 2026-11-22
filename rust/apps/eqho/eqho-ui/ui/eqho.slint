@@ -81,7 +81,7 @@ export component DashboardWindow inherits Window {
     callback export-history();
     callback clear-history();
     callback copy-history-entry(string);
-    callback delete-history-entry(float);
+    callback delete-history-entry(string);
 
     // Settings tab properties & callbacks
     in-out property <int> theme-mode-index: 1;
@@ -310,6 +310,7 @@ export component EqhoTray inherits SystemTrayIcon {
 
     icon: root.tray-icon;
     tooltip: root.tray-tooltip;
+    clicked => { root.tray-clicked(); }
 
     Menu {
         MenuItem {

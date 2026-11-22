@@ -127,13 +127,13 @@ fn model_cards_and_history_rows_populate_and_fire_callbacks() {
     win.invoke_copy_history_entry("Hello world".into());
     assert_eq!(copied.borrow().as_str(), "Hello world");
 
-    let deleted_ts = Rc::new(RefCell::new(0.0_f32));
+    let deleted_ts = Rc::new(RefCell::new(String::new()));
     let deleted_c = Rc::clone(&deleted_ts);
     win.on_delete_history_entry(move |ts| {
-        *deleted_c.borrow_mut() = ts;
+        *deleted_c.borrow_mut() = ts.to_string();
     });
-    win.invoke_delete_history_entry(1_700_000_100.0);
-    assert!((*deleted_ts.borrow() - 1_700_000_100.0).abs() < 100.0);
+    win.invoke_delete_history_entry("1700000100.000000".into());
+    assert_eq!(deleted_ts.borrow().as_str(), "1700000100.000000");
 }
 
 #[test]

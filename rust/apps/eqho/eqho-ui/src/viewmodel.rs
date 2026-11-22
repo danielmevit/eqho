@@ -157,7 +157,7 @@ pub fn build_history_rows(entries: &[TranscriptEntry]) -> Vec<HistoryRowItem> {
                 meta_parts.push(e.lang.as_str());
             }
             HistoryRowItem {
-                ts: e.ts as f32,
+                ts_key: format!("{:.6}", e.ts).into(),
                 timestamp_text: format_timestamp_utc(e.ts).into(),
                 meta_text: meta_parts.join("  ·  ").into(),
                 text: e.text.clone().into(),
