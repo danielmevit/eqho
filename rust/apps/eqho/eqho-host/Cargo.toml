@@ -1,0 +1,21 @@
+[package]
+name = "eqho-host"
+description = "Out-of-process whisper.cpp 1.8.4 model host (IPC protocol, dynamic whisper.dll FFI, GGML HuggingFace downloader, kill-on-switch/timeout)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+eqho-core.workspace = true
+libloading.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
+
+[lints]
+workspace = true

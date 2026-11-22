@@ -1,0 +1,184 @@
+# Eqho design tokens — single source of truth for colours, radii, spacing and type sizes
+# (matching docs/ai/DESIGN_SYSTEM.md and src/theme.py).
+# Regenerate outputs with:
+#   cargo run -p damt-theme --example gen -- apps/eqho/theme/tokens.toml apps/eqho/theme/generated
+
+# --- Core palette ---------------------------------------------------------------------------
+
+[color.bg]
+light = "#F5F6F8"          # light gray canvas
+dark = "#0A0A0B"           # near-black canvas
+
+[color.surface]
+light = "#FFFFFF"          # white cards, sidebar
+dark = "#151517"           # cards, sidebar
+
+[color.surface-tertiary]
+light = "#ECEDF0"          # inputs, nested surfaces
+dark = "#1F1F23"
+
+[color.surface-hover]
+light = "#E2E4E8"
+dark = "#29292E"
+
+[color.text]
+light = "#1A1C1F"          # primary text
+dark = "#F5F6F8"
+
+[color.text-muted]
+light = "#4B4F58"          # secondary text (AA on Surface)
+dark = "#A1A1AA"
+
+[color.text-subtle]
+light = "#74747E"          # hints, disabled text
+dark = "#85858F"
+
+[color.accent]
+light = "#0969DA"          # Eqho light blue (5.17:1 with white on-accent, >3:1 on bg/surface)
+dark = "#58A6FF"           # Eqho dark blue (7.4:1 with #0A0A0B on-accent, >6:1 on bg/surface)
+
+[color.accent-text]
+light = "#0969DA"          # links and small accent text
+dark = "#58A6FF"
+
+[color.accent-text-pressed]
+light = "#0550AE"
+dark = "#79B8FF"
+
+[color.accent-muted]
+light = "#DBEAFE"
+dark = "#16283F"
+
+[color.accent-selected]
+light = "#B3D1F5"
+dark = "#1F6FEB"
+
+[color.on-accent]
+light = "#FFFFFF"          # white on deep light-mode blue
+dark = "#0A0A0B"           # near-black on bright Eqho blue
+
+[color.success]
+light = "#1A7F37"
+dark = "#3FB950"
+
+[color.success-muted]
+light = "#DAFBE1"
+dark = "#1A3A2A"
+
+[color.warning]
+light = "#9A6700"
+dark = "#D29922"
+
+[color.warning-muted]
+light = "#FFF8C5"
+dark = "#3D2E00"
+
+[color.error]
+light = "#CF222E"
+dark = "#F85149"
+
+[color.attention]
+light = "#9A6700"
+dark = "#D29922"
+
+# --- Derived colours & control borders ------------------------------------------------------
+
+[color.border]
+light = "#D4D6DC"
+dark = "#2A2A30"
+
+[color.border-subtle]
+light = "#E4E6EA"
+dark = "#232327"
+
+[color.input-border]
+ref = "text-muted"
+alpha = { light = 0.70, dark = 0.60 }
+
+[color.divider]
+ref = "text"
+alpha = 0.08
+
+[color.progress-track]
+ref = "text"
+alpha = { light = 0.10, dark = 0.08 }
+
+[color.button-outline-hover]
+ref = "text"
+alpha = 0.07
+
+[color.button-outline-pressed]
+ref = "text"
+alpha = 0.12
+
+[color.overlay-bg]
+light = "#FFFFFF"
+dark = "#151517"
+
+[color.overlay-fg]
+light = "#1A1C1F"
+dark = "#F5F6F8"
+
+# --- Accent ramp & button states (all AA-verified against on-accent) ------------------------
+
+[color.system-accent]
+light = "#0969DA"
+dark = "#58A6FF"
+
+[color.system-accent-light-1]
+light = "#218BFF"
+dark = "#79B8FF"
+
+[color.system-accent-dark-1]
+light = "#0550AE"
+dark = "#4096FF"
+
+[color.system-accent-dark-2]
+light = "#033D8B"
+dark = "#2B85F5"
+
+[color.button-accent-hover]
+light = { ref = "system-accent-dark-1" }
+dark = { ref = "system-accent-light-1" }
+
+[color.button-accent-pressed]
+light = { ref = "system-accent-dark-2" }
+dark = { ref = "system-accent-dark-1" }
+
+# --- Corner radii (px) ----------------------------------------------------------------------
+
+[radius]
+sm = 4
+md = 6
+lg = 8
+xl = 12
+card = 8
+button = 4
+toggle = 10
+
+# --- Spacing scale (px) ---------------------------------------------------------------------
+
+[space]
+2 = 2
+4 = 4
+6 = 6
+8 = 8
+10 = 10
+12 = 12
+14 = 14
+16 = 16
+24 = 24
+32 = 32
+
+# --- Font sizes (px) ------------------------------------------------------------------------
+
+[font.size]
+xs = 10
+sm = 11
+help = 11
+label = 13
+base = 13
+body = 13
+lg = 15
+xl = 17
+title = 20

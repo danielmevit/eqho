@@ -1,0 +1,26 @@
+[package]
+name = "eqho-spike"
+description = "R0 measurement spike: whisper.cpp 1.8.4 Vulkan/CPU speed & accuracy, per-pixel alpha pill animation, Slint software tray RAM/startup."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "eqho-spike"
+path = "src/main.rs"
+
+[dependencies]
+damt-app.workspace = true
+libloading.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+slint.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
+
+[lints]
+workspace = true

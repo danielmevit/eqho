@@ -1,0 +1,20 @@
+[package]
+name = "damt-theme"
+description = "Design tokens for the damt.xyz apps: one tokens.toml validated and generated into Slint, CSS and Rust."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+roxmltree.workspace = true
+slint-interpreter.workspace = true
+spin_on.workspace = true
+
+[lints]
+workspace = true

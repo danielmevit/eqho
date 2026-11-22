@@ -1,0 +1,1125 @@
+// damt-ui: the app-neutral component kit. Colours and sizes come from the consuming app's generated
+// `Theme` global, mapped by the app's build script as the `@app-theme` library path.
+// Compact density, no italics anywhere, focus ring in Accent.
+import { Theme } from "@app-theme/theme.slint";
+
+export enum ButtonKind { accent, outline, text }
+
+// Button with three classes: accent (filled), outline (1 px muted border), text (muted label only).
+// Accent labels are regular at rest and semibold on hover; the width is reserved for the semibold
+// label (a hidden measuring copy), so the button never changes size.
+export component Button inherits Rectangle {
+    in property <string> text;
+    in property <ButtonKind> kind: ButtonKind.outline;
+    in property <bool> enabled: true;
+    in property <length> font-size: Theme.font-size-label;
+    in property <int> font-weight: 400;
+    in property <length> padding-x: kind == ButtonKind.accent ? 12px : kind == ButtonKind.outline ? 10px : 8px;
+    in property <length> padding-y: 6px;
+    in property <length> fixed-width: 0px;
+    in property <length> fixed-height: 0px;
+    in property <string> accessible-name: root.text;
+    out property <bool> has-hover: touch.has-hover;
+    out property <bool> pressed: touch.pressed;
+    callback clicked();
+
+    min-width: root.fixed-width > 0 ? root.fixed-width : Math.max(label.preferred-width, bold-measure.preferred-width) + 2 * root.padding-x;
+    max-width: root.fixed-width > 0 ? root.fixed-width : 100000px;
+    min-height: root.fixed-height > 0 ? root.fixed-height : Math.max(label.preferred-height, bold-measure.preferred-height) + 2 * root.padding-y;
+    max-height: root.fixed-height > 0 ? root.fixed-height : 100000px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+
+    border-radius: Theme.radius-button;
+    border-width: root.kind == ButtonKind.outline ? 1px : 0px;
+    border-color: Theme.text-muted;
+    background: root.kind == ButtonKind.accent
+        ? (!root.enabled ? Theme.accent : touch.pressed ? Theme.button-accent-pressed : touch.has-hover ? Theme.button-accent-hover : Theme.accent)
+        : root.kind == ButtonKind.outline
+            ? (!root.enabled ? transparent : touch.pressed ? Theme.button-outline-pressed : touch.has-hover ? Theme.button-outline-hover : transparent)
+            : transparent;
+    opacity: root.enabled ? 1.0 : 0.4;
+
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if (root.enabled) { root.clicked(); } }
+
+    // Measures the semibold label so the hover weight never shifts the layout.
+    bold-measure := Text {
+        text: root.text;
+        font-size: root.font-size;
+        font-weight: 600;
+        visible: false;
+        accessible-role: none;
+    }
+
+    label := Text {
+        text: root.text;
+        font-size: root.font-size;
+        font-weight: root.kind == ButtonKind.accent && root.enabled && touch.has-hover ? 600 : root.font-weight;
+        font-italic: false;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        color: root.kind == ButtonKind.accent ? Theme.on-accent
+            : root.kind == ButtonKind.outline ? Theme.text
+            : (root.enabled && (touch.has-hover || touch.pressed) ? Theme.text : Theme.text-muted);
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        focus-on-click: false;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    // Focus ring: 2 px Accent, 3 px outside the button.
+    if focus.has-focus : Rectangle {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-width: 2px;
+        border-color: Theme.accent;
+        border-radius: Theme.radius-button + 3px;
+    }
+}
+
+// Close button: a drawn × (no font glyph, so it never depends on font coverage), 28 x 28,
+// muted, Text colour on hover/pressed, keyboard focus ring in Accent.
+export component CloseButton inherits Rectangle {
+    in property <string> accessible-name;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: 28px;
+    height: 28px;
+    border-radius: Theme.radius-button;
+    background: touch.pressed ? Theme.button-outline-pressed : touch.has-hover ? Theme.button-outline-hover : transparent;
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    accessible-action-default => { if (root.enabled) { root.clicked(); } }
+    Path {
+        width: 10px;
+        height: 10px;
+        commands: "M0 0 L10 10 M10 0 L0 10";
+        viewbox-width: 10;
+        viewbox-height: 10;
+        stroke: (touch.has-hover || touch.pressed) ? Theme.text : Theme.text-muted;
+        stroke-width: 1.2px;
+        fill: transparent;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    focus := FocusScope {
+        enabled: root.enabled;
+        focus-on-click: false;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n") { root.clicked(); return accept; }
+            reject
+        }
+    }
+    if focus.has-focus : Rectangle {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-width: 2px;
+        border-color: Theme.accent;
+        border-radius: Theme.radius-button + 3px;
+    }
+}
+
+// "Try …" link: left-aligned accent text with pointer cursor, hover underline, pressed darker accent,
+// and keyboard focus ring consistent with the kit's other focusable controls.
+export component LinkButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    in property <length> font-size: Theme.font-size-label;
+    in property <int> font-weight: 400;
+    in property <length> padding-x: 0px;
+    in property <length> padding-y: 6px;
+    in property <length> fixed-width: 0px;
+    in property <length> fixed-height: 0px;
+    in property <string> accessible-name: root.text;
+    out property <bool> has-hover: touch.has-hover;
+    out property <bool> pressed: touch.pressed;
+    callback clicked();
+
+    // Text, not a fill: accent-text (4.5:1 in both themes; the dark fill is too dark for small text).
+    property <color> link-color: !root.enabled ? Theme.accent-text
+        : touch.pressed ? Theme.accent-text-pressed
+        : Theme.accent-text;
+
+    min-width: root.fixed-width > 0 ? root.fixed-width : label.preferred-width + 2 * root.padding-x;
+    max-width: root.fixed-width > 0 ? root.fixed-width : 100000px;
+    min-height: root.fixed-height > 0 ? root.fixed-height : label.preferred-height + 2 * root.padding-y;
+    max-height: root.fixed-height > 0 ? root.fixed-height : 100000px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    background: transparent;
+    opacity: root.enabled ? 1.0 : 0.4;
+
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if (root.enabled) { root.clicked(); } }
+
+    label := Text {
+        text: root.text;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        font-italic: false;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        color: root.link-color;
+    }
+
+    if root.enabled && (touch.has-hover || touch.pressed) : Rectangle {
+        x: (parent.width - label.preferred-width) / 2;
+        y: (parent.height + label.preferred-height) / 2 - 1px;
+        width: label.preferred-width;
+        height: 1px;
+        background: root.link-color;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        focus-on-click: false;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    // Focus ring: 2 px Accent, 3 px outside the link.
+    if focus.has-focus : Rectangle {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-width: 2px;
+        border-color: Theme.accent;
+        border-radius: Theme.radius-button + 3px;
+    }
+}
+
+// Card surface: Surface fill, 8 px radius, optional 1 px border and drop shadow.
+export component Card inherits Rectangle {
+    in property <bool> bordered: true;
+    in property <bool> shadow: true;
+    background: Theme.surface;
+    border-radius: Theme.radius-card;
+    border-width: root.bordered ? 1px : 0px;
+    border-color: Theme.border;
+    // 10 px blur + 4 px offset stays inside a 16 px window margin (Avalonia's 16 px blur is a softer
+    // Gaussian of similar reach).
+    drop-shadow-blur: root.shadow ? 10px : 0px;
+    drop-shadow-offset-y: root.shadow ? 4px : 0px;
+    drop-shadow-color: root.shadow ? #0000002A : transparent;
+}
+
+// Toggle switch, 40 x 20. Both states stay in the accent family: off = accent outline + accent knob,
+// on = accent fill + surface knob. Hover = accent light-1, pressed = accent dark-1.
+export component Toggle inherits Rectangle {
+    in-out property <bool> checked;
+    in property <bool> enabled: true;
+    in property <string> accessible-name;
+    callback toggled(bool);
+
+    width: 40px;
+    height: 20px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    opacity: root.enabled ? 1.0 : 0.4;
+
+    property <color> tone: !root.enabled ? Theme.accent
+        : touch.pressed ? Theme.system-accent-dark-1
+        : touch.has-hover ? Theme.system-accent-light-1
+        : Theme.accent;
+
+    accessible-role: switch;
+    accessible-checkable: true;
+    accessible-checked: root.checked;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if (root.enabled) { root.flip(); } }
+
+    function flip() {
+        root.checked = !root.checked;
+        root.toggled(root.checked);
+    }
+
+    track := Rectangle {
+        border-radius: Theme.radius-toggle;
+        border-width: 1px;
+        border-color: root.tone;
+        background: root.checked ? root.tone : transparent;
+    }
+
+    knob := Rectangle {
+        width: 10px;
+        height: 10px;
+        y: 5px;
+        x: root.checked ? root.width - 15px : 5px;
+        border-radius: 5px;
+        background: root.checked ? Theme.surface : root.tone;
+        animate x { duration: 120ms; easing: ease-out; }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.flip(); }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        focus-on-click: false;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n") {
+                root.flip();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus : Rectangle {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-width: 2px;
+        border-color: Theme.accent;
+        border-radius: Theme.radius-toggle + 3px;
+    }
+}
+
+// Thin progress line: 3 px, rounded, Accent fill on the progress track. `progress` is 0..1.
+// For screen readers it is a progress indicator 0..100; `accessible-text` (e.g. "4:12") replaces the
+// percentage as the announced value when set.
+export component ProgressLine inherits Rectangle {
+    in property <float> progress;
+    in property <string> accessible-name;
+    in property <string> accessible-text;
+    height: 3px;
+    border-radius: 1.5px;
+    background: Theme.progress-track;
+    accessible-role: progress-indicator;
+    accessible-label: root.accessible-name;
+    accessible-value: root.accessible-text != "" ? root.accessible-text : Math.round(Math.clamp(root.progress, 0, 1) * 100);
+    accessible-value-minimum: 0;
+    accessible-value-maximum: 100;
+    Rectangle {
+        x: 0;
+        width: parent.width * Math.clamp(root.progress, 0, 1);
+        height: parent.height;
+        border-radius: 1.5px;
+        background: Theme.accent;
+    }
+}
+
+// ---- Settings V2 controls (promoted from the Ocy settings concepts) ----
+
+// Drawn chevron (down by default, `up` flips it). A path, never a glyph.
+export component Chevron inherits Path {
+    in property <bool> up: false;
+    width: 8px;
+    height: 5px;
+    commands: root.up ? "M0 5 L4 1 L8 5" : "M0 1 L4 5 L8 1";
+    viewbox-width: 8;
+    viewbox-height: 5;
+    stroke-width: 1.3px;
+    fill: transparent;
+    accessible-role: none;
+}
+
+// Drawn check mark.
+export component Check inherits Path {
+    width: 10px;
+    height: 8px;
+    commands: "M1 4 L4 7 L9 1";
+    viewbox-width: 10;
+    viewbox-height: 8;
+    stroke-width: 1.6px;
+    fill: transparent;
+    accessible-role: none;
+}
+
+// Small muted caption used as an inline group header.
+export component Caption inherits Text {
+    font-size: Theme.font-size-help;
+    font-weight: 600;
+    color: Theme.text-muted;
+    wrap: word-wrap;
+}
+
+// Slider: label and its plain-language value on one line, a 4 px track with a 14 px knob below.
+// A press sets the value at once (first click works); dragging follows the pointer. Keys: Left/Down and
+// Right/Up step, PageUp/PageDown step 10x, Home/End jump to the ends. For screen readers it is a
+// slider whose value is `value-text` (the host's whole phrase, unit included).
+export component Slider inherits Rectangle {
+    in property <string> label;
+    in property <string> value-text;
+    in property <string> accessible-name: root.label;
+    in-out property <int> value;
+    in property <int> minimum: 0;
+    in property <int> maximum: 100;
+    in property <int> step: 1;
+    in property <bool> enabled: true;
+    callback edited(int);
+
+    min-height: lay.preferred-height;
+    min-width: 96px;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+    opacity: root.enabled ? 1.0 : 0.5;
+
+    accessible-role: slider;
+    accessible-label: root.accessible-name;
+    accessible-enabled: root.enabled;
+    accessible-value: root.value-text != "" ? root.value-text : root.value;
+    accessible-value-minimum: root.minimum;
+    accessible-value-maximum: root.maximum;
+    accessible-value-step: root.step;
+    accessible-action-increment => { if (root.enabled) { root.set-value(root.value + root.step); } }
+    accessible-action-decrement => { if (root.enabled) { root.set-value(root.value - root.step); } }
+    accessible-action-set-value(v) => { if (root.enabled && v.is-float()) { root.set-value(v.to-float().round()); } }
+
+    function set-value(v: int) {
+        let snapped = root.minimum + Math.round((v - root.minimum) / Math.max(1, root.step)) * Math.max(1, root.step);
+        let c = Math.clamp(snapped, root.minimum, root.maximum);
+        if (c != root.value) {
+            root.value = c;
+            root.edited(c);
+        }
+    }
+    function set-from-x(x: length) {
+        let t = Math.clamp((x - 7px) / Math.max(1px, track.width - 14px), 0, 1);
+        root.set-value(root.minimum + Math.round(t * (root.maximum - root.minimum)));
+    }
+
+    lay := VerticalLayout {
+        spacing: 4px;
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: root.label;
+                font-size: Theme.font-size-label;
+                color: Theme.text;
+                wrap: word-wrap;
+                horizontal-stretch: 1;
+                accessible-role: none;
+            }
+            Text {
+                text: root.value-text;
+                font-size: Theme.font-size-label;
+                font-weight: 600;
+                color: Theme.text;
+                horizontal-alignment: right;
+                horizontal-stretch: 0;
+                accessible-role: none;
+            }
+        }
+        track := Rectangle {
+            height: 16px;
+            property <float> t: (root.value - root.minimum) / Math.max(1, root.maximum - root.minimum);
+            Rectangle {
+                y: (parent.height - 4px) / 2;
+                height: 4px;
+                border-radius: 2px;
+                background: Theme.progress-track;
+            }
+            Rectangle {
+                x: 0;
+                y: (parent.height - 4px) / 2;
+                width: (parent.width - 14px) * parent.t + 7px;
+                height: 4px;
+                border-radius: 2px;
+                background: Theme.accent;
+            }
+            Rectangle {
+                x: (parent.width - 14px) * parent.t;
+                y: 1px;
+                width: 14px;
+                height: 14px;
+                border-radius: 7px;
+                background: touch.pressed ? Theme.system-accent-dark-1 : touch.has-hover ? Theme.system-accent-light-1 : Theme.accent;
+                border-width: 2px;
+                border-color: Theme.surface;
+            }
+            if focus.has-focus : Rectangle {
+                x: (parent.width - 14px) * parent.t - 3px;
+                y: -2px;
+                width: 20px;
+                height: 20px;
+                border-radius: 10px;
+                border-width: 2px;
+                border-color: Theme.accent;
+            }
+            touch := TouchArea {
+                enabled: root.enabled;
+                mouse-cursor: pointer;
+                pointer-event(event) => {
+                    if (event.kind == PointerEventKind.down && event.button == PointerEventButton.left) {
+                        root.set-from-x(self.mouse-x);
+                    }
+                }
+                moved => { if (self.pressed) { root.set-from-x(self.mouse-x); } }
+            }
+        }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        focus-on-click: false;
+        key-pressed(event) => {
+            if (event.text == Key.LeftArrow || event.text == Key.DownArrow) { root.set-value(root.value - root.step); return accept; }
+            if (event.text == Key.RightArrow || event.text == Key.UpArrow) { root.set-value(root.value + root.step); return accept; }
+            if (event.text == Key.PageDown) { root.set-value(root.value - 10 * root.step); return accept; }
+            if (event.text == Key.PageUp) { root.set-value(root.value + 10 * root.step); return accept; }
+            if (event.text == Key.Home) { root.set-value(root.minimum); return accept; }
+            if (event.text == Key.End) { root.set-value(root.maximum); return accept; }
+            reject
+        }
+    }
+}
+
+// Segmented tab list: equal segments, the selected one in accent fill with on-accent text. Labels wrap.
+// One tab stop: Left/Right (and Home/End) move the selection, Space/Enter re-pick the current tab.
+export component TabList inherits Rectangle {
+    in property <[string]> items;
+    in-out property <int> selected;
+    in property <string> accessible-name;
+    callback picked(int);
+
+    min-height: Math.max(30px, lay.preferred-height);
+    border-radius: Theme.radius-button;
+    border-width: 1px;
+    border-color: Theme.input-border;
+    accessible-role: tab-list;
+    accessible-label: root.accessible-name;
+
+    function pick(i: int) {
+        let c = Math.clamp(i, 0, root.items.length - 1);
+        root.selected = c;
+        root.picked(c);
+    }
+
+    lay := HorizontalLayout {
+        padding: 2px;
+        spacing: 2px;
+        for item[i] in root.items : Rectangle {
+            // Equal segments: no preferred width, so the layout splits the row evenly.
+            preferred-width: 0px;
+            horizontal-stretch: 1;
+            border-radius: Theme.radius-button - 2px;
+            background: i == root.selected ? Theme.accent : seg.pressed ? Theme.button-outline-pressed : seg.has-hover ? Theme.button-outline-hover : transparent;
+            accessible-role: tab;
+            accessible-label: item;
+            accessible-item-selectable: true;
+            accessible-item-selected: i == root.selected;
+            accessible-item-index: i;
+            accessible-item-count: root.items.length;
+            accessible-action-default => { root.pick(i); }
+            HorizontalLayout {
+                padding-left: 6px;
+                padding-right: 6px;
+                padding-top: 4px;
+                padding-bottom: 4px;
+                Text {
+                    text: item;
+                    font-size: Theme.font-size-label;
+                    // White on the green: regular, semibold only while hovered (equal-width segments, no shift).
+                    font-weight: i == root.selected && seg.has-hover ? 600 : 400;
+                    color: i == root.selected ? Theme.on-accent : Theme.text;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                    accessible-role: none;
+                }
+            }
+            seg := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.pick(i); }
+            }
+        }
+    }
+
+    focus := FocusScope {
+        focus-on-click: false;
+        key-pressed(event) => {
+            if (event.text == Key.LeftArrow || event.text == Key.UpArrow) { root.pick(root.selected - 1); return accept; }
+            if (event.text == Key.RightArrow || event.text == Key.DownArrow) { root.pick(root.selected + 1); return accept; }
+            if (event.text == Key.Home) { root.pick(0); return accept; }
+            if (event.text == Key.End) { root.pick(root.items.length - 1); return accept; }
+            if (event.text == " " || event.text == "\n") { root.pick(root.selected); return accept; }
+            reject
+        }
+    }
+
+    if focus.has-focus : Rectangle {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-width: 2px;
+        border-color: Theme.accent;
+        border-radius: Theme.radius-button + 3px;
+    }
+}
+
+// Preset card: a short title and a summary; selected = 2 px accent border + drawn check.
+// A toggle button for screen readers (checked = selected).
+export component PresetCard inherits Rectangle {
+    in property <string> title;
+    in property <string> summary;
+    in property <bool> selected;
+    // Optional decorative glyph before the title (20 px); empty shows nothing.
+    in property <image> glyph;
+    callback picked();
+
+    horizontal-stretch: 1;
+    min-height: lay.preferred-height;
+    border-radius: Theme.radius-card;
+    // Opaque surface; the hover tint and the outline are children so nothing paints over the outline.
+    background: Theme.surface;
+
+    accessible-role: button;
+    accessible-label: root.title;
+    accessible-description: root.summary;
+    accessible-checkable: true;
+    accessible-checked: root.selected;
+    accessible-action-default => { root.picked(); }
+
+    // Hover / pressed tint over the opaque surface.
+    Rectangle {
+        border-radius: Theme.radius-card;
+        background: touch.pressed ? Theme.button-outline-pressed : touch.has-hover && !root.selected ? Theme.button-outline-hover : transparent;
+    }
+
+    lay := VerticalLayout {
+        padding: 10px;
+        spacing: 2px;
+        alignment: start;
+        HorizontalLayout {
+            spacing: 6px;
+            if root.glyph.width > 0 : Image {
+                source: root.glyph;
+                width: 20px;
+                height: 20px;
+                image-fit: contain;
+                accessible-role: none;
+            }
+            Text {
+                text: root.title;
+                font-size: Theme.font-size-body;
+                font-weight: 600;
+                color: Theme.text;
+                wrap: word-wrap;
+                horizontal-stretch: 1;
+                accessible-role: none;
+            }
+            Rectangle {
+                width: 16px;
+                height: 16px;
+                border-radius: 8px;
+                background: root.selected ? Theme.accent : transparent;
+                if root.selected : Check { stroke: Theme.on-accent; }
+            }
+        }
+        Text {
+            text: root.summary;
+            font-size: Theme.font-size-help;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+            accessible-role: none;
+        }
+    }
+
+    // Outline drawn last so it stays visible: input-border (3:1 UI contrast) or a 2 px accent when selected.
+    Rectangle {
+        border-radius: Theme.radius-card;
+        border-width: root.selected ? 2px : 1px;
+        border-color: root.selected ? Theme.accent : Theme.input-border;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.picked(); }
+    }
+
+    focus := FocusScope {
+        focus-on-click: false;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n") { root.picked(); return accept; }
+            reject
+        }
+    }
+
+    if focus.has-focus : Rectangle {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-width: 2px;
+        border-color: Theme.accent;
+        border-radius: Theme.radius-card + 3px;
+    }
+}
+
+// Accordion section header: title left, drawn chevron right, the whole row clickable.
+// An expandable button for screen readers.
+export component AccordionHeader inherits Rectangle {
+    in property <string> text;
+    in property <bool> open;
+    callback toggled();
+
+    min-height: Math.max(34px, title.preferred-height + 12px);
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-expandable: true;
+    accessible-expanded: root.open;
+    accessible-action-default => { root.toggled(); }
+    accessible-action-expand => { root.toggled(); }
+
+    HorizontalLayout {
+        spacing: 8px;
+        title := Text {
+            text: root.text;
+            font-size: Theme.font-size-body;
+            font-weight: 600;
+            color: Theme.text;
+            vertical-alignment: center;
+            wrap: word-wrap;
+            horizontal-stretch: 1;
+            accessible-role: none;
+        }
+        VerticalLayout {
+            alignment: center;
+            Chevron { up: root.open; stroke: touch.has-hover ? Theme.text : Theme.text-muted; }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggled(); }
+    }
+
+    focus := FocusScope {
+        focus-on-click: false;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n") { root.toggled(); return accept; }
+            reject
+        }
+    }
+
+    if focus.has-focus : Rectangle {
+        x: -3px;
+        y: 0px;
+        width: parent.width + 6px;
+        height: parent.height;
+        border-width: 2px;
+        border-color: Theme.accent;
+        border-radius: Theme.radius-button;
+    }
+}
+
+// Dropdown picker: the selected entry + a drawn chevron in an outlined box; a click, Space/Enter or
+// Alt+Down opens the list, Up/Down change the selection directly (like a Windows combo box).
+// The open list is capped (`max-rows` rows, and the space inside the window below or above the box
+// when the host sets `window-height`) and scrolls with the wheel, touchpad or its thin scrollbar.
+// In the list: Up/Down/Home/End/PageUp/PageDown move the highlight (kept in view, and exposed to
+// screen readers as the selected item), Enter/Space pick, Esc closes, and a letter jumps to the next
+// item starting with it. Lists that fit are drawn exactly as before (no scrollbar).
+export component Dropdown inherits Rectangle {
+    in property <[string]> model;
+    in-out property <int> current-index;
+    in property <string> accessible-name;
+    in property <bool> enabled: true;
+    // The window's height, so the list fits inside it; 0 = unknown (only `max-rows` caps it).
+    in property <length> window-height: 0px;
+    in property <int> max-rows: 10;
+    callback selected(int);
+
+    // For hosts and tests: the open list's height, whether it scrolls, its scroll offset and the
+    // highlighted row.
+    out property <length> list-height: root.popup-h;
+    out property <bool> list-scrolls: root.content-h > root.popup-h;
+    out property <length> list-offset: -root.scroll-y;
+    out property <int> highlighted: root.hl;
+
+    public function open() { if (root.enabled) { popup.show(); } }
+
+    property <string> current-value: root.current-index >= 0 && root.current-index < root.model.length ? root.model[root.current-index] : "";
+    property <length> row-h: 28px;
+    property <length> pad: 4px;
+    property <length> content-h: root.model.length * root.row-h + 2 * root.pad;
+    property <length> cap: Math.min(root.content-h, root.max-rows * root.row-h + 2 * root.pad);
+    property <length> space-below: root.window-height - root.absolute-position.y - root.height - 2px - 8px;
+    property <length> space-above: root.absolute-position.y - 2px - 8px;
+    property <bool> popup-up: root.window-height > 0 && root.space-below < root.cap && root.space-above > root.space-below;
+    property <length> popup-h: root.window-height <= 0 ? root.cap
+        : Math.max(Math.min(root.cap, root.popup-up ? root.space-above : root.space-below), Math.min(root.cap, 3 * root.row-h + 2 * root.pad));
+    property <int> hl: root.current-index;
+    property <length> scroll-y: 0px;
+
+    min-width: Math.max(140px, val.preferred-width + 36px);
+    height: 28px;
+    horizontal-stretch: 0;
+    border-radius: Theme.radius-button;
+    border-width: 1px;
+    border-color: (touch.has-hover && root.enabled) ? Theme.text-muted : Theme.input-border;
+    background: touch.pressed ? Theme.button-outline-pressed : transparent;
+    opacity: root.enabled ? 1.0 : 0.5;
+
+    accessible-role: combobox;
+    accessible-label: root.accessible-name;
+    accessible-value: root.current-value;
+    accessible-enabled: root.enabled;
+    accessible-expandable: true;
+    accessible-action-default => { root.open(); }
+    accessible-action-expand => { root.open(); }
+
+    function pick(i: int) {
+        let c = Math.clamp(i, 0, root.model.length - 1);
+        if (c != root.current-index) {
+            root.current-index = c;
+            root.selected(c);
+        }
+    }
+
+    // Scrolls the list so row i is fully visible.
+    function reveal(i: int) {
+        let top = root.pad + i * root.row-h;
+        if (top + root.scroll-y < root.pad) {
+            root.scroll-y = Math.min(0px, -top + root.pad);
+        } else if (top + root.row-h + root.scroll-y > root.popup-h - root.pad) {
+            root.scroll-y = Math.max(root.popup-h - root.content-h, root.popup-h - root.pad - top - root.row-h);
+        }
+    }
+
+    function move-to(i: int) {
+        root.hl = Math.clamp(i, 0, root.model.length - 1);
+        root.reveal(root.hl);
+    }
+
+    // Type-ahead: the next item after the highlight whose text starts with `t` (first 64 items scanned).
+    function next-match(t: string) -> int {
+        let n = root.model.length;
+            if (n >= 1 && root.model[Math.mod(root.hl + 1, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 1, n); }
+            if (n >= 2 && root.model[Math.mod(root.hl + 2, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 2, n); }
+            if (n >= 3 && root.model[Math.mod(root.hl + 3, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 3, n); }
+            if (n >= 4 && root.model[Math.mod(root.hl + 4, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 4, n); }
+            if (n >= 5 && root.model[Math.mod(root.hl + 5, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 5, n); }
+            if (n >= 6 && root.model[Math.mod(root.hl + 6, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 6, n); }
+            if (n >= 7 && root.model[Math.mod(root.hl + 7, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 7, n); }
+            if (n >= 8 && root.model[Math.mod(root.hl + 8, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 8, n); }
+            if (n >= 9 && root.model[Math.mod(root.hl + 9, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 9, n); }
+            if (n >= 10 && root.model[Math.mod(root.hl + 10, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 10, n); }
+            if (n >= 11 && root.model[Math.mod(root.hl + 11, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 11, n); }
+            if (n >= 12 && root.model[Math.mod(root.hl + 12, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 12, n); }
+            if (n >= 13 && root.model[Math.mod(root.hl + 13, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 13, n); }
+            if (n >= 14 && root.model[Math.mod(root.hl + 14, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 14, n); }
+            if (n >= 15 && root.model[Math.mod(root.hl + 15, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 15, n); }
+            if (n >= 16 && root.model[Math.mod(root.hl + 16, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 16, n); }
+            if (n >= 17 && root.model[Math.mod(root.hl + 17, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 17, n); }
+            if (n >= 18 && root.model[Math.mod(root.hl + 18, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 18, n); }
+            if (n >= 19 && root.model[Math.mod(root.hl + 19, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 19, n); }
+            if (n >= 20 && root.model[Math.mod(root.hl + 20, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 20, n); }
+            if (n >= 21 && root.model[Math.mod(root.hl + 21, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 21, n); }
+            if (n >= 22 && root.model[Math.mod(root.hl + 22, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 22, n); }
+            if (n >= 23 && root.model[Math.mod(root.hl + 23, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 23, n); }
+            if (n >= 24 && root.model[Math.mod(root.hl + 24, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 24, n); }
+            if (n >= 25 && root.model[Math.mod(root.hl + 25, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 25, n); }
+            if (n >= 26 && root.model[Math.mod(root.hl + 26, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 26, n); }
+            if (n >= 27 && root.model[Math.mod(root.hl + 27, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 27, n); }
+            if (n >= 28 && root.model[Math.mod(root.hl + 28, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 28, n); }
+            if (n >= 29 && root.model[Math.mod(root.hl + 29, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 29, n); }
+            if (n >= 30 && root.model[Math.mod(root.hl + 30, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 30, n); }
+            if (n >= 31 && root.model[Math.mod(root.hl + 31, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 31, n); }
+            if (n >= 32 && root.model[Math.mod(root.hl + 32, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 32, n); }
+            if (n >= 33 && root.model[Math.mod(root.hl + 33, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 33, n); }
+            if (n >= 34 && root.model[Math.mod(root.hl + 34, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 34, n); }
+            if (n >= 35 && root.model[Math.mod(root.hl + 35, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 35, n); }
+            if (n >= 36 && root.model[Math.mod(root.hl + 36, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 36, n); }
+            if (n >= 37 && root.model[Math.mod(root.hl + 37, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 37, n); }
+            if (n >= 38 && root.model[Math.mod(root.hl + 38, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 38, n); }
+            if (n >= 39 && root.model[Math.mod(root.hl + 39, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 39, n); }
+            if (n >= 40 && root.model[Math.mod(root.hl + 40, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 40, n); }
+            if (n >= 41 && root.model[Math.mod(root.hl + 41, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 41, n); }
+            if (n >= 42 && root.model[Math.mod(root.hl + 42, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 42, n); }
+            if (n >= 43 && root.model[Math.mod(root.hl + 43, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 43, n); }
+            if (n >= 44 && root.model[Math.mod(root.hl + 44, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 44, n); }
+            if (n >= 45 && root.model[Math.mod(root.hl + 45, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 45, n); }
+            if (n >= 46 && root.model[Math.mod(root.hl + 46, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 46, n); }
+            if (n >= 47 && root.model[Math.mod(root.hl + 47, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 47, n); }
+            if (n >= 48 && root.model[Math.mod(root.hl + 48, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 48, n); }
+            if (n >= 49 && root.model[Math.mod(root.hl + 49, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 49, n); }
+            if (n >= 50 && root.model[Math.mod(root.hl + 50, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 50, n); }
+            if (n >= 51 && root.model[Math.mod(root.hl + 51, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 51, n); }
+            if (n >= 52 && root.model[Math.mod(root.hl + 52, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 52, n); }
+            if (n >= 53 && root.model[Math.mod(root.hl + 53, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 53, n); }
+            if (n >= 54 && root.model[Math.mod(root.hl + 54, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 54, n); }
+            if (n >= 55 && root.model[Math.mod(root.hl + 55, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 55, n); }
+            if (n >= 56 && root.model[Math.mod(root.hl + 56, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 56, n); }
+            if (n >= 57 && root.model[Math.mod(root.hl + 57, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 57, n); }
+            if (n >= 58 && root.model[Math.mod(root.hl + 58, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 58, n); }
+            if (n >= 59 && root.model[Math.mod(root.hl + 59, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 59, n); }
+            if (n >= 60 && root.model[Math.mod(root.hl + 60, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 60, n); }
+            if (n >= 61 && root.model[Math.mod(root.hl + 61, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 61, n); }
+            if (n >= 62 && root.model[Math.mod(root.hl + 62, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 62, n); }
+            if (n >= 63 && root.model[Math.mod(root.hl + 63, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 63, n); }
+            if (n >= 64 && root.model[Math.mod(root.hl + 64, n)].to-lowercase().starts-with(t)) { return Math.mod(root.hl + 64, n); }
+        return -1;
+    }
+
+    val := Text {
+        x: 10px;
+        width: parent.width - 30px;
+        text: root.current-value;
+        font-size: Theme.font-size-label;
+        color: Theme.text;
+        vertical-alignment: center;
+        overflow: elide;
+        accessible-role: none;
+    }
+    Chevron { x: parent.width - 18px; stroke: Theme.text-muted; }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.open(); }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        focus-on-click: false;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n" || (event.modifiers.alt && event.text == Key.DownArrow)) { root.open(); return accept; }
+            if (event.text == Key.UpArrow) { root.pick(root.current-index - 1); return accept; }
+            if (event.text == Key.DownArrow) { root.pick(root.current-index + 1); return accept; }
+            reject
+        }
+    }
+
+    if focus.has-focus : Rectangle {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-width: 2px;
+        border-color: Theme.accent;
+        border-radius: Theme.radius-button + 3px;
+    }
+
+    popup := PopupWindow {
+        x: 0;
+        y: root.popup-up ? -root.popup-h - 2px : root.height + 2px;
+        width: Math.max(root.width, list.preferred-width);
+        height: root.popup-h;
+        Rectangle {
+            background: Theme.surface;
+            border-radius: Theme.radius-button;
+            border-width: 1px;
+            border-color: Theme.input-border;
+            drop-shadow-blur: 8px;
+            drop-shadow-offset-y: 2px;
+            drop-shadow-color: #00000030;
+        }
+        keys := FocusScope {
+            init => {
+                root.hl = Math.max(0, root.current-index);
+                root.scroll-y = 0px;
+                root.reveal(root.hl);
+                self.focus();
+            }
+            key-pressed(event) => {
+                if (event.text == Key.UpArrow) { root.move-to(root.hl - 1); return accept; }
+                if (event.text == Key.DownArrow) { root.move-to(root.hl + 1); return accept; }
+                if (event.text == Key.Home) { root.move-to(0); return accept; }
+                if (event.text == Key.End) { root.move-to(root.model.length - 1); return accept; }
+                if (event.text == Key.PageUp) { root.move-to(root.hl - root.max-rows); return accept; }
+                if (event.text == Key.PageDown) { root.move-to(root.hl + root.max-rows); return accept; }
+                if (event.text == "\n" || event.text == " ") { root.pick(root.hl); popup.close(); focus.focus(); return accept; }
+                if (event.text == Key.Escape) { popup.close(); focus.focus(); return accept; }
+                if (event.text.character-count == 1 && !event.modifiers.control && !event.modifiers.alt) {
+                    let m = root.next-match(event.text.to-lowercase());
+                    if (m >= 0) { root.move-to(m); }
+                    return accept;
+                }
+                reject
+            }
+            flick := Flickable {
+                viewport-height: root.content-h;
+                viewport-width: self.width;
+                viewport-y <=> root.scroll-y;
+                list := VerticalLayout {
+                    padding: root.pad;
+                    padding-right: root.pad + (root.list-scrolls ? 8px : 0px);
+                    for item[i] in root.model : Rectangle {
+                        min-height: root.row-h;
+                        max-height: root.row-h;
+                        min-width: entry.preferred-width + 20px;
+                        border-radius: Theme.radius-button - 2px;
+                        background: i == root.hl ? Theme.button-outline-pressed : row.has-hover ? Theme.button-outline-hover : transparent;
+                        accessible-role: list-item;
+                        accessible-label: item;
+                        accessible-item-selectable: true;
+                        accessible-item-selected: i == root.hl;
+                        accessible-action-default => { root.pick(i); popup.close(); }
+                        entry := Text {
+                            x: 8px;
+                            text: item;
+                            font-size: Theme.font-size-label;
+                            font-weight: i == root.current-index ? 600 : 400;
+                            color: Theme.text;
+                            vertical-alignment: center;
+                            accessible-role: none;
+                        }
+                        row := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.pick(i); popup.close(); }
+                        }
+                    }
+                }
+            }
+            // Thin scrollbar, only when the list scrolls; drag the thumb to scroll.
+            if root.list-scrolls : Rectangle {
+                property <length> track: root.popup-h - 2 * root.pad;
+                property <length> thumb-h: Math.max(24px, self.track * root.popup-h / root.content-h);
+                x: parent.width - 8px;
+                y: root.pad;
+                width: 6px;
+                height: self.track;
+                accessible-role: none;
+                thumb := Rectangle {
+                    y: (self.parent-track - self.height) * (-root.scroll-y) / (root.content-h - root.popup-h);
+                    property <length> parent-track: parent.track;
+                    width: drag.pressed ? 6px : 4px;
+                    x: parent.width - self.width;
+                    height: parent.thumb-h;
+                    border-radius: 3px;
+                    background: Theme.text-muted;
+                    opacity: drag.has-hover || drag.pressed ? 0.8 : 0.5;
+                }
+                drag := TouchArea {
+                    property <length> start-y;
+                    pointer-event(e) => { if (e.kind == PointerEventKind.down) { self.start-y = root.scroll-y; } }
+                    moved => {
+                        root.scroll-y = Math.clamp(self.start-y - (self.mouse-y - self.pressed-y) * (root.content-h - root.popup-h) / (parent.track - parent.thumb-h), root.popup-h - root.content-h, 0px);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Timeline mark kind: a short break (ring dot) or a long break (filled block).
+export enum TimelineMarkKind { short-break, long-break }
+
+// One mark on the timeline; `position` is 0..1 along the track (0 = now).
+export struct TimelineMark {
+    kind: TimelineMarkKind,
+    position: float,
+}
+
+// Upcoming-breaks timeline. The host fills the marks; `now-label` sits at the left end and label i of
+// `labels` at (i + 1) / labels.length along the track (equal steps ending at the span's end).
+// Decorative for screen readers: the header's next-break text carries the meaning.
+export component Timeline inherits Rectangle {
+    in property <[TimelineMark]> marks;
+    in property <[string]> labels;
+    in property <string> now-label;
+
+    height: 40px;
+    property <length> track-y: 12px;
+    property <length> inner: root.width - 16px;
+    accessible-role: none;
+
+    Rectangle { x: 0; y: root.track-y + 5px; height: 2px; border-radius: 1px; background: Theme.progress-track; }
+    for m in root.marks : Rectangle {
+        property <bool> long: m.kind == TimelineMarkKind.long-break;
+        x: Math.clamp(m.position, 0, 1) * root.inner + 8px - self.width / 2;
+        y: self.long ? root.track-y - 1px : root.track-y + 2px;
+        width: self.long ? 14px : 8px;
+        height: self.long ? 14px : 8px;
+        border-radius: self.long ? 4px : 4px;
+        background: self.long ? Theme.accent : Theme.surface;
+        border-width: self.long ? 0px : 2px;
+        border-color: Theme.accent;
+    }
+    // Now marker.
+    Rectangle { x: 0; y: root.track-y - 4px; width: 2px; height: 20px; border-radius: 1px; background: Theme.text; }
+    Text {
+        x: 0;
+        y: root.track-y + 18px;
+        text: root.now-label;
+        font-size: Theme.font-size-help;
+        font-weight: 600;
+        color: Theme.text;
+        accessible-role: none;
+    }
+    for l[i] in root.labels : Text {
+        property <length> centre: (i + 1) / root.labels.length * root.inner + 8px;
+        x: Math.clamp(self.centre - self.preferred-width / 2, 0px, root.width - self.preferred-width);
+        y: root.track-y + 18px;
+        text: l;
+        font-size: Theme.font-size-help;
+        color: Theme.text-muted;
+        accessible-role: none;
+    }
+}
+
+// Legend swatch for the timeline: ring dot (short) or block (long).
+export component Swatch inherits Rectangle {
+    in property <bool> block;
+    width: root.block ? 14px : 8px;
+    height: 8px;
+    border-radius: 4px;
+    background: root.block ? Theme.accent : Theme.surface;
+    border-width: root.block ? 0px : 2px;
+    border-color: Theme.accent;
+    accessible-role: none;
+}
+
+// Compact settings row: label (+ optional help) left, the control right; no divider.
+export component CompactRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> help;
+    in property <bool> enabled: true;
+    spacing: 12px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 1;
+        opacity: root.enabled ? 1.0 : 0.5;
+        Text { text: root.label; font-size: Theme.font-size-label; color: Theme.text; wrap: word-wrap; }
+        if root.help != "" : Text { text: root.help; font-size: Theme.font-size-help; color: Theme.text-muted; wrap: word-wrap; }
+    }
+    VerticalLayout { alignment: center; horizontal-stretch: 0; @children }
+}

@@ -1,0 +1,15 @@
+[package]
+name = "damt-platform"
+description = "OS-service contracts shared by the damt.xyz apps (idle, focus, session, autostart, screens, theme, clock)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+jiff.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
