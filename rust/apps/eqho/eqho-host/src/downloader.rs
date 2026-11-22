@@ -89,7 +89,7 @@ fn download_https_to_file(
         WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP, WINHTTP_QUERY_CONTENT_LENGTH,
         WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_STATUS_CODE, WinHttpCloseHandle, WinHttpConnect,
         WinHttpOpen, WinHttpOpenRequest, WinHttpQueryHeaders, WinHttpReadData,
-        WinHttpReceiveResponse, WinHttpSendRequest, WinHttpSetOption,
+        WinHttpReceiveResponse, WinHttpSendRequest, WinHttpSetOption, WinHttpSetTimeouts,
     };
     use windows::core::PCWSTR;
 
@@ -180,6 +180,7 @@ fn download_https_to_file(
             Some(&redirect_policy.to_ne_bytes()),
         )
         .map_err(|e| HostError::DownloadFailed(format!("WinHttpSetOption redirect failed: {e}")))?;
+        let _ = WinHttpSetTimeouts(session.0, 30_000, 30_000, 30_000, 60_000);
     }
 
     // SAFETY: `session.0` is valid and `host_w` is null-terminated UTF-16.

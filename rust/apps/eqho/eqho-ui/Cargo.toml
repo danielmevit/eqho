@@ -1,0 +1,24 @@
+[package]
+name = "eqho-ui"
+description = "Eqho Slint 1.19 software-rendered Dashboard, 6-step Onboarding, and SystemTrayIcon UI."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+eqho-core.workspace = true
+# Software renderer ONLY — never enable femtovg.
+slint = { version = "=1.19.0", default-features = false, features = ["std", "compat-1-18", "renderer-software", "system-tray"] }
+
+[build-dependencies]
+slint-build.workspace = true
+damt-ui.workspace = true
+
+[dev-dependencies]
+i-slint-backend-testing.workspace = true
+png.workspace = true
+
+[lints]
+workspace = true

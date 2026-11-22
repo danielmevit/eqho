@@ -18,14 +18,16 @@ Parent Python workspace (`D:\Vibe Coding\_vm\eqho\{repo,coord,wt}`) and live use
 5. **Idle means idle.** Slint 1.19 `renderer-software` ONLY (never compile in `femtovg`). No dashboard window created until opened; pill overlay created lazily or hidden when idle.
 6. **Versioning:** `0.9.0-dev` → `0.9.0` (parity switchover) → `0.9.x`. Never `1.0`.
 
-## 2. Target Budgets (to be proven by R0/R4 on Windows)
-| Metric | Python 0.8.11 Baseline | Rust `0.9.0` Budget |
-| --- | --- | --- |
-| Idle RAM (tray only, no model loaded) | ~150+ MB | ≤ 15 MB private |
-| Launch → tray icon ready | ~2–3 s | ≤ 250 ms |
-| RTX 3060 stop→text (`large-v3-turbo` / `distil`) | 1.30–1.44 s, WER 1.05–1.86% | ≤ 2.0 s, WER ≤ 2.5% |
-| Pill frame render (224×41 / 280×51) | ~5.5–6.6 ms (numpy + PPM) | ≤ 1.5 ms (pure Rust BGRA) |
-| Installer / portable footprint | ~250+ MB (Python + CTranslate2 + Vulkan) | ≤ 30 MB zipped (Eqho.exe + whisper.cpp DLLs) |
+## 2. Target Budgets & Measured R0 Results (Windows 11, RTX 3060 Laptop GPU, 2026-11-22)
+| Metric | Python 0.8.11 Baseline | Rust `0.9.0` Budget | Measured R0 (`eqho-spike.exe` release, 8.6 MB) | Status |
+| --- | --- | --- | --- | --- |
+| Idle RAM (tray only, no model loaded) | ~150+ MB | ≤ 15 MB private | **3.42 MB private** (22.8 MB WS) | **PASS (4.4× under)** |
+| Launch → tray icon ready | ~2–3 s | ≤ 250 ms | **38.1 ms** | **PASS (6.5× under)** |
+| RTX 3060 `large-v3-turbo` (5 LibriSpeech clips) | 1.30–1.44 s, WER 1.05–1.86% | ≤ 2.0 s, WER ≤ 2.5% | **0.267–0.351 s** (mean 297 ms, **4.5× faster**), **1.39% WER** (71/72 words) | **PASS (4.5× faster)** |
+| RTX 3060 `tiny` warm Vulkan | — | — | **90.3 ms** on 10.4 s audio (RTF 0.0087, 115× RT) | **PASS** |
+| CPU fallback (`ggml-tiny.bin`, `threads=1`) | — | Clean fallback | **1.87 s** on 10.4 s audio (RTF 0.179) *(Note: prebuilt `ggml-cpu.dll` `OPENMP=1` faults at `threads>1`; clamped to 1 until R4 CI builds `-DGGML_OPENMP=OFF`)* | **PASS (safeguarded)** |
+| Pill frame render (`280×51` layered BGRA) | ~5.5–6.6 ms (numpy + PPM) | ≤ 1.5 ms target / < 16 ms 60fps | **2.74 ms avg / 3.12 ms p95 / 3.60 ms max**, `focus_stolen: false` | **PASS (6× under 60fps)** |
+| Installer / portable footprint | ~250+ MB (Python + CTranslate2 + Vulkan) | ≤ 30 MB zipped | `eqho-spike.exe` 8.6 MB + 5 Whisper DLLs (~20 MB zipped) | **PASS** |
 
 ## 3. Architecture (`rust/` Cargo Workspace)
 ```text

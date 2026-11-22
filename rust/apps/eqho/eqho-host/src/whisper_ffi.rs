@@ -409,6 +409,7 @@ impl WhisperEngine {
             val
         };
         ctx_params.use_gpu = use_gpu;
+        ctx_params.flash_attn = use_gpu;
 
         let model_cstr = CString::new(model_path.to_string_lossy().as_bytes())?;
         // SAFETY: `model_cstr` is a valid null-terminated path and `ctx_params` is initialized from defaults.
@@ -428,9 +429,26 @@ impl WhisperEngine {
 
         // 0.5 s silence warm-up (verifies GPU/CPU backend and warms shaders/buffers).
         let silence = vec![0.0f32; TARGET_SAMPLE_RATE / 2];
-        let _ = engine.transcribe(&silence, "en", 1, "", 4)?;
+        let warmup_threads = engine.effective_threads(4);
+        let _ = engine.transcribe(&silence, "en", 1, "", warmup_threads)?;
 
         Ok(engine)
+    }
+
+    /// Safeguard for prebuilt Windows `ggml-cpu.dll` compiled with MSVC OpenMP (`vcomp140.dll`),
+    /// which faults (`0xC0000005`) when `n_threads > 1` on CPU-only inference. GPU Vulkan runs
+    /// multi-threaded cleanly; once R4 CI builds `ggml-cpu` with `-DGGML_OPENMP=OFF`, `OPENMP = 1`
+    /// disappears from `system_info` and multi-threaded CPU unlocks automatically.
+    fn effective_threads(&self, requested: u32) -> u32 {
+        let clamped = requested.max(1);
+        #[cfg(windows)]
+        if !self.use_gpu
+            && self.system_info.contains("OPENMP = 1")
+            && std::env::var_os("EQHO_ALLOW_CPU_OPENMP_MT").is_none()
+        {
+            return 1;
+        }
+        clamped
     }
 
     pub fn version(&self) -> &str {
@@ -486,7 +504,7 @@ impl WhisperEngine {
             Some(CString::new(initial_prompt.as_bytes())?)
         };
 
-        full_params.n_threads = threads.max(1).min(i32::MAX as u32) as c_int;
+        full_params.n_threads = self.effective_threads(threads).min(i32::MAX as u32) as c_int;
         full_params.language = lang_cstr.as_ptr();
         full_params.initial_prompt = prompt_cstr
             .as_ref()

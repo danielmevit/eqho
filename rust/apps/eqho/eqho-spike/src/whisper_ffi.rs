@@ -466,6 +466,7 @@ pub fn run_transcribe(args: &TranscribeArgs) -> Result<TranscribeOutput, Whisper
         val
     };
     ctx_params.use_gpu = args.gpu;
+    ctx_params.flash_attn = args.gpu;
 
     let model_cstr = CString::new(args.model.to_string_lossy().as_bytes())?;
     let t_load = Instant::now();
