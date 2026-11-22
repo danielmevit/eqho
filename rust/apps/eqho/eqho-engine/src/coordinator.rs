@@ -914,13 +914,18 @@ impl CoordinatorInner {
     }
 
     fn apply_settings(self: &Arc<Self>, new_settings: Settings, reload_model: bool) {
-        {
+        let hotkey_changed = {
             let mut s = lock_unpoisoned(&self.settings);
+            let changed =
+                s.hotkey != new_settings.hotkey || s.hotkey_mode != new_settings.hotkey_mode;
             *s = new_settings.clone();
-        }
+            changed
+        };
         let _ = new_settings.save_to_path(&self.settings_path);
-        self.unregister_hotkey();
-        let _ = self.register_hotkey();
+        if hotkey_changed {
+            self.unregister_hotkey();
+            let _ = self.register_hotkey();
+        }
         if reload_model {
             let _ = self.preload_model();
         }

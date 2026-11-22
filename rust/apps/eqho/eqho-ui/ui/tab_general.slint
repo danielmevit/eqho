@@ -1,7 +1,8 @@
 // General Tab: Audio Input, Hotkey, Speech, and Behavior.
 import { Theme } from "@app-theme/theme.slint";
-import { Dropdown, Slider, TabList, Toggle, CompactRow } from "@damt-ui/kit.slint";
-import { ScrollArea, SectionHeader, SectionCard, StackedSettingRow, ThemedTextEdit } from "components.slint";
+import { Button, ButtonKind, Dropdown, Slider, TabList, Toggle, CompactRow } from "@damt-ui/kit.slint";
+import { LanguageOption } from "types.slint";
+import { FlagDropdown, ScrollArea, SectionHeader, SectionCard, StackedSettingRow, ThemedTextEdit } from "components.slint";
 
 export component GeneralTab inherits Rectangle {
     in property <length> window-height: 560px;
@@ -14,7 +15,7 @@ export component GeneralTab inherits Rectangle {
     in-out property <bool> hotkey-capturing: false;
     in-out property <int> hotkey-mode-index: 0;
 
-    in property <[string]> language-names: ["English"];
+    in property <[LanguageOption]> language-options: [];
     in-out property <int> language-index: 0;
     in-out property <string> language-warning: "";
     in-out property <string> initial-prompt: "";
@@ -25,6 +26,7 @@ export component GeneralTab inherits Rectangle {
     in-out property <int> paste-mode-index: 0;
 
     callback mic-selected(int);
+    callback refresh-mics();
     callback vad-sensitivity-changed(int);
     callback start-hotkey-capture();
     callback cancel-hotkey-capture();
@@ -61,12 +63,22 @@ export component GeneralTab inherits Rectangle {
                         StackedSettingRow {
                             label: "Microphone";
                             help: "Select your input device";
-                            Dropdown {
-                                model: root.mic-names;
-                                current-index <=> root.mic-index;
-                                window-height: root.window-height;
-                                accessible-name: "Microphone";
-                                selected(i) => { root.mic-selected(i); }
+                            HorizontalLayout {
+                                spacing: Theme.space-8;
+                                Dropdown {
+                                    horizontal-stretch: 1;
+                                    model: root.mic-names;
+                                    current-index <=> root.mic-index;
+                                    window-height: root.window-height;
+                                    accessible-name: "Microphone";
+                                    selected(i) => { root.mic-selected(i); }
+                                }
+                                Button {
+                                    horizontal-stretch: 0;
+                                    text: "Refresh";
+                                    kind: ButtonKind.outline;
+                                    clicked => { root.refresh-mics(); }
+                                }
                             }
                         }
                         Slider {
@@ -153,8 +165,8 @@ export component GeneralTab inherits Rectangle {
                         StackedSettingRow {
                             label: "Language";
                             help: "Transcription language";
-                            Dropdown {
-                                model: root.language-names;
+                            FlagDropdown {
+                                model: root.language-options;
                                 current-index <=> root.language-index;
                                 window-height: root.window-height;
                                 accessible-name: "Language";
@@ -231,12 +243,22 @@ export component GeneralTab inherits Rectangle {
                     StackedSettingRow {
                         label: "Microphone";
                         help: "Select your input device";
-                        Dropdown {
-                            model: root.mic-names;
-                            current-index <=> root.mic-index;
-                            window-height: root.window-height;
-                            accessible-name: "Microphone";
-                            selected(i) => { root.mic-selected(i); }
+                        HorizontalLayout {
+                            spacing: Theme.space-8;
+                            Dropdown {
+                                horizontal-stretch: 1;
+                                model: root.mic-names;
+                                current-index <=> root.mic-index;
+                                window-height: root.window-height;
+                                accessible-name: "Microphone";
+                                selected(i) => { root.mic-selected(i); }
+                            }
+                            Button {
+                                horizontal-stretch: 0;
+                                text: "Refresh";
+                                kind: ButtonKind.outline;
+                                clicked => { root.refresh-mics(); }
+                            }
                         }
                     }
                     Slider {
@@ -303,8 +325,8 @@ export component GeneralTab inherits Rectangle {
                     StackedSettingRow {
                         label: "Language";
                         help: "Transcription language";
-                        Dropdown {
-                            model: root.language-names;
+                        FlagDropdown {
+                            model: root.language-options;
                             current-index <=> root.language-index;
                             window-height: root.window-height;
                             accessible-name: "Language";

@@ -24,13 +24,14 @@ use eqho_platform::{AudioBackend, AudioDeviceInfo, AudioStreamHandle, ClipboardS
 use eqho_ui::{
     DashboardWindow, EqhoTray, Theme, apply_settings_to_window, build_history_rows,
     build_model_cards, filter_history_entries, language_code_for_index,
-    language_warning_text, overlay_position_key, parse_paste_rules_text, parse_replacements_text,
-    split_model_cards, status_summary_title, theme_mode_key, ui_scale_value, volume_duck_key,
+    language_warning_text, model_short_name, onboarding_model_copy, overlay_position_key,
+    parse_paste_rules_text, parse_replacements_text, split_model_cards, status_summary_title,
+    theme_mode_key, ui_scale_value, volume_duck_key,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::assets::{
-    LOGO_HORIZONTAL_DARK, LOGO_HORIZONTAL_LIGHT, build_tray_icon_rgba,
+    LOGO_32, LOGO_HORIZONTAL_DARK, LOGO_HORIZONTAL_LIGHT, build_tray_icon_rgba,
     decode_png_rgba, rgba_to_slint_image,
 };
 use crate::paths::{resolve_dll_dir, resolve_runtime_paths, resolve_theme_is_dark};
@@ -101,6 +102,8 @@ struct UiSyncSnapshot {
     recovery_text: Option<String>,
     downloading_key: Option<String>,
     download_progress: f32,
+    download_detail: String,
+    download_done_key: Option<String>,
     download_error_key: Option<String>,
     hotkey: String,
     light_taskbar: bool,
@@ -224,19 +227,38 @@ impl UiEventSink for AppUiSink {
     }
 
     fn on_model_progress(&self, model_key: &str, message: &str, fraction: Option<f32>) {
-        {
+        let lower = message.to_ascii_lowercase();
+        let is_error = lower.contains("failed");
+        let is_ready = message.eq_ignore_ascii_case("ready");
+        let is_active = !is_error && !is_ready && (fraction.is_some() || lower.contains("loading") || lower.contains("downloading"));
+        let clamped_frac = fraction.map(|f| f.clamp(0.0, 1.0));
+
+        let (progress_val, detail_text) = {
             let mut snap = self.snapshot.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some(frac) = fraction {
-                snap.downloading_key = Some(model_key.to_owned());
-                snap.download_progress = frac;
-                snap.download_error_key = None;
-            } else if message.to_ascii_lowercase().contains("failed") {
+            if is_error {
                 snap.downloading_key = None;
+                snap.download_done_key = None;
                 snap.download_error_key = Some(model_key.to_owned());
-            } else {
+                snap.download_detail = message.to_owned();
+                (0.0_f32, message.to_owned())
+            } else if is_ready {
                 snap.downloading_key = None;
+                snap.download_progress = 1.0;
+                snap.download_error_key = None;
+                snap.download_done_key = Some(model_key.to_owned());
+                snap.download_detail = "Ready".to_owned();
+                (1.0_f32, "Ready".to_owned())
+            } else {
+                snap.downloading_key = Some(model_key.to_owned());
+                if let Some(frac) = clamped_frac {
+                    snap.download_progress = frac;
+                }
+                snap.download_error_key = None;
+                snap.download_done_key = None;
+                snap.download_detail = message.to_owned();
+                (snap.download_progress, message.to_owned())
             }
-        }
+        };
         self.refresh_models_in_dash();
 
         let dash_weak_opt = self
@@ -245,12 +267,20 @@ impl UiEventSink for AppUiSink {
             .unwrap_or_else(|e| e.into_inner())
             .clone();
         if let Some(dash_weak) = dash_weak_opt {
-            let msg = message.to_owned();
-            let frac = fraction.unwrap_or(0.0);
+            let model_name = model_short_name(model_key);
+            let pct = (progress_val * 100.0).round().clamp(0.0, 100.0) as i32;
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(dash) = dash_weak.upgrade() {
-                    dash.set_onboarding_download_status(msg.into());
-                    dash.set_onboarding_download_progress(frac);
+                    dash.set_bg_download_active(is_active);
+                    dash.set_bg_download_done(is_ready);
+                    dash.set_bg_download_error(is_error);
+                    dash.set_bg_download_model(model_name.into());
+                    dash.set_bg_download_progress(progress_val);
+                    dash.set_bg_download_pct(pct);
+                    dash.set_bg_download_detail(detail_text.into());
+                    if is_ready {
+                        dash.set_onboarding_model_cached(true);
+                    }
                 }
             });
         }
@@ -461,17 +491,84 @@ impl AppController {
         self.mic_test_stream = None;
     }
 
+    fn refresh_mics(&mut self, user_triggered: bool) {
+        self.mic_devices = self.platform.list_input_devices();
+        let mut mic_names: Vec<SharedString> = vec!["System Default".into()];
+        let mut mic_idx = 0_i32;
+        let cur_dev = self
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .audio_device;
+        for (i, d) in self.mic_devices.iter().enumerate() {
+            mic_names.push(d.name.clone().into());
+            if cur_dev == Some(d.index as i32) {
+                mic_idx = (i + 1) as i32;
+            }
+        }
+        let count = self.mic_devices.len();
+        let mut restart_test = false;
+        if let Some(dash) = &self.dashboard {
+            dash.set_mic_names(ModelRc::new(VecModel::from(mic_names)));
+            dash.set_mic_index(mic_idx);
+            let status = if user_triggered {
+                if count == 0 {
+                    "Refreshed — no microphones detected yet. Check the connection and try again."
+                        .to_owned()
+                } else {
+                    format!(
+                        "Refreshed — {count} microphone{} detected.",
+                        if count == 1 { "" } else { "s" }
+                    )
+                }
+            } else if count > 0 {
+                format!(
+                    "{count} microphone{} detected. Plugged in a new one? Click Refresh devices.",
+                    if count == 1 { "" } else { "s" }
+                )
+            } else {
+                "No microphones detected. Plug one in and click Refresh devices.".to_owned()
+            };
+            dash.set_onboarding_mic_status(status.into());
+            restart_test =
+                user_triggered && dash.get_onboarding_active() && dash.get_onboarding_step() == 2;
+        }
+        if restart_test {
+            self.start_mic_test();
+        }
+    }
+
     fn start_download(&self, model_key: String) {
+        let already_downloading = {
+            let mut snap = self.snapshot.lock().unwrap_or_else(|e| e.into_inner());
+            if snap.downloading_key.as_deref() == Some(model_key.as_str()) {
+                true
+            } else {
+                snap.downloading_key = Some(model_key.clone());
+                snap.download_progress = 0.0;
+                snap.download_detail = "Downloading 0% · Connecting…".to_owned();
+                snap.download_done_key = None;
+                snap.download_error_key = None;
+                false
+            }
+        };
+        if already_downloading {
+            return;
+        }
+
         let model_dir = self
             .settings
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .resolve_model_dir();
-        {
-            let mut snap = self.snapshot.lock().unwrap_or_else(|e| e.into_inner());
-            snap.downloading_key = Some(model_key.clone());
-            snap.download_progress = 0.0;
-            snap.download_error_key = None;
+        if let Some(dash) = &self.dashboard {
+            dash.set_bg_download_active(true);
+            dash.set_bg_download_done(false);
+            dash.set_bg_download_error(false);
+            dash.set_bg_download_model(model_short_name(&model_key).into());
+            dash.set_bg_download_progress(0.0);
+            dash.set_bg_download_pct(0);
+            dash.set_bg_download_detail("Downloading 0% · Connecting…".into());
         }
         self.refresh_models();
 
@@ -488,28 +585,23 @@ impl AppController {
                 });
                 match res {
                     Ok(_) => {
-                        {
-                            let mut snap = ui.snapshot.lock().unwrap_or_else(|e| e.into_inner());
-                            snap.downloading_key = None;
-                            snap.download_progress = 1.0;
-                            snap.download_error_key = None;
-                        }
-                        {
+                        // CRITICAL: Drop `settings_arc` lock BEFORE calling into `coordinator`
+                        // or `ui` so `on_model_progress -> refresh_models_in_dash` can never
+                        // re-entrantly deadlock on `settings_arc`!
+                        let updated_settings = {
                             let mut s = settings_arc.lock().unwrap_or_else(|e| e.into_inner());
                             s.model_size = model_key.clone();
                             let _ = s.save_to_path(&settings_path);
-                            coordinator.apply_settings(s.clone(), true);
-                        }
+                            s.clone()
+                        };
+                        ui.on_model_progress(&model_key, "Loading model into memory…", Some(1.0));
+                        coordinator.apply_settings(updated_settings, false);
+                        let _ = coordinator.preload_model();
                         ui.on_model_progress(&model_key, "Ready", None);
                         ui.refresh_models_in_dash();
                     }
                     Err(err) => {
                         let msg = format!("Download failed: {err}");
-                        {
-                            let mut snap = ui.snapshot.lock().unwrap_or_else(|e| e.into_inner());
-                            snap.downloading_key = None;
-                            snap.download_error_key = Some(model_key.clone());
-                        }
                         ui.on_model_progress(&model_key, &msg, None);
                         ui.refresh_models_in_dash();
                     }
@@ -539,24 +631,25 @@ fn ensure_dashboard(ctrl: &Rc<RefCell<AppController>>, tab: Option<&str>) {
         // Populate initial state
         {
             let mut c = ctrl.borrow_mut();
-            c.mic_devices = c.platform.list_input_devices();
-            let mut mic_names: Vec<SharedString> = vec!["System Default".into()];
-            let mut mic_idx = 0_i32;
-            let cur_dev = c.settings.lock().unwrap_or_else(|e| e.into_inner()).audio_device;
-            for (i, d) in c.mic_devices.iter().enumerate() {
-                mic_names.push(d.name.clone().into());
-                if cur_dev == Some(d.index as i32) {
-                    mic_idx = (i + 1) as i32;
-                }
-            }
+            c.refresh_mics(false);
             let is_dark = c.resolved_is_dark();
             let s = c.settings.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            let snap = c.snapshot.lock().unwrap_or_else(|e| e.into_inner()).clone();
             let hw = c.hw_class;
+            let model_dir = s.resolve_model_dir();
+            let rec_key = eqho_core::modelpick::recommend_model(hw, &s.language);
+            let rec_cached = whispercpp_model_path(&model_dir, rec_key)
+                .metadata()
+                .map(|m| m.is_file() && m.len() > 1_048_576)
+                .unwrap_or(false);
             if let Some(dash) = &c.dashboard {
-                dash.set_mic_names(ModelRc::new(VecModel::from(mic_names)));
-                dash.set_mic_index(mic_idx);
                 dash.set_app_version(env!("CARGO_PKG_VERSION").into());
                 apply_settings_to_window(dash, &s, hw, is_dark);
+                dash.set_onboarding_model_cached(rec_cached);
+
+                if let Ok((w, h, rgba)) = decode_png_rgba(LOGO_32) {
+                    dash.set_window_icon(rgba_to_slint_image(w, h, &rgba));
+                }
 
                 let logo_bytes = if is_dark {
                     LOGO_HORIZONTAL_DARK
@@ -567,13 +660,25 @@ fn ensure_dashboard(ctrl: &Rc<RefCell<AppController>>, tab: Option<&str>) {
                     dash.set_logo_image(rgba_to_slint_image(w, h, &rgba));
                 }
 
-                let recovery = c
-                    .snapshot
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .recovery_text
-                    .clone()
-                    .unwrap_or_default();
+                if let Some(ref key) = snap.downloading_key {
+                    dash.set_bg_download_active(true);
+                    dash.set_bg_download_model(model_short_name(key).into());
+                    dash.set_bg_download_progress(snap.download_progress);
+                    dash.set_bg_download_pct((snap.download_progress * 100.0).round() as i32);
+                    dash.set_bg_download_detail(snap.download_detail.clone().into());
+                } else if let Some(ref key) = snap.download_done_key {
+                    dash.set_bg_download_done(true);
+                    dash.set_bg_download_model(model_short_name(key).into());
+                    dash.set_bg_download_progress(1.0);
+                    dash.set_bg_download_pct(100);
+                    dash.set_bg_download_detail("Ready".into());
+                } else if let Some(ref key) = snap.download_error_key {
+                    dash.set_bg_download_error(true);
+                    dash.set_bg_download_model(model_short_name(key).into());
+                    dash.set_bg_download_detail(snap.download_detail.clone().into());
+                }
+
+                let recovery = snap.recovery_text.unwrap_or_default();
                 dash.set_recovery_text(recovery.into());
             }
             c.refresh_models();
@@ -696,6 +801,12 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     }
     {
         let ctrl_w = Rc::clone(ctrl);
+        dash.on_refresh_mics(move || {
+            ctrl_w.borrow_mut().refresh_mics(true);
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
         dash.on_vad_sensitivity_changed(move |pct| {
             let c = ctrl_w.borrow();
             c.settings
@@ -763,14 +874,23 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         dash.on_language_selected(move |idx| {
             let c = ctrl_w.borrow();
             let code = language_code_for_index(idx);
-            let model_size = {
+            let (model_size, model_dir) = {
                 let mut s = c.settings.lock().unwrap_or_else(|e| e.into_inner());
                 s.language = code.to_owned();
-                s.model_size.clone()
+                (s.model_size.clone(), s.resolve_model_dir())
             };
             c.save_settings(false);
             if let Some(d) = dash_w.upgrade() {
                 d.set_language_warning(language_warning_text(code, &model_size, c.hw_class).into());
+                let (summary, url) = onboarding_model_copy(c.hw_class, code);
+                let rec_key = eqho_core::modelpick::recommend_model(c.hw_class, code);
+                let rec_cached = whispercpp_model_path(&model_dir, rec_key)
+                    .metadata()
+                    .map(|m| m.is_file() && m.len() > 1_048_576)
+                    .unwrap_or(false);
+                d.set_onboarding_model_summary(summary.into());
+                d.set_onboarding_model_url(url.into());
+                d.set_onboarding_model_cached(rec_cached);
             }
         });
     }
@@ -841,7 +961,8 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
                 s.model_size = key.to_string();
                 s.language.clone()
             };
-            c.save_settings(true);
+            // Never reload model synchronously on the UI thread; the background thread below handles preload.
+            c.save_settings(false);
             c.refresh_models();
             if let Some(d) = dash_w.upgrade() {
                 d.set_language_warning(language_warning_text(&lang, &key, c.hw_class).into());
@@ -1158,6 +1279,17 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         });
     }
     {
+        dash.on_open_url(move |url| {
+            open_https_url(&url);
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        dash.on_copy_text(move |txt| {
+            let _ = ctrl_w.borrow().platform.set_text(&txt, false);
+        });
+    }
+    {
         let ctrl_w = Rc::clone(ctrl);
         let dash_w = dash.as_weak();
         dash.on_onboarding_sound_chosen(move |mute| {
@@ -1182,6 +1314,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         dash.on_onboarding_step_changed(move |step| {
             let mut c = ctrl_w.borrow_mut();
             if step == 2 {
+                c.refresh_mics(false);
                 c.start_mic_test();
             } else {
                 c.stop_mic_test();
@@ -1231,6 +1364,25 @@ fn open_folder(path: &Path) {
     #[cfg(not(windows))]
     {
         let _ = Command::new("xdg-open").arg(path).spawn();
+    }
+}
+
+fn open_https_url(url: &str) {
+    let trimmed = url.trim();
+    if !trimmed.starts_with("https://")
+        || trimmed.chars().any(|c| c.is_whitespace() || c.is_control())
+    {
+        return;
+    }
+    #[cfg(windows)]
+    {
+        let _ = Command::new("rundll32.exe")
+            .args(["url.dll,FileProtocolHandler", trimmed])
+            .spawn();
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = Command::new("xdg-open").arg(trimmed).spawn();
     }
 }
 
@@ -1479,6 +1631,8 @@ pub fn run_desktop_app(
         recovery_text: None,
         downloading_key: None,
         download_progress: 0.0,
+        download_detail: String::new(),
+        download_done_key: None,
         download_error_key: None,
         hotkey: settings.hotkey.clone(),
         light_taskbar,

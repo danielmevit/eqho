@@ -1,6 +1,6 @@
 // Eqho Slint 1.19 Root UI: DashboardWindow & EqhoTray.
 import { Theme } from "@app-theme/theme.slint";
-import { ModelCardItem, HistoryRowItem } from "types.slint";
+import { ModelCardItem, HistoryRowItem, LanguageOption } from "types.slint";
 import { TopBar, RecoveryBanner } from "components.slint";
 import { GeneralTab } from "tab_general.slint";
 import { ModelsTab } from "tab_models.slint";
@@ -8,7 +8,7 @@ import { HistoryTab } from "tab_history.slint";
 import { SettingsTab } from "tab_settings.slint";
 import { OnboardingView } from "onboarding.slint";
 
-export { Theme, ModelCardItem, HistoryRowItem }
+export { Theme, ModelCardItem, HistoryRowItem, LanguageOption }
 
 export component DashboardWindow inherits Window {
     min-width: 600px;
@@ -16,9 +16,11 @@ export component DashboardWindow inherits Window {
     preferred-width: 940px;
     preferred-height: 560px;
     title: root.window-title;
+    icon: root.window-icon;
     background: Theme.bg;
 
     in-out property <string> window-title: "Eqho Dashboard";
+    in property <image> window-icon;
     in-out property <string> active-tab: "general";
     in-out property <bool> onboarding-active: false;
     in-out property <int> onboarding-step: 0;
@@ -40,7 +42,7 @@ export component DashboardWindow inherits Window {
     in-out property <string> hotkey-display: "Alt + Q";
     in-out property <bool> hotkey-capturing: false;
     in-out property <int> hotkey-mode-index: 0;
-    in property <[string]> language-names: ["English"];
+    in property <[LanguageOption]> language-options: [];
     in-out property <int> language-index: 0;
     in-out property <string> language-warning: "";
     in-out property <string> initial-prompt: "";
@@ -50,6 +52,7 @@ export component DashboardWindow inherits Window {
     in-out property <int> paste-mode-index: 0;
 
     callback mic-selected(int);
+    callback refresh-mics();
     callback vad-sensitivity-changed(int);
     callback start-hotkey-capture();
     callback cancel-hotkey-capture();
@@ -121,9 +124,20 @@ export component DashboardWindow inherits Window {
     // Onboarding properties & callbacks
     in-out property <float> onboarding-mic-level: 0.0;
     in-out property <string> onboarding-mic-error: "";
+    in-out property <string> onboarding-mic-status: "";
     in-out property <string> onboarding-model-summary: "";
-    in-out property <float> onboarding-download-progress: 0.0;
-    in-out property <string> onboarding-download-status: "";
+    in-out property <string> onboarding-model-url: "";
+    in-out property <bool> onboarding-model-cached: false;
+
+    // Persistent background download state (shared across onboarding steps)
+    in-out property <bool> bg-download-active: false;
+    in-out property <bool> bg-download-done: false;
+    in-out property <bool> bg-download-error: false;
+    in-out property <string> bg-download-model: "";
+    in-out property <float> bg-download-progress: 0.0;
+    in-out property <int> bg-download-pct: 0;
+    in-out property <string> bg-download-detail: "";
+
     in-out property <bool> onboarding-duck-mute: false;
     in-out property <string> onboarding-try-hint: "";
     in-out property <string> onboarding-try-text: "";
@@ -132,6 +146,8 @@ export component DashboardWindow inherits Window {
     callback onboarding-retry-mic();
     callback onboarding-download-model();
     callback onboarding-later-model();
+    callback open-url(string);
+    callback copy-text(string);
     callback onboarding-sound-chosen(bool);
     callback onboarding-step-changed(int);
     callback onboarding-skip();
@@ -142,25 +158,36 @@ export component DashboardWindow inherits Window {
         height: root.height;
         window-height: root.height;
         step <=> root.onboarding-step;
-        language-names: root.language-names;
+        language-options: root.language-options;
         language-index <=> root.language-index;
         mic-names: root.mic-names;
         mic-index <=> root.mic-index;
+        mic-status <=> root.onboarding-mic-status;
         mic-level <=> root.onboarding-mic-level;
         mic-error <=> root.onboarding-mic-error;
         model-summary <=> root.onboarding-model-summary;
-        download-progress <=> root.onboarding-download-progress;
-        download-status <=> root.onboarding-download-status;
+        model-url <=> root.onboarding-model-url;
+        model-cached <=> root.onboarding-model-cached;
+        bg-download-active <=> root.bg-download-active;
+        bg-download-done <=> root.bg-download-done;
+        bg-download-error <=> root.bg-download-error;
+        bg-download-model <=> root.bg-download-model;
+        bg-download-progress <=> root.bg-download-progress;
+        bg-download-pct <=> root.bg-download-pct;
+        bg-download-detail <=> root.bg-download-detail;
         duck-mute <=> root.onboarding-duck-mute;
         try-hint <=> root.onboarding-try-hint;
         try-text <=> root.onboarding-try-text;
 
         language-selected(i) => { root.language-selected(i); }
         mic-selected(i) => { root.mic-selected(i); }
+        refresh-mics => { root.refresh-mics(); }
         open-mic-settings => { root.onboarding-open-mic-settings(); }
         retry-mic => { root.onboarding-retry-mic(); }
         download-model => { root.onboarding-download-model(); }
         later-model => { root.onboarding-later-model(); }
+        open-url(u) => { root.open-url(u); }
+        copy-text(t) => { root.copy-text(t); }
         sound-chosen(m) => { root.onboarding-sound-chosen(m); }
         step-changed(s) => { root.onboarding-step-changed(s); }
         skip-clicked => { root.onboarding-skip(); }
@@ -202,7 +229,7 @@ export component DashboardWindow inherits Window {
                 hotkey-display <=> root.hotkey-display;
                 hotkey-capturing <=> root.hotkey-capturing;
                 hotkey-mode-index <=> root.hotkey-mode-index;
-                language-names: root.language-names;
+                language-options: root.language-options;
                 language-index <=> root.language-index;
                 language-warning <=> root.language-warning;
                 initial-prompt <=> root.initial-prompt;
@@ -212,6 +239,7 @@ export component DashboardWindow inherits Window {
                 paste-mode-index <=> root.paste-mode-index;
 
                 mic-selected(i) => { root.mic-selected(i); }
+                refresh-mics => { root.refresh-mics(); }
                 vad-sensitivity-changed(v) => { root.vad-sensitivity-changed(v); }
                 start-hotkey-capture => { root.start-hotkey-capture(); }
                 cancel-hotkey-capture => { root.cancel-hotkey-capture(); }

@@ -11,7 +11,9 @@ pub mod slint_generated {
     slint::include_modules!();
 }
 
+pub mod flags;
 pub mod viewmodel;
 
+pub use flags::*;
 pub use slint_generated::*;
 pub use viewmodel::*;

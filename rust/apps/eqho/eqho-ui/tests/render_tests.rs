@@ -192,9 +192,34 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
     assert_non_uniform_and_valid_png(&settings_dark, 940, 560);
     maybe_save_png(dump_dir.as_ref(), "06_settings_dark_940x560", &settings_dark, 940, 560);
 
-    // 5. Onboarding step 0 (dark wide)
+    // 5. Onboarding steps: Step 2 (Language w/ flags), Step 3 (Mic + Refresh + 3/6 blue bar),
+    //    Step 4 (Trusted source URL + 4/6 blue bar), Step 5 (Other sounds + live 42% ETA bar + 5/6 blue bar)
     win.set_onboarding_active(true);
-    let onboarding_frame = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
-    assert_non_uniform_and_valid_png(&onboarding_frame, 940, 560);
-    maybe_save_png(dump_dir.as_ref(), "07_onboarding_dark_940x560", &onboarding_frame, 940, 560);
+
+    win.set_onboarding_step(1);
+    let onboarding_lang = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
+    assert_non_uniform_and_valid_png(&onboarding_lang, 940, 560);
+    maybe_save_png(dump_dir.as_ref(), "07_onboarding_step2_lang_flags", &onboarding_lang, 940, 560);
+
+    win.set_onboarding_step(2);
+    win.set_onboarding_mic_level(0.55);
+    win.set_onboarding_mic_status("2 microphones detected. Plugged in a new one? Click Refresh devices.".into());
+    let onboarding_mic = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
+    assert_non_uniform_and_valid_png(&onboarding_mic, 940, 560);
+    maybe_save_png(dump_dir.as_ref(), "08_onboarding_step3_mic_refresh", &onboarding_mic, 940, 560);
+
+    win.set_onboarding_step(3);
+    let onboarding_model = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
+    assert_non_uniform_and_valid_png(&onboarding_model, 940, 560);
+    maybe_save_png(dump_dir.as_ref(), "09_onboarding_step4_trusted_link", &onboarding_model, 940, 560);
+
+    win.set_onboarding_step(4);
+    win.set_bg_download_active(true);
+    win.set_bg_download_model("Distil Large v3".into());
+    win.set_bg_download_progress(0.42);
+    win.set_bg_download_pct(42);
+    win.set_bg_download_detail("Downloading 42% · 640 MB / 1.51 GB · 12.4 MB/s · ~1m 08s left".into());
+    let onboarding_sound = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
+    assert_non_uniform_and_valid_png(&onboarding_sound, 940, 560);
+    maybe_save_png(dump_dir.as_ref(), "10_onboarding_step5_bg_download", &onboarding_sound, 940, 560);
 }

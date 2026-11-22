@@ -9,9 +9,10 @@ use eqho_core::settings::{
     LANGUAGE_TIERS, OVERLAY_POSITIONS, Settings, VOLUME_DUCK_OPTIONS, is_english_only_model,
     supported_language_name,
 };
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, ModelRc, VecModel};
 
-use crate::{DashboardWindow, HistoryRowItem, ModelCardItem, Theme};
+use crate::flags::flag_image_for_language;
+use crate::{DashboardWindow, HistoryRowItem, LanguageOption, ModelCardItem, Theme};
 
 const UI_SCALE_LEVELS: [f64; 5] = [1.0, 1.25, 1.5, 1.75, 2.0];
 const THEME_MODES: [&str; 3] = ["light", "dark", "system"];
@@ -310,6 +311,34 @@ pub fn language_display_names() -> Vec<String> {
         .collect()
 }
 
+/// Build Slint `LanguageOption` rows with crisp country flags for all 99 supported languages.
+pub fn build_language_options() -> Vec<LanguageOption> {
+    LANGUAGE_TIERS
+        .iter()
+        .map(|e| LanguageOption {
+            label: e.name.into(),
+            flag: flag_image_for_language(e.code),
+        })
+        .collect()
+}
+
+/// Build onboarding Step 4 recommended model copy: `(summary, direct_download_url)`.
+pub fn onboarding_model_copy(hw: HardwareClass, lang: &str) -> (String, String) {
+    let rec_key = recommend_model(hw, lang);
+    let rec_info = model_info(rec_key);
+    let rec_size = rec_info
+        .map(|m| model_size_label(m.size_mb))
+        .unwrap_or_default();
+    let rec_url = rec_info
+        .map(|m| m.download_url.to_owned())
+        .unwrap_or_default();
+    let summary = format!(
+        "Eqho needs to download its speech model once: {}, about {rec_size}. It stays on this computer.",
+        model_short_name(rec_key)
+    );
+    (summary, rec_url)
+}
+
 /// Find the dropdown index for a language code (defaults to `0` = English).
 pub fn language_index_for_code(code: &str) -> i32 {
     LANGUAGE_TIERS
@@ -398,8 +427,7 @@ pub fn apply_settings_to_window(
 ) {
     window.global::<Theme>().set_dark(is_dark);
 
-    let langs: Vec<SharedString> = language_display_names().into_iter().map(Into::into).collect();
-    window.set_language_names(ModelRc::new(VecModel::from(langs)));
+    window.set_language_options(ModelRc::new(VecModel::from(build_language_options())));
     window.set_language_index(language_index_for_code(&settings.language));
     window.set_language_warning(
         language_warning_text(&settings.language, &settings.model_size, hw).into(),
@@ -438,15 +466,9 @@ pub fn apply_settings_to_window(
 
     window.set_onboarding_active(!settings.onboarding_done);
     window.set_onboarding_duck_mute(settings.volume_duck == "mute");
-    let rec_key = recommend_model(hw, &settings.language);
-    let rec_size = model_info(rec_key).map(|m| model_size_label(m.size_mb)).unwrap_or_default();
-    window.set_onboarding_model_summary(
-        format!(
-            "Eqho needs to download its speech model once: {}, about {rec_size}. It stays on this computer.",
-            model_short_name(rec_key)
-        )
-        .into(),
-    );
+    let (model_summary, model_url) = onboarding_model_copy(hw, &settings.language);
+    window.set_onboarding_model_summary(model_summary.into());
+    window.set_onboarding_model_url(model_url.into());
     let hk = format_hotkey_display(&settings.hotkey);
     let how = if settings.hotkey_mode == "hold" {
         format!("Hold {hk} down, say a sentence, then let go.")

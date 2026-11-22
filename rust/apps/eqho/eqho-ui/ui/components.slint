@@ -1,6 +1,7 @@
 // Reusable Toolcraft-inspired layout & chrome components for Eqho.
 import { Theme } from "@app-theme/theme.slint";
 import { Button, ButtonKind, Card } from "@damt-ui/kit.slint";
+import { LanguageOption } from "types.slint";
 
 // Scrollable container with a thin themed scrollbar when content overflows.
 export component ScrollArea inherits Rectangle {
@@ -441,5 +442,283 @@ export component TopBar inherits Rectangle {
         width: parent.width;
         height: 1px;
         background: Theme.border-subtle;
+    }
+}
+
+// Language dropdown displaying a crisp 21x14 country flag before each language name.
+export component FlagDropdown inherits Rectangle {
+    in property <[LanguageOption]> model: [];
+    in-out property <int> current-index: 0;
+    in property <bool> enabled: true;
+    in property <int> max-rows: 8;
+    in property <length> window-height: 0px;
+    in property <string> accessible-name: "Language";
+    callback selected(int);
+
+    property <length> row-h: 28px;
+    property <length> pad: 4px;
+    property <int> visible-rows: Math.max(1, Math.min(root.model.length, root.max-rows));
+    property <bool> list-scrolls: root.model.length > root.max-rows;
+    property <length> content-h: root.model.length * root.row-h + 2 * root.pad;
+    property <length> popup-h: root.visible-rows * root.row-h + 2 * root.pad;
+    property <length> max-scroll: Math.max(0px, root.content-h - root.popup-h);
+    property <bool> opens-up: root.window-height > 0px
+        && root.absolute-position.y + root.height + 4px + root.popup-h > root.window-height
+        && root.absolute-position.y >= root.popup-h + 4px;
+    property <int> hl: 0;
+    property <length> scroll-y: 0px;
+
+    function clamp-index(idx: int) -> int {
+        Math.max(0, Math.min(idx, Math.max(0, root.model.length - 1)))
+    }
+
+    function scroll-into-view(i: int) {
+        if (!root.list-scrolls) {
+            root.scroll-y = 0px;
+            return;
+        }
+        let top = root.pad + i * root.row-h;
+        let bot = top + root.row-h;
+        if (top < -root.scroll-y) {
+            root.scroll-y = -Math.min(top, root.max-scroll);
+        } else if (bot > -root.scroll-y + root.popup-h) {
+            root.scroll-y = -Math.min(Math.max(0px, bot - root.popup-h), root.max-scroll);
+        }
+    }
+
+    function move-to(idx: int) {
+        let clamped = root.clamp-index(idx);
+        root.hl = clamped;
+        root.scroll-into-view(clamped);
+    }
+
+    function pick(idx: int) {
+        if (idx >= 0 && idx < root.model.length && idx != root.current-index) {
+            root.current-index = idx;
+            root.selected(idx);
+        }
+    }
+
+    function open-popup() {
+        if (!root.enabled || root.model.length == 0) { return; }
+        root.hl = root.clamp-index(root.current-index);
+        root.scroll-into-view(root.hl);
+        popup.show();
+    }
+
+    height: 32px;
+    border-radius: Theme.radius-button;
+    border-width: 1px;
+    border-color: focus.has-focus ? Theme.accent : Theme.input-border;
+    background: !root.enabled ? Theme.surface-tertiary
+        : touch.pressed ? Theme.button-outline-pressed
+        : touch.has-hover ? Theme.surface-hover
+        : Theme.surface;
+    opacity: root.enabled ? 1.0 : 0.45;
+
+    accessible-role: combobox;
+    accessible-label: root.accessible-name;
+    accessible-value: root.current-index >= 0 && root.current-index < root.model.length
+        ? root.model[root.current-index].label : "";
+    accessible-enabled: root.enabled;
+    accessible-action-default => { root.open-popup(); }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+        alignment: space-between;
+
+        HorizontalLayout {
+            spacing: 8px;
+            horizontal-stretch: 1;
+            alignment: start;
+
+            if root.current-index >= 0 && root.current-index < root.model.length
+                && root.model[root.current-index].flag.width > 0 : VerticalLayout {
+                alignment: center;
+                Image {
+                    source: root.model[root.current-index].flag;
+                    width: 21px;
+                    height: 14px;
+                    image-fit: contain;
+                    accessible-role: none;
+                }
+            }
+
+            Text {
+                text: root.current-index >= 0 && root.current-index < root.model.length
+                    ? root.model[root.current-index].label : "";
+                font-size: Theme.font-size-label;
+                color: Theme.text;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+                accessible-role: none;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            Path {
+                width: 10px;
+                height: 6px;
+                viewbox-width: 10;
+                viewbox-height: 6;
+                commands: "M1 1 L5 5 L9 1";
+                stroke: Theme.text-muted;
+                stroke-width: 1.5px;
+                fill: transparent;
+            }
+        }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if (event.text == "\n" || event.text == " " || event.text == Key.DownArrow) {
+                root.open-popup();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            focus.focus();
+            root.open-popup();
+        }
+    }
+
+    popup := PopupWindow {
+        x: 0px;
+        y: root.opens-up ? -(root.popup-h + 4px) : root.height + 4px;
+        width: root.width;
+        height: root.popup-h;
+        close-policy: close-on-click-outside;
+
+        Rectangle {
+            width: parent.width;
+            height: parent.height;
+            border-radius: Theme.radius-button;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.surface;
+            clip: true;
+
+            popup-focus := FocusScope {
+                width: parent.width;
+                height: parent.height;
+                init => { self.focus(); }
+                key-pressed(event) => {
+                    if (event.text == Key.UpArrow) { root.move-to(root.hl - 1); return accept; }
+                    if (event.text == Key.DownArrow) { root.move-to(root.hl + 1); return accept; }
+                    if (event.text == Key.Home) { root.move-to(0); return accept; }
+                    if (event.text == Key.End) { root.move-to(root.model.length - 1); return accept; }
+                    if (event.text == Key.PageUp) { root.move-to(root.hl - root.max-rows); return accept; }
+                    if (event.text == Key.PageDown) { root.move-to(root.hl + root.max-rows); return accept; }
+                    if (event.text == "\n" || event.text == " ") {
+                        root.pick(root.hl);
+                        popup.close();
+                        focus.focus();
+                        return accept;
+                    }
+                    if (event.text == Key.Escape) {
+                        popup.close();
+                        focus.focus();
+                        return accept;
+                    }
+                    reject
+                }
+
+                flick := Flickable {
+                    width: parent.width;
+                    height: parent.height;
+                    content-height: root.content-h;
+                    content-width: self.width;
+                    content-y <=> root.scroll-y;
+
+                    VerticalLayout {
+                        padding: root.pad;
+                        padding-right: root.pad + (root.list-scrolls ? 8px : 0px);
+
+                        for item[i] in root.model : Rectangle {
+                            min-height: root.row-h;
+                            max-height: root.row-h;
+                            border-radius: Theme.radius-button - 1px;
+                            background: i == root.hl ? Theme.button-outline-pressed
+                                : row.has-hover ? Theme.surface-hover
+                                : transparent;
+
+                            accessible-role: list-item;
+                            accessible-label: item.label;
+                            accessible-item-selectable: true;
+                            accessible-item-selected: i == root.current-index;
+                            accessible-action-default => { root.pick(i); popup.close(); }
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                spacing: 8px;
+                                alignment: start;
+
+                                if item.flag.width > 0 : VerticalLayout {
+                                    alignment: center;
+                                    Image {
+                                        source: item.flag;
+                                        width: 21px;
+                                        height: 14px;
+                                        image-fit: contain;
+                                        accessible-role: none;
+                                    }
+                                }
+
+                                Text {
+                                    text: item.label;
+                                    font-size: Theme.font-size-label;
+                                    font-weight: i == root.current-index ? 600 : 400;
+                                    color: i == root.current-index ? Theme.accent-text : Theme.text;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                    horizontal-stretch: 1;
+                                    accessible-role: none;
+                                }
+                            }
+
+                            row := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    root.pick(i);
+                                    popup.close();
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Thin scrollbar when list overflows
+                if root.list-scrolls : Rectangle {
+                    property <length> track-h: Math.max(1px, parent.height - 8px);
+                    property <length> thumb-h: Math.max(22px, self.track-h * root.popup-h / Math.max(1px, root.content-h));
+                    x: parent.width - 7px;
+                    y: 4px;
+                    width: 4px;
+                    height: self.track-h;
+
+                    Rectangle {
+                        y: (parent.track-h - parent.thumb-h) * Math.clamp(-root.scroll-y / Math.max(1px, root.max-scroll), 0, 1);
+                        width: 4px;
+                        height: parent.thumb-h;
+                        border-radius: 2px;
+                        background: Theme.text-muted;
+                        opacity: 0.45;
+                    }
+                }
+            }
+        }
     }
 }

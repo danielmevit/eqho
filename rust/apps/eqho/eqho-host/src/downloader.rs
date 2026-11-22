@@ -9,6 +9,89 @@ use crate::error::HostError;
 /// Minimum file size (1 MiB) for an existing `.bin` model file to be considered cached.
 pub const MIN_CACHED_MODEL_BYTES: u64 = 1_048_576;
 
+/// Format a byte count into a human-readable MB / GB string (e.g. `"580 MB"`, `"1.5 GB"`).
+#[must_use]
+pub fn format_bytes(bytes: u64) -> String {
+    const MIB: f64 = 1_048_576.0;
+    const GIB: f64 = 1_073_741_824.0;
+    let b = bytes as f64;
+    if b >= GIB {
+        format!("{:.2} GB", b / GIB)
+    } else if b >= MIB {
+        format!("{:.0} MB", b / MIB)
+    } else {
+        format!("{} KB", (bytes / 1024).max(1))
+    }
+}
+
+/// Format an estimated remaining duration in seconds into a concise ETA string.
+#[must_use]
+pub fn format_eta(remaining_secs: f64) -> String {
+    if !remaining_secs.is_finite() || remaining_secs < 0.0 {
+        return String::new();
+    }
+    let total = remaining_secs.round() as u64;
+    if total <= 3 {
+        "< 5s left".to_owned()
+    } else if total < 60 {
+        format!("~{total}s left")
+    } else if total < 3600 {
+        let mins = total / 60;
+        let secs = total % 60;
+        if secs == 0 {
+            format!("~{mins}m left")
+        } else {
+            format!("~{mins}m {secs:02}s left")
+        }
+    } else {
+        let hrs = total / 3600;
+        let mins = (total % 3600) / 60;
+        format!("~{hrs}h {mins:02}m left")
+    }
+}
+
+/// Build a human-friendly progress line including percent, transferred bytes, speed, and ETA.
+#[must_use]
+pub fn format_download_progress(
+    downloaded: u64,
+    total_bytes: Option<u64>,
+    elapsed_secs: f64,
+) -> String {
+    let speed_bps = if elapsed_secs >= 0.4 && downloaded > 0 {
+        Some(downloaded as f64 / elapsed_secs)
+    } else {
+        None
+    };
+    let speed_str = speed_bps.map(|bps| format!("{:.1} MB/s", bps / 1_048_576.0));
+
+    if let Some(total) = total_bytes.filter(|&t| t > 0) {
+        let pct = ((downloaded.saturating_mul(100)) / total).min(100);
+        let mut parts = vec![
+            format!("Downloading {pct}%"),
+            format!("{} / {}", format_bytes(downloaded), format_bytes(total)),
+        ];
+        if let Some(spd) = speed_str {
+            parts.push(spd);
+        }
+        if let Some(bps) = speed_bps
+            && bps > 1.0
+            && total > downloaded
+        {
+            let eta = format_eta((total - downloaded) as f64 / bps);
+            if !eta.is_empty() {
+                parts.push(eta);
+            }
+        }
+        parts.join(" · ")
+    } else {
+        let mut parts = vec![format!("Downloading {}", format_bytes(downloaded))];
+        if let Some(spd) = speed_str {
+            parts.push(spd);
+        }
+        parts.join(" · ")
+    }
+}
+
 /// Parse an `https://` URL into `(host, port, path_and_query)`.
 pub fn parse_https_url(url: &str) -> Result<(String, u16, String), HostError> {
     let rest = url
@@ -263,7 +346,7 @@ fn download_https_to_file(
         }
     };
 
-    on_progress("downloading model 0%", total_bytes.map(|_| 0.0));
+    on_progress("Downloading 0% · Connecting…", total_bytes.map(|_| 0.0));
 
     {
         let file = File::create(&tmp_path)?;
@@ -271,7 +354,8 @@ fn download_https_to_file(
         let mut chunk = vec![0u8; 64 * 1024];
         let mut downloaded: u64 = 0;
         let mut last_pct: i32 = -1;
-        let mut last_report = Instant::now();
+        let download_start = Instant::now();
+        let mut last_report = download_start;
 
         loop {
             let mut bytes_read: u32 = 0;
@@ -296,15 +380,16 @@ fn download_https_to_file(
                 .filter(|&t| t > 0)
                 .map(|t| ((downloaded.saturating_mul(100)) / t).min(100) as i32);
             let pct_changed = pct_now.is_some_and(|p| p != last_pct);
-            if pct_changed || now.duration_since(last_report) >= Duration::from_millis(250) {
+            if pct_changed || now.duration_since(last_report) >= Duration::from_millis(350) {
                 last_report = now;
+                let elapsed_s = now.duration_since(download_start).as_secs_f64();
+                let msg = format_download_progress(downloaded, total_bytes, elapsed_s);
                 if let (Some(total), Some(pct)) = (total_bytes.filter(|&t| t > 0), pct_now) {
                     last_pct = pct;
                     let frac = (downloaded as f32 / total as f32).clamp(0.0, 1.0);
-                    on_progress(&format!("downloading model {pct}%"), Some(frac));
+                    on_progress(&msg, Some(frac));
                 } else {
-                    let mib = downloaded / (1024 * 1024);
-                    on_progress(&format!("downloading model {mib} MiB"), None);
+                    on_progress(&msg, None);
                 }
             }
         }
@@ -318,7 +403,7 @@ fn download_https_to_file(
     }
     std::fs::rename(&tmp_path, target)?;
     tmp_guard.disarm();
-    on_progress("downloading model 100%", Some(1.0));
+    on_progress("Downloading 100% · Finishing…", Some(1.0));
     Ok(())
 }
 
@@ -368,6 +453,21 @@ mod tests {
         assert!(parse_https_url("https://example.com:0/path").is_err());
         assert!(parse_https_url("https://example.com:99999/path").is_err());
         assert!(parse_https_url("https://example.com/with space").is_err());
+    }
+
+    #[test]
+    fn format_eta_and_download_progress() {
+        assert_eq!(format_eta(2.0), "< 5s left");
+        assert_eq!(format_eta(42.0), "~42s left");
+        assert_eq!(format_eta(125.0), "~2m 05s left");
+        assert_eq!(format_eta(3660.0), "~1h 01m left");
+        assert_eq!(format_bytes(500 * 1_048_576), "500 MB");
+        assert_eq!(format_bytes(1_624_555_275), "1.51 GB");
+
+        let line = format_download_progress(500 * 1_048_576, Some(1_000 * 1_048_576), 50.0);
+        assert!(line.contains("Downloading 50%"), "got: {line}");
+        assert!(line.contains("10.0 MB/s"), "got: {line}");
+        assert!(line.contains("~50s left"), "got: {line}");
     }
 
     #[test]

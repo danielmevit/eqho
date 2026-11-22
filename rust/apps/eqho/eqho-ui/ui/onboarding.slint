@@ -1,32 +1,49 @@
-// 6-Step First-Time Onboarding View.
+// 6-Step First-Time Onboarding View with country flags, microphone refresh,
+// trusted model download source link, persistent background download indicator
+// (0-100% + ETA across steps), and a 6-segment blue step progress strip.
 import { Theme } from "@app-theme/theme.slint";
 import { Button, ButtonKind, Dropdown, ProgressLine } from "@damt-ui/kit.slint";
-import { ScrollArea, ThemedTextEdit } from "components.slint";
+import { LanguageOption } from "types.slint";
+import { FlagDropdown, ScrollArea, SectionCard, ThemedTextEdit } from "components.slint";
 
 export component OnboardingView inherits Rectangle {
     in property <length> window-height: 560px;
 
     in-out property <int> step: 0;
-    in property <[string]> language-names: ["English"];
+    in property <[LanguageOption]> language-options: [];
     in-out property <int> language-index: 0;
     in property <[string]> mic-names: ["System Default"];
     in-out property <int> mic-index: 0;
+    in-out property <string> mic-status: "";
 
     in-out property <float> mic-level: 0.0;
     in-out property <string> mic-error: "";
     in-out property <string> model-summary: "";
-    in-out property <float> download-progress: 0.0;
-    in-out property <string> download-status: "";
+    in-out property <string> model-url: "";
+    in-out property <bool> model-cached: false;
+
+    // Persistent background download state (visible across all steps once started)
+    in-out property <bool> bg-download-active: false;
+    in-out property <bool> bg-download-done: false;
+    in-out property <bool> bg-download-error: false;
+    in-out property <string> bg-download-model: "";
+    in-out property <float> bg-download-progress: 0.0;
+    in-out property <int> bg-download-pct: 0;
+    in-out property <string> bg-download-detail: "";
+
     in-out property <bool> duck-mute: false;
     in-out property <string> try-hint: "";
     in-out property <string> try-text: "";
 
     callback language-selected(int);
     callback mic-selected(int);
+    callback refresh-mics();
     callback open-mic-settings();
     callback retry-mic();
     callback download-model();
     callback later-model();
+    callback open-url(string);
+    callback copy-text(string);
     callback sound-chosen(bool);
     callback step-changed(int);
     callback skip-clicked();
@@ -44,7 +61,7 @@ export component OnboardingView inherits Rectangle {
                 spacing: Theme.space-16;
                 alignment: start;
 
-                // Step 0: Welcome
+                // Step 1 (index 0): Welcome
                 if root.step == 0 : VerticalLayout {
                     spacing: Theme.space-12;
                     Text {
@@ -67,7 +84,7 @@ export component OnboardingView inherits Rectangle {
                     }
                 }
 
-                // Step 1: Language
+                // Step 2 (index 1): Language with country flags
                 if root.step == 1 : VerticalLayout {
                     spacing: Theme.space-12;
                     Text {
@@ -76,8 +93,14 @@ export component OnboardingView inherits Rectangle {
                         font-weight: 700;
                         color: Theme.text;
                     }
-                    Dropdown {
-                        model: root.language-names;
+                    Text {
+                        text: "You can switch languages anytime from the General tab.";
+                        font-size: Theme.font-size-base;
+                        color: Theme.text-muted;
+                        wrap: word-wrap;
+                    }
+                    FlagDropdown {
+                        model: root.language-options;
                         current-index <=> root.language-index;
                         window-height: root.window-height;
                         accessible-name: "Language";
@@ -85,7 +108,7 @@ export component OnboardingView inherits Rectangle {
                     }
                 }
 
-                // Step 2: Microphone
+                // Step 3 (index 2): Microphone + Refresh devices button
                 if root.step == 2 : VerticalLayout {
                     spacing: Theme.space-12;
                     Text {
@@ -94,12 +117,30 @@ export component OnboardingView inherits Rectangle {
                         font-weight: 700;
                         color: Theme.text;
                     }
-                    Dropdown {
-                        model: root.mic-names;
-                        current-index <=> root.mic-index;
-                        window-height: root.window-height;
-                        accessible-name: "Microphone";
-                        selected(i) => { root.mic-selected(i); }
+                    HorizontalLayout {
+                        spacing: Theme.space-8;
+                        Dropdown {
+                            horizontal-stretch: 1;
+                            model: root.mic-names;
+                            current-index <=> root.mic-index;
+                            window-height: root.window-height;
+                            accessible-name: "Microphone";
+                            selected(i) => { root.mic-selected(i); }
+                        }
+                        Button {
+                            horizontal-stretch: 0;
+                            text: "Refresh devices";
+                            kind: ButtonKind.outline;
+                            clicked => { root.refresh-mics(); }
+                        }
+                    }
+                    Text {
+                        text: root.mic-status != ""
+                            ? root.mic-status
+                            : "Just plugged in a microphone? Click Refresh devices to detect it.";
+                        font-size: Theme.font-size-sm;
+                        color: Theme.text-muted;
+                        wrap: word-wrap;
                     }
                     Text {
                         text: "Say something — the bar should move.";
@@ -137,7 +178,7 @@ export component OnboardingView inherits Rectangle {
                     }
                 }
 
-                // Step 3: Model
+                // Step 4 (index 3): Model + trusted open-source download link
                 if root.step == 3 : VerticalLayout {
                     spacing: Theme.space-12;
                     Text {
@@ -147,40 +188,117 @@ export component OnboardingView inherits Rectangle {
                         color: Theme.text;
                     }
                     Text {
-                        text: root.model-summary != "" ? root.model-summary : "Eqho needs to download its speech model once. It stays on this computer.";
+                        text: root.model-summary != ""
+                            ? root.model-summary
+                            : "Eqho needs to download its speech model once. It stays on this computer.";
                         font-size: Theme.font-size-base;
                         color: Theme.text;
                         wrap: word-wrap;
                     }
+
+                    // Trusted download source card with direct HTTPS URL
+                    SectionCard {
+                        HorizontalLayout {
+                            spacing: Theme.space-8;
+                            alignment: start;
+                            VerticalLayout {
+                                alignment: center;
+                                horizontal-stretch: 0;
+                                Rectangle {
+                                    width: 8px;
+                                    height: 8px;
+                                    border-radius: 4px;
+                                    background: Theme.success;
+                                }
+                            }
+                            Text {
+                                text: "Trusted open-source download (HTTPS · Hugging Face)";
+                                font-size: Theme.font-size-sm;
+                                font-weight: 600;
+                                color: Theme.success;
+                                horizontal-stretch: 1;
+                                vertical-alignment: center;
+                                wrap: word-wrap;
+                            }
+                        }
+                        Text {
+                            text: "Downloaded directly from the official open-source whisper.cpp repository (ggerganov/whisper.cpp, MIT license) hosted on Hugging Face. No telemetry, no account required — the file stays 100% offline on this PC.";
+                            font-size: Theme.font-size-sm;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        if root.model-url != "" : Rectangle {
+                            border-radius: Theme.radius-sm;
+                            background: Theme.surface-tertiary;
+                            border-width: 1px;
+                            border-color: Theme.border-subtle;
+                            min-height: url-lay.preferred-height;
+
+                            url-lay := HorizontalLayout {
+                                padding-left: Theme.space-10;
+                                padding-right: Theme.space-8;
+                                padding-top: Theme.space-6;
+                                padding-bottom: Theme.space-6;
+                                spacing: Theme.space-8;
+                                alignment: space-between;
+
+                                Text {
+                                    text: root.model-url;
+                                    font-size: Theme.font-size-xs;
+                                    color: Theme.accent-text;
+                                    horizontal-stretch: 1;
+                                    vertical-alignment: center;
+                                    wrap: word-wrap;
+                                }
+
+                                HorizontalLayout {
+                                    horizontal-stretch: 0;
+                                    spacing: 4px;
+                                    alignment: center;
+                                    Button {
+                                        text: "Open";
+                                        kind: ButtonKind.outline;
+                                        clicked => { root.open-url(root.model-url); }
+                                    }
+                                    Button {
+                                        text: "Copy";
+                                        kind: ButtonKind.outline;
+                                        clicked => { root.copy-text(root.model-url); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     HorizontalLayout {
                         spacing: Theme.space-8;
                         alignment: start;
                         Button {
-                            text: "Download now";
+                            text: root.bg-download-active
+                                ? "Downloading (" + root.bg-download-pct + "%)…"
+                                : root.model-cached || root.bg-download-done
+                                    ? "✓ Already downloaded"
+                                    : "Download now";
                             kind: ButtonKind.accent;
+                            enabled: !root.bg-download-active && !(root.model-cached || root.bg-download-done);
                             clicked => { root.download-model(); }
                         }
                         Button {
-                            text: "Later";
+                            text: root.bg-download-active ? "Continue in background" : "Later";
                             kind: ButtonKind.outline;
                             clicked => { root.later-model(); }
                         }
                     }
-                    ProgressLine {
-                        height: 6px;
-                        border-radius: 3px;
-                        progress: root.download-progress;
-                        accessible-name: "Model download progress";
-                    }
-                    if root.download-status != "" : Text {
-                        text: root.download-status;
-                        font-size: Theme.font-size-base;
+
+                    if root.bg-download-active : Text {
+                        text: "You can click Next or Continue in background — progress stays visible at the bottom.";
+                        font-size: Theme.font-size-sm;
                         color: Theme.text-muted;
                         wrap: word-wrap;
                     }
                 }
 
-                // Step 4: Sound
+                // Step 5 (index 4): Sound
                 if root.step == 4 : VerticalLayout {
                     spacing: Theme.space-12;
                     Text {
@@ -217,7 +335,7 @@ export component OnboardingView inherits Rectangle {
                     }
                 }
 
-                // Step 5: Try it
+                // Step 6 (index 5): Try it
                 if root.step == 5 : VerticalLayout {
                     spacing: Theme.space-12;
                     Text {
@@ -227,7 +345,9 @@ export component OnboardingView inherits Rectangle {
                         color: Theme.text;
                     }
                     Text {
-                        text: root.try-hint != "" ? root.try-hint : "Press Alt + Q, say a sentence, press Alt + Q again. Your words appear where your cursor is.";
+                        text: root.try-hint != ""
+                            ? root.try-hint
+                            : "Press Alt + Q, say a sentence, press Alt + Q again. Your words appear where your cursor is.";
                         font-size: Theme.font-size-base;
                         color: Theme.text;
                         wrap: word-wrap;
@@ -241,10 +361,10 @@ export component OnboardingView inherits Rectangle {
             }
         }
 
-        // Bottom nav bar
-        Rectangle {
-            height: 60px;
-            background: Theme.bg;
+        // Persistent background download bar (visible across all steps while downloading / done / error)
+        if root.bg-download-active || root.bg-download-done || root.bg-download-error : Rectangle {
+            background: Theme.surface;
+            min-height: dl-lay.preferred-height;
 
             Rectangle {
                 y: 0;
@@ -252,6 +372,104 @@ export component OnboardingView inherits Rectangle {
                 height: 1px;
                 background: Theme.border-subtle;
             }
+
+            dl-lay := VerticalLayout {
+                padding-left: Theme.space-24;
+                padding-right: Theme.space-24;
+                padding-top: Theme.space-8;
+                padding-bottom: Theme.space-8;
+                spacing: 5px;
+
+                HorizontalLayout {
+                    spacing: Theme.space-8;
+                    alignment: space-between;
+
+                    HorizontalLayout {
+                        spacing: Theme.space-6;
+                        horizontal-stretch: 1;
+                        alignment: start;
+
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 0;
+                            Rectangle {
+                                width: 8px;
+                                height: 8px;
+                                border-radius: 4px;
+                                background: root.bg-download-error ? Theme.error
+                                    : root.bg-download-done ? Theme.success
+                                    : Theme.accent;
+                            }
+                        }
+
+                        Text {
+                            text: root.bg-download-error
+                                ? "Download failed" + (root.bg-download-model != "" ? " (" + root.bg-download-model + ")" : "")
+                                : root.bg-download-done
+                                    ? "✓ " + (root.bg-download-model != "" ? root.bg-download-model : "Speech model") + " ready"
+                                    : "Downloading " + (root.bg-download-model != "" ? root.bg-download-model : "speech model") + " in background";
+                            font-size: Theme.font-size-sm;
+                            font-weight: 600;
+                            color: root.bg-download-error ? Theme.error
+                                : root.bg-download-done ? Theme.success
+                                : Theme.text;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: Theme.space-8;
+                        horizontal-stretch: 0;
+                        alignment: end;
+
+                        Text {
+                            text: root.bg-download-detail != ""
+                                ? root.bg-download-detail
+                                : root.bg-download-active ? root.bg-download-pct + "%" : "";
+                            font-size: Theme.font-size-xs;
+                            font-weight: 500;
+                            color: root.bg-download-error ? Theme.error : Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+
+                        if root.bg-download-error : Button {
+                            text: "Retry";
+                            kind: ButtonKind.outline;
+                            clicked => { root.download-model(); }
+                        }
+                    }
+                }
+
+                if root.bg-download-active : ProgressLine {
+                    height: 5px;
+                    border-radius: 2.5px;
+                    progress: root.bg-download-progress;
+                    accessible-name: "Background model download progress";
+                }
+            }
+        }
+
+        // 6-part segmented blue step progress strip directly above the bottom navigation bar.
+        // Dynamically spans the exact popup width: step 1 = 1/6, step 2 = 2/6, step 3 = 3/6 (half), ..., step 6 = 6/6.
+        Rectangle {
+            height: 4px;
+            background: Theme.bg;
+
+            HorizontalLayout {
+                spacing: 2px;
+                for seg in [0, 1, 2, 3, 4, 5] : Rectangle {
+                    horizontal-stretch: 1;
+                    height: 4px;
+                    background: seg <= root.step ? Theme.accent : Theme.border-subtle;
+                }
+            }
+        }
+
+        // Bottom nav bar
+        Rectangle {
+            height: 58px;
+            background: Theme.bg;
 
             HorizontalLayout {
                 padding-left: Theme.space-24;
