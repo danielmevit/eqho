@@ -38,10 +38,14 @@ cmake --build build --config Release
 ```
 With `-DGGML_OPENMP=OFF`, `OPENMP = 1` disappears from `whisper_print_system_info()` and `eqho-host` automatically unlocks multi-threaded CPU inference with zero code changes.
 
-## 3. Portable Bundle & Installer Layout
+## 3. Portable Bundle, Inno Setup Installer & CI Workflow
+
+- **PowerShell build script:** `packaging/windows/build-rust.ps1` (compiles `Eqho.exe`, stages DLLs + notices, runs `--smoke`, builds portable zip, Inno Setup 6 installer, and `SHA256SUMS`).
+- **Inno Setup 6 script:** `packaging/windows/installer-rust.iss` (per-user, no UAC; supports `/DDevIsolated=1` for isolated `Eqho-Rust-0.9` side-by-side dev installs).
+- **GitHub Actions CI:** `.github/workflows/rust-windows.yml` (compiles clean-PC `whisper.cpp v1.8.4` DLLs with Vulkan + `GGML_OPENMP=OFF` + `GGML_CPU_ALL_VARIANTS=ON` + static CRT `/MT`, builds `Eqho.exe`, runs `cargo test` + `--smoke`, uploads portable zip, installer, and SHA256SUMS).
 
 Place the following files together in `dist/Eqho/`:
-- `Eqho.exe` (~15 MB, embedded `eqho.ico`, PerMonitorV2 manifest, `VERSIONINFO`)
+- `Eqho.exe` (~16 MB, embedded `eqho.ico`, PerMonitorV2 manifest, `VERSIONINFO`)
 - `whisper.dll`
 - `ggml.dll`
 - `ggml-base.dll`
@@ -49,8 +53,6 @@ Place the following files together in `dist/Eqho/`:
 - `ggml-vulkan.dll`
 - `THIRD_PARTY_NOTICES.txt`
 - `LICENSE`
-
-Inno Setup (`packaging/windows/installer.iss`) packages `dist/Eqho/*` directly into `Eqho-Setup-<version>-win-x64.exe` with no changes required to the installer script.
 
 ## 4. `0.9.0-dev` Isolation vs. `0.9.0` Production Switchover
 

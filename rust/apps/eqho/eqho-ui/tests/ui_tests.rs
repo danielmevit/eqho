@@ -81,15 +81,15 @@ fn model_cards_and_history_rows_populate_and_fire_callbacks() {
         HardwareClass::Gpu,
         "en",
     );
-    assert_eq!(cards.len(), 9);
+    assert_eq!(cards.len(), 13);
     let (en_cards, ml_cards) = split_model_cards(cards);
-    assert_eq!(en_cards.len(), 3);
-    assert_eq!(ml_cards.len(), 6);
+    assert_eq!(en_cards.len(), 4);
+    assert_eq!(ml_cards.len(), 9);
 
     win.set_english_models(ModelRc::new(VecModel::from(en_cards)));
     win.set_multilingual_models(ModelRc::new(VecModel::from(ml_cards)));
-    assert_eq!(win.get_english_models().row_count(), 3);
-    assert_eq!(win.get_multilingual_models().row_count(), 6);
+    assert_eq!(win.get_english_models().row_count(), 4);
+    assert_eq!(win.get_multilingual_models().row_count(), 9);
 
     let selected_model = Rc::new(RefCell::new(String::new()));
     let selected_c = Rc::clone(&selected_model);

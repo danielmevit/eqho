@@ -17,9 +17,9 @@ pub fn recommend_model(hw: HardwareClass, lang: &str) -> &'static str {
         }
         HardwareClass::Cpu => {
             if lang == "en" {
-                "distil-small.en"
+                "small.en-q5"
             } else {
-                "small"
+                "small-q5"
             }
         }
     }
@@ -34,7 +34,7 @@ mod tests {
     fn recommends_expected_models() {
         assert_eq!(recommend_model(HardwareClass::Gpu, "en"), "distil-large-v3");
         assert_eq!(recommend_model(HardwareClass::Gpu, "de"), "large-v3-turbo");
-        assert_eq!(recommend_model(HardwareClass::Cpu, "en"), "distil-small.en");
-        assert_eq!(recommend_model(HardwareClass::Cpu, "fr"), "small");
+        assert_eq!(recommend_model(HardwareClass::Cpu, "en"), "small.en-q5");
+        assert_eq!(recommend_model(HardwareClass::Cpu, "fr"), "small-q5");
     }
 }

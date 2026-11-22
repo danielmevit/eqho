@@ -163,7 +163,9 @@ pub fn supported_language_name(code: &str) -> Option<&'static str> {
 }
 
 pub fn is_english_only_model(model_key: &str) -> bool {
-    model_key.starts_with("distil") || model_key.ends_with(".en")
+    model_key.starts_with("distil")
+        || model_key.ends_with(".en")
+        || model_key.contains(".en-")
 }
 
 pub fn volume_duck_level(option: &str) -> Option<f32> {

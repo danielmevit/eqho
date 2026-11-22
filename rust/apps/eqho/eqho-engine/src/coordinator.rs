@@ -1725,4 +1725,56 @@ mod tests {
         assert!(report.ok, "smoke report failed: {:?}", report.checks);
         assert!(report.checks.len() >= 5);
     }
+
+    #[test]
+    fn concurrent_settings_updates_and_model_preload_never_deadlock() {
+        let dir = temp_dir("concurrent_settings");
+        let platform = Arc::new(FakePlatform::new(WindowHandle(99)));
+        let ui = Arc::new(RecordingUi::new());
+        let speech = FakeSpeech::with_responses(vec![Ok(vec![seg("ok")])]);
+        let hist = TranscriptHistory::with_default_cap(dir.join("history.jsonl"));
+        let coord = DictationCoordinator::new(
+            Settings::default(),
+            dir.join("settings.json"),
+            hist,
+            platform,
+            Box::new(speech),
+            ui,
+        );
+
+        let c_bg = coord.clone();
+        let bg = thread::spawn(move || {
+            for i in 0..40 {
+                let s = Settings {
+                    model_size: if i % 2 == 0 {
+                        "distil-large-v3".to_owned()
+                    } else {
+                        "small.en-q5".to_owned()
+                    },
+                    ..Settings::default()
+                };
+                c_bg.apply_settings(s, false);
+                let _ = c_bg.preload_model();
+            }
+        });
+
+        let c_ui = coord.clone();
+        let ui_t = thread::spawn(move || {
+            for i in 0..80 {
+                let s = Settings {
+                    volume_duck: if i % 2 == 0 {
+                        "mute".to_owned()
+                    } else {
+                        "off".to_owned()
+                    },
+                    ..Settings::default()
+                };
+                c_ui.apply_settings(s, false);
+            }
+        });
+
+        bg.join().expect("background download/preload thread should not deadlock");
+        ui_t.join().expect("UI settings thread should not deadlock");
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

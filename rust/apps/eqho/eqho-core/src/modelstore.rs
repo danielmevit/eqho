@@ -21,9 +21,11 @@ pub struct ModelInfo {
     pub ggml_filename: &'static str,
     pub download_url: &'static str,
     pub english_only: bool,
+    pub quantized: bool,
 }
 
 pub const MODELS: &[ModelInfo] = &[
+    // English-optimized (4 — clean 2x2 grid)
     ModelInfo {
         key: "distil-large-v3",
         label: "Distil Large v3 (~1.5 GB, English-optimized, recommended)",
@@ -32,6 +34,7 @@ pub const MODELS: &[ModelInfo] = &[
         ggml_filename: "ggml-large-v3-turbo.bin",
         download_url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin",
         english_only: true,
+        quantized: false,
     },
     ModelInfo {
         key: "distil-medium.en",
@@ -41,16 +44,29 @@ pub const MODELS: &[ModelInfo] = &[
         ggml_filename: "ggml-medium.en.bin",
         download_url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin",
         english_only: true,
+        quantized: false,
     },
     ModelInfo {
         key: "distil-small.en",
-        label: "Distil Small EN (~330 MB, fastest English)",
+        label: "Distil Small EN (~330 MB, fast English)",
         size_mb: 330,
         ggml_name: "small.en",
         ggml_filename: "ggml-small.en.bin",
         download_url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
         english_only: true,
+        quantized: false,
     },
+    ModelInfo {
+        key: "small.en-q5",
+        label: "Small EN Q5 (~190 MB, CPU-fast quantized English)",
+        size_mb: 190,
+        ggml_name: "small.en-q5_1",
+        ggml_filename: "ggml-small.en-q5_1.bin",
+        download_url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en-q5_1.bin",
+        english_only: true,
+        quantized: true,
+    },
+    // Multilingual (9)
     ModelInfo {
         key: "large-v3-turbo",
         label: "Large v3 Turbo (~1.6 GB, multilingual, near-large accuracy)",
@@ -59,6 +75,17 @@ pub const MODELS: &[ModelInfo] = &[
         ggml_filename: "ggml-large-v3-turbo.bin",
         download_url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin",
         english_only: false,
+        quantized: false,
+    },
+    ModelInfo {
+        key: "large-v3-turbo-q5",
+        label: "Large v3 Turbo Q5 (~574 MB, quantized fast, low RAM/VRAM)",
+        size_mb: 574,
+        ggml_name: "large-v3-turbo-q5_0",
+        ggml_filename: "ggml-large-v3-turbo-q5_0.bin",
+        download_url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
+        english_only: false,
+        quantized: true,
     },
     ModelInfo {
         key: "medium",
@@ -68,6 +95,7 @@ pub const MODELS: &[ModelInfo] = &[
         ggml_filename: "ggml-medium.bin",
         download_url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
         english_only: false,
+        quantized: false,
     },
     ModelInfo {
         key: "small",
@@ -77,6 +105,17 @@ pub const MODELS: &[ModelInfo] = &[
         ggml_filename: "ggml-small.bin",
         download_url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
         english_only: false,
+        quantized: false,
+    },
+    ModelInfo {
+        key: "small-q5",
+        label: "Small Q5 (~190 MB, CPU-fast quantized multilingual)",
+        size_mb: 190,
+        ggml_name: "small-q5_1",
+        ggml_filename: "ggml-small-q5_1.bin",
+        download_url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin",
+        english_only: false,
+        quantized: true,
     },
     ModelInfo {
         key: "base",
@@ -86,6 +125,17 @@ pub const MODELS: &[ModelInfo] = &[
         ggml_filename: "ggml-base.bin",
         download_url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
         english_only: false,
+        quantized: false,
+    },
+    ModelInfo {
+        key: "base-q5",
+        label: "Base Q5 (~60 MB, ultra-lightweight CPU)",
+        size_mb: 60,
+        ggml_name: "base-q5_1",
+        ggml_filename: "ggml-base-q5_1.bin",
+        download_url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin",
+        english_only: false,
+        quantized: true,
     },
     ModelInfo {
         key: "tiny",
@@ -95,6 +145,7 @@ pub const MODELS: &[ModelInfo] = &[
         ggml_filename: "ggml-tiny.bin",
         download_url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
         english_only: false,
+        quantized: false,
     },
     ModelInfo {
         key: "large-v3",
@@ -104,17 +155,22 @@ pub const MODELS: &[ModelInfo] = &[
         ggml_filename: "ggml-large-v3.bin",
         download_url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin",
         english_only: false,
+        quantized: false,
     },
 ];
 
-pub const MODEL_SIZES_MB: [(&str, u64); 9] = [
+pub const MODEL_SIZES_MB: [(&str, u64); 13] = [
     ("distil-large-v3", 1510),
     ("distil-medium.en", 750),
     ("distil-small.en", 330),
+    ("small.en-q5", 190),
     ("large-v3-turbo", 1620),
+    ("large-v3-turbo-q5", 574),
     ("medium", 1530),
     ("small", 970),
+    ("small-q5", 190),
     ("base", 290),
+    ("base-q5", 60),
     ("tiny", 150),
     ("large-v3", 3090),
 ];
@@ -163,11 +219,19 @@ mod tests {
 
     #[test]
     fn model_table_and_paths() {
-        assert_eq!(MODELS.len(), 9);
+        assert_eq!(MODELS.len(), 13);
         let dir = Path::new("/tmp/models");
         assert_eq!(
             whispercpp_model_path(dir, "distil-large-v3"),
             PathBuf::from("/tmp/models/whispercpp/ggml-large-v3-turbo.bin")
+        );
+        assert_eq!(
+            whispercpp_model_path(dir, "large-v3-turbo-q5"),
+            PathBuf::from("/tmp/models/whispercpp/ggml-large-v3-turbo-q5_0.bin")
+        );
+        assert_eq!(
+            whispercpp_model_path(dir, "small.en-q5"),
+            PathBuf::from("/tmp/models/whispercpp/ggml-small.en-q5_1.bin")
         );
         assert_eq!(
             whispercpp_model_path(dir, "unknown-model"),

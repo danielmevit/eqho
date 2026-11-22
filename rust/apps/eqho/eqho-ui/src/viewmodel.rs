@@ -86,7 +86,11 @@ pub fn build_model_cards(
             } else {
                 "Multilingual"
             };
-            let detail = format!("{lang_kind} · {}", model_size_label(m.size_mb));
+            let detail = if m.quantized {
+                format!("{lang_kind} · {} · Q5 CPU-fast", model_size_label(m.size_mb))
+            } else {
+                format!("{lang_kind} · {}", model_size_label(m.size_mb))
+            };
             let recommendation = if m.key == recommended {
                 "Recommended for this PC"
             } else {
