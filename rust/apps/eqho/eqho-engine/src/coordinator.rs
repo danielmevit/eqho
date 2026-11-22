@@ -834,8 +834,8 @@ impl CoordinatorInner {
             return Ok(info);
         }
 
-        // Low-memory warning on CPU / shared-memory loads (warning only, never blocks).
-        if (!use_gpu || !settings.engine_backend.eq_ignore_ascii_case("faster-whisper"))
+        // Low-memory warning when running on PC RAM (CPU mode — warning only, never blocks).
+        if !use_gpu
             && let Some(free_mb) = self.platform.free_memory_mb()
         {
             let need_mb = required_memory_mb(model_key);

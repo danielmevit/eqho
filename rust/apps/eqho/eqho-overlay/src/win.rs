@@ -848,16 +848,23 @@ unsafe extern "system" fn pill_wnd_proc(
 ) -> LRESULT {
     match msg {
         WM_APP_CMD => {
+            let mut destroy_handles: Option<(HWND, HWND)> = None;
             // SAFETY: `hwnd` belongs to the overlay thread.
             if let Some(state) = unsafe { get_window_state(hwnd) }
                 && state.handle_commands()
             {
                 state.stop_timer();
-                let panel = state.panel_hwnd;
+                destroy_handles = Some((state.panel_hwnd, hwnd));
+            }
+            if let Some((panel, pill)) = destroy_handles {
+                // Detach state pointers BEFORE `DestroyWindow` so re-entrant messages
+                // cannot alias `OverlayState`.
+                set_window_state(panel, null_mut());
+                set_window_state(pill, null_mut());
                 // SAFETY: Destroying owned windows and exiting message loop on shutdown.
                 unsafe {
                     let _ = DestroyWindow(panel);
-                    let _ = DestroyWindow(hwnd);
+                    let _ = DestroyWindow(pill);
                     PostQuitMessage(0);
                 }
             }
