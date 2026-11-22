@@ -1,0 +1,1 @@
+Implement `eqho-host` out-of-process `whisper.cpp 1.8.4` model host: dynamic FFI, WinHTTP GGML downloader, framed stdin/stdout IPC protocol + worker loop, and `ModelHost` client with inactivity/transcribe timeouts and kill-on-switch/error.
