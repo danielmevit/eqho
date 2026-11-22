@@ -974,9 +974,9 @@ export component Dropdown inherits Rectangle {
                 reject
             }
             flick := Flickable {
-                viewport-height: root.content-h;
-                viewport-width: self.width;
-                viewport-y <=> root.scroll-y;
+                content-height: root.content-h;
+                content-width: self.width;
+                content-y <=> root.scroll-y;
                 list := VerticalLayout {
                     padding: root.pad;
                     padding-right: root.pad + (root.list-scrolls ? 8px : 0px);

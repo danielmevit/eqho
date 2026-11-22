@@ -148,19 +148,21 @@ export component ModelsTab inherits Rectangle {
                 for row-idx in Math.ceil(root.english-models.length / 2) : HorizontalLayout {
                     spacing: Theme.space-10;
                     ModelCard {
+                        width: (parent.width - Theme.space-10) / 2;
                         item: root.english-models[row-idx * 2];
                         select-clicked(k) => { root.select-model(k); }
                         download-clicked(k) => { root.download-model(k); }
                         delete-clicked(k) => { root.delete-model(k); }
                     }
                     if row-idx * 2 + 1 < root.english-models.length : ModelCard {
+                        width: (parent.width - Theme.space-10) / 2;
                         item: root.english-models[row-idx * 2 + 1];
                         select-clicked(k) => { root.select-model(k); }
                         download-clicked(k) => { root.download-model(k); }
                         delete-clicked(k) => { root.delete-model(k); }
                     }
                     if row-idx * 2 + 1 >= root.english-models.length : Rectangle {
-                        horizontal-stretch: 1;
+                        width: (parent.width - Theme.space-10) / 2;
                     }
                 }
             }
@@ -181,19 +183,21 @@ export component ModelsTab inherits Rectangle {
                 for row-idx in Math.ceil(root.multilingual-models.length / 2) : HorizontalLayout {
                     spacing: Theme.space-10;
                     ModelCard {
+                        width: (parent.width - Theme.space-10) / 2;
                         item: root.multilingual-models[row-idx * 2];
                         select-clicked(k) => { root.select-model(k); }
                         download-clicked(k) => { root.download-model(k); }
                         delete-clicked(k) => { root.delete-model(k); }
                     }
                     if row-idx * 2 + 1 < root.multilingual-models.length : ModelCard {
+                        width: (parent.width - Theme.space-10) / 2;
                         item: root.multilingual-models[row-idx * 2 + 1];
                         select-clicked(k) => { root.select-model(k); }
                         download-clicked(k) => { root.download-model(k); }
                         delete-clicked(k) => { root.delete-model(k); }
                     }
                     if row-idx * 2 + 1 >= root.multilingual-models.length : Rectangle {
-                        horizontal-stretch: 1;
+                        width: (parent.width - Theme.space-10) / 2;
                     }
                 }
             }

@@ -1690,12 +1690,20 @@ mod tests {
             hist,
             platform.clone(),
             Box::new(speech),
-            ui,
+            ui.clone(),
         );
 
         coord.activate();
-        // Wait enough for 1.5s audio at 50ms/block (30 blocks ~ 1.5s) + trailing silence flush
-        thread::sleep(Duration::from_millis(3200));
+        // Wait until the WAV feeder + VAD emit the completed phrase (bounded deadline so
+        // heavy scheduler load never flakes on a fixed sleep).
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !lock_unpoisoned(&ui.overlay_texts)
+            .iter()
+            .any(|t| t.contains("Wav test passed"))
+            && Instant::now() < deadline
+        {
+            thread::sleep(Duration::from_millis(25));
+        }
         coord.deactivate();
         wait_until_not_finishing(&coord);
 

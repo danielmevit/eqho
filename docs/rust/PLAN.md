@@ -27,7 +27,11 @@ Parent Python workspace (`D:\Vibe Coding\_vm\eqho\{repo,coord,wt}`) and live use
 | RTX 3060 `tiny` warm Vulkan | — | — | **90.3 ms** on 10.4 s audio (RTF 0.0087, 115× RT) | **PASS** |
 | CPU fallback (`ggml-tiny.bin`, `threads=1`) | — | Clean fallback | **1.87 s** on 10.4 s audio (RTF 0.179) *(Note: prebuilt `ggml-cpu.dll` `OPENMP=1` faults at `threads>1`; clamped to 1 until R4 CI builds `-DGGML_OPENMP=OFF`)* | **PASS (safeguarded)** |
 | Pill frame render (`280×51` layered BGRA) | ~5.5–6.6 ms (numpy + PPM) | ≤ 1.5 ms target / < 16 ms 60fps | **2.74 ms avg / 3.12 ms p95 / 3.60 ms max**, `focus_stolen: false` | **PASS (6× under 60fps)** |
-| Installer / portable footprint | ~250+ MB (Python + CTranslate2 + Vulkan) | ≤ 30 MB zipped | `eqho-spike.exe` 8.6 MB + 5 Whisper DLLs (~20 MB zipped) | **PASS** |
+| Installer / portable footprint | ~250+ MB (Python + CTranslate2 + Vulkan) | ≤ 30 MB zipped | `Eqho.exe` 14.96 MB + 5 Whisper DLLs (~22 MB zipped) | **PASS** |
+| **Live `Eqho.exe --e2e-wav` (RTX 3060 Vulkan via `--model-host` IPC, 5 LibriSpeech clips)** | 1.30–1.44 s | ≤ 2.0 s, WER ≤ 2.5% | **311–476 ms** (mean **376 ms**, **3.6× faster** incl. IPC + textproc), **1.39% WER** (71/72 words exact), `no_speech_prob=3.5e-11`, `avg_logprob=-0.045..-0.132` | **PASS** |
+| **Live `Eqho.exe --e2e-wav` CPU fallback (`tiny`, `--gpu false`)** | — | Zero crash | **2.99 s** on 10.44 s audio (RTF 0.286, Windows `OPENMP=1` thread clamp verified) | **PASS** |
+| **Live `Eqho.exe --soak 30` (native Win32 layered pill + panel)** | — | Flat RAM | `ok: true`, **+0.17 MB** private RAM delta across 30 cycles | **PASS** |
+| **Live WinHTTP GGML downloader** | — | Native HTTPS progress | Verified live HTTPS streaming download from HuggingFace with byte-level progress & atomic `.tmp.<pid>` staging | **PASS** |
 
 ## 3. Architecture (`rust/` Cargo Workspace)
 ```text
