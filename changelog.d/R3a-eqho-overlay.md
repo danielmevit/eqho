@@ -1,0 +1,1 @@
+- **eqho-overlay (R3a):** Implemented `pure.rs`, `win.rs` (Win32 `UpdateLayeredWindow` iridescent pill + rounded translucent upward-growing panel), and `OverlayHandle` API in `rust/apps/eqho/eqho-overlay/`.
