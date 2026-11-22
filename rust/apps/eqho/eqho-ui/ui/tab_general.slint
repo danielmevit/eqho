@@ -1,0 +1,375 @@
+// General Tab: Audio Input, Hotkey, Speech, and Behavior.
+import { Theme } from "@app-theme/theme.slint";
+import { Dropdown, Slider, TabList, Toggle, CompactRow } from "@damt-ui/kit.slint";
+import { ScrollArea, SectionHeader, SectionCard, StackedSettingRow, ThemedTextEdit } from "components.slint";
+
+export component GeneralTab inherits Rectangle {
+    in property <length> window-height: 560px;
+
+    in property <[string]> mic-names: ["System Default"];
+    in-out property <int> mic-index: 0;
+    in-out property <int> vad-sensitivity-pct: 100;
+
+    in-out property <string> hotkey-display: "Alt + Q";
+    in-out property <bool> hotkey-capturing: false;
+    in-out property <int> hotkey-mode-index: 0;
+
+    in property <[string]> language-names: ["English"];
+    in-out property <int> language-index: 0;
+    in-out property <string> language-warning: "";
+    in-out property <string> initial-prompt: "";
+
+    in-out property <bool> format-cleanup: true;
+    in-out property <bool> sound-feedback: true;
+    in-out property <bool> history-enabled: true;
+    in-out property <int> paste-mode-index: 0;
+
+    callback mic-selected(int);
+    callback vad-sensitivity-changed(int);
+    callback start-hotkey-capture();
+    callback cancel-hotkey-capture();
+    callback hotkey-mode-changed(int);
+    callback language-selected(int);
+    callback initial-prompt-changed(string);
+    callback format-cleanup-toggled(bool);
+    callback sound-feedback-toggled(bool);
+    callback history-enabled-toggled(bool);
+    callback paste-mode-changed(int);
+
+    property <bool> two-col: root.width >= 760px;
+
+    ScrollArea {
+        width: parent.width;
+        height: parent.height;
+
+        VerticalLayout {
+            padding: Theme.space-16;
+            spacing: Theme.space-16;
+
+            if root.two-col : HorizontalLayout {
+                spacing: Theme.space-16;
+                alignment: stretch;
+
+                // Left column: AUDIO INPUT + HOTKEY
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: Theme.space-12;
+                    alignment: start;
+
+                    SectionHeader { text: "AUDIO INPUT"; }
+                    SectionCard {
+                        StackedSettingRow {
+                            label: "Microphone";
+                            help: "Select your input device";
+                            Dropdown {
+                                model: root.mic-names;
+                                current-index <=> root.mic-index;
+                                window-height: root.window-height;
+                                accessible-name: "Microphone";
+                                selected(i) => { root.mic-selected(i); }
+                            }
+                        }
+                        Slider {
+                            label: "Mic Sensitivity";
+                            value-text: root.vad-sensitivity-pct <= 80 ? "Low" : root.vad-sensitivity-pct >= 140 ? "High" : "Normal";
+                            value <=> root.vad-sensitivity-pct;
+                            minimum: 50;
+                            maximum: 200;
+                            step: 10;
+                            edited(v) => { root.vad-sensitivity-changed(v); }
+                        }
+                    }
+
+                    SectionHeader { text: "HOTKEY"; }
+                    SectionCard {
+                        StackedSettingRow {
+                            label: "Global Hotkey";
+                            help: "Press to activate/deactivate dictation";
+                            Rectangle {
+                                height: 34px;
+                                border-radius: Theme.radius-sm;
+                                background: root.hotkey-capturing ? Theme.accent-muted : Theme.surface-tertiary;
+                                border-width: 1px;
+                                border-color: root.hotkey-capturing ? Theme.accent : Theme.border;
+
+                                accessible-role: button;
+                                accessible-label: "Global Hotkey";
+                                accessible-action-default => {
+                                    if (root.hotkey-capturing) {
+                                        root.cancel-hotkey-capture();
+                                    } else {
+                                        root.start-hotkey-capture();
+                                    }
+                                }
+
+                                Text {
+                                    text: root.hotkey-capturing ? "Press your new keys…" : root.hotkey-display;
+                                    font-size: Theme.font-size-lg;
+                                    font-weight: 700;
+                                    color: root.hotkey-capturing ? Theme.text : Theme.accent-text;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+
+                                TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        if (root.hotkey-capturing) {
+                                            root.cancel-hotkey-capture();
+                                        } else {
+                                            root.start-hotkey-capture();
+                                        }
+                                    }
+                                }
+                            }
+                            Text {
+                                text: root.hotkey-capturing ? "Esc to cancel" : "Click to change";
+                                font-size: Theme.font-size-xs;
+                                color: Theme.text-muted;
+                            }
+                        }
+
+                        StackedSettingRow {
+                            label: "Hotkey Mode";
+                            help: "Toggle on/off or hold to talk";
+                            TabList {
+                                items: ["Toggle", "Hold"];
+                                selected <=> root.hotkey-mode-index;
+                                accessible-name: "Hotkey Mode";
+                                picked(i) => { root.hotkey-mode-changed(i); }
+                            }
+                        }
+                    }
+                }
+
+                // Right column: SPEECH + BEHAVIOR
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: Theme.space-12;
+                    alignment: start;
+
+                    SectionHeader { text: "SPEECH"; }
+                    SectionCard {
+                        StackedSettingRow {
+                            label: "Language";
+                            help: "Transcription language";
+                            Dropdown {
+                                model: root.language-names;
+                                current-index <=> root.language-index;
+                                window-height: root.window-height;
+                                accessible-name: "Language";
+                                selected(i) => { root.language-selected(i); }
+                            }
+                        }
+                        if root.language-warning != "" : Text {
+                            text: root.language-warning;
+                            font-size: Theme.font-size-sm;
+                            color: Theme.warning;
+                            wrap: word-wrap;
+                        }
+                        StackedSettingRow {
+                            label: "Custom Vocabulary";
+                            help: "Names and special words Eqho should know";
+                            ThemedTextEdit {
+                                height: 64px;
+                                text <=> root.initial-prompt;
+                                font-size: Theme.font-size-sm;
+                                edited(s) => { root.initial-prompt-changed(s); }
+                            }
+                        }
+                    }
+
+                    SectionHeader { text: "BEHAVIOR"; }
+                    SectionCard {
+                        CompactRow {
+                            label: "Auto-format";
+                            help: "Clean up punctuation and capitalization";
+                            Toggle {
+                                checked <=> root.format-cleanup;
+                                accessible-name: "Auto-format";
+                                toggled(v) => { root.format-cleanup-toggled(v); }
+                            }
+                        }
+                        CompactRow {
+                            label: "Sound Feedback";
+                            help: "Play a subtle chime when recording starts/stops";
+                            Toggle {
+                                checked <=> root.sound-feedback;
+                                accessible-name: "Sound Feedback";
+                                toggled(v) => { root.sound-feedback-toggled(v); }
+                            }
+                        }
+                        CompactRow {
+                            label: "Save History";
+                            help: "Keep local transcripts in the History tab";
+                            Toggle {
+                                checked <=> root.history-enabled;
+                                accessible-name: "Save History";
+                                toggled(v) => { root.history-enabled-toggled(v); }
+                            }
+                        }
+                        StackedSettingRow {
+                            label: "Paste Mode";
+                            help: "How dictated text enters the active app";
+                            TabList {
+                                items: ["Clipboard", "Typing"];
+                                selected <=> root.paste-mode-index;
+                                accessible-name: "Paste Mode";
+                                picked(i) => { root.paste-mode-changed(i); }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Single-column narrow layout
+            if !root.two-col : VerticalLayout {
+                spacing: Theme.space-12;
+
+                SectionHeader { text: "AUDIO INPUT"; }
+                SectionCard {
+                    StackedSettingRow {
+                        label: "Microphone";
+                        help: "Select your input device";
+                        Dropdown {
+                            model: root.mic-names;
+                            current-index <=> root.mic-index;
+                            window-height: root.window-height;
+                            accessible-name: "Microphone";
+                            selected(i) => { root.mic-selected(i); }
+                        }
+                    }
+                    Slider {
+                        label: "Mic Sensitivity";
+                        value-text: root.vad-sensitivity-pct <= 80 ? "Low" : root.vad-sensitivity-pct >= 140 ? "High" : "Normal";
+                        value <=> root.vad-sensitivity-pct;
+                        minimum: 50;
+                        maximum: 200;
+                        step: 10;
+                        edited(v) => { root.vad-sensitivity-changed(v); }
+                    }
+                }
+
+                SectionHeader { text: "HOTKEY"; }
+                SectionCard {
+                    StackedSettingRow {
+                        label: "Global Hotkey";
+                        help: "Press to activate/deactivate dictation";
+                        Rectangle {
+                            height: 34px;
+                            border-radius: Theme.radius-sm;
+                            background: root.hotkey-capturing ? Theme.accent-muted : Theme.surface-tertiary;
+                            border-width: 1px;
+                            border-color: root.hotkey-capturing ? Theme.accent : Theme.border;
+                            Text {
+                                text: root.hotkey-capturing ? "Press your new keys…" : root.hotkey-display;
+                                font-size: Theme.font-size-lg;
+                                font-weight: 700;
+                                color: root.hotkey-capturing ? Theme.text : Theme.accent-text;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    if (root.hotkey-capturing) {
+                                        root.cancel-hotkey-capture();
+                                    } else {
+                                        root.start-hotkey-capture();
+                                    }
+                                }
+                            }
+                        }
+                        Text {
+                            text: root.hotkey-capturing ? "Esc to cancel" : "Click to change";
+                            font-size: Theme.font-size-xs;
+                            color: Theme.text-muted;
+                        }
+                    }
+                    StackedSettingRow {
+                        label: "Hotkey Mode";
+                        help: "Toggle on/off or hold to talk";
+                        TabList {
+                            items: ["Toggle", "Hold"];
+                            selected <=> root.hotkey-mode-index;
+                            accessible-name: "Hotkey Mode";
+                            picked(i) => { root.hotkey-mode-changed(i); }
+                        }
+                    }
+                }
+
+                SectionHeader { text: "SPEECH"; }
+                SectionCard {
+                    StackedSettingRow {
+                        label: "Language";
+                        help: "Transcription language";
+                        Dropdown {
+                            model: root.language-names;
+                            current-index <=> root.language-index;
+                            window-height: root.window-height;
+                            accessible-name: "Language";
+                            selected(i) => { root.language-selected(i); }
+                        }
+                    }
+                    if root.language-warning != "" : Text {
+                        text: root.language-warning;
+                        font-size: Theme.font-size-sm;
+                        color: Theme.warning;
+                        wrap: word-wrap;
+                    }
+                    StackedSettingRow {
+                        label: "Custom Vocabulary";
+                        help: "Names and special words Eqho should know";
+                        ThemedTextEdit {
+                            height: 64px;
+                            text <=> root.initial-prompt;
+                            font-size: Theme.font-size-sm;
+                            edited(s) => { root.initial-prompt-changed(s); }
+                        }
+                    }
+                }
+
+                SectionHeader { text: "BEHAVIOR"; }
+                SectionCard {
+                    CompactRow {
+                        label: "Auto-format";
+                        help: "Clean up punctuation and capitalization";
+                        Toggle {
+                            checked <=> root.format-cleanup;
+                            accessible-name: "Auto-format";
+                            toggled(v) => { root.format-cleanup-toggled(v); }
+                        }
+                    }
+                    CompactRow {
+                        label: "Sound Feedback";
+                        help: "Play a subtle chime when recording starts/stops";
+                        Toggle {
+                            checked <=> root.sound-feedback;
+                            accessible-name: "Sound Feedback";
+                            toggled(v) => { root.sound-feedback-toggled(v); }
+                        }
+                    }
+                    CompactRow {
+                        label: "Save History";
+                        help: "Keep local transcripts in the History tab";
+                        Toggle {
+                            checked <=> root.history-enabled;
+                            accessible-name: "Save History";
+                            toggled(v) => { root.history-enabled-toggled(v); }
+                        }
+                    }
+                    StackedSettingRow {
+                        label: "Paste Mode";
+                        help: "How dictated text enters the active app";
+                        TabList {
+                            items: ["Clipboard", "Typing"];
+                            selected <=> root.paste-mode-index;
+                            accessible-name: "Paste Mode";
+                            picked(i) => { root.paste-mode-changed(i); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

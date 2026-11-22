@@ -1,0 +1,313 @@
+// 6-Step First-Time Onboarding View.
+import { Theme } from "@app-theme/theme.slint";
+import { Button, ButtonKind, Dropdown, ProgressLine } from "@damt-ui/kit.slint";
+import { ScrollArea, ThemedTextEdit } from "components.slint";
+
+export component OnboardingView inherits Rectangle {
+    in property <length> window-height: 560px;
+
+    in-out property <int> step: 0;
+    in property <[string]> language-names: ["English"];
+    in-out property <int> language-index: 0;
+    in property <[string]> mic-names: ["System Default"];
+    in-out property <int> mic-index: 0;
+
+    in-out property <float> mic-level: 0.0;
+    in-out property <string> mic-error: "";
+    in-out property <string> model-summary: "";
+    in-out property <float> download-progress: 0.0;
+    in-out property <string> download-status: "";
+    in-out property <bool> duck-mute: false;
+    in-out property <string> try-hint: "";
+    in-out property <string> try-text: "";
+
+    callback language-selected(int);
+    callback mic-selected(int);
+    callback open-mic-settings();
+    callback retry-mic();
+    callback download-model();
+    callback later-model();
+    callback sound-chosen(bool);
+    callback step-changed(int);
+    callback skip-clicked();
+    callback finish-clicked();
+
+    background: Theme.bg;
+
+    VerticalLayout {
+        // Scrollable step body
+        ScrollArea {
+            vertical-stretch: 1;
+
+            VerticalLayout {
+                padding: Theme.space-32;
+                spacing: Theme.space-16;
+                alignment: start;
+
+                // Step 0: Welcome
+                if root.step == 0 : VerticalLayout {
+                    spacing: Theme.space-12;
+                    Text {
+                        text: "Welcome to Eqho";
+                        font-size: Theme.font-size-title;
+                        font-weight: 700;
+                        color: Theme.text;
+                    }
+                    Text {
+                        text: "Eqho types what you say, in any app. Everything stays on this computer — nothing you say is sent anywhere.";
+                        font-size: Theme.font-size-lg;
+                        color: Theme.text;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: "This short setup takes about a minute.";
+                        font-size: Theme.font-size-base;
+                        color: Theme.text-muted;
+                        wrap: word-wrap;
+                    }
+                }
+
+                // Step 1: Language
+                if root.step == 1 : VerticalLayout {
+                    spacing: Theme.space-12;
+                    Text {
+                        text: "Which language will you speak?";
+                        font-size: Theme.font-size-title;
+                        font-weight: 700;
+                        color: Theme.text;
+                    }
+                    Dropdown {
+                        model: root.language-names;
+                        current-index <=> root.language-index;
+                        window-height: root.window-height;
+                        accessible-name: "Language";
+                        selected(i) => { root.language-selected(i); }
+                    }
+                }
+
+                // Step 2: Microphone
+                if root.step == 2 : VerticalLayout {
+                    spacing: Theme.space-12;
+                    Text {
+                        text: "Which microphone should Eqho use?";
+                        font-size: Theme.font-size-title;
+                        font-weight: 700;
+                        color: Theme.text;
+                    }
+                    Dropdown {
+                        model: root.mic-names;
+                        current-index <=> root.mic-index;
+                        window-height: root.window-height;
+                        accessible-name: "Microphone";
+                        selected(i) => { root.mic-selected(i); }
+                    }
+                    Text {
+                        text: "Say something — the bar should move.";
+                        font-size: Theme.font-size-base;
+                        color: Theme.text-muted;
+                    }
+                    ProgressLine {
+                        height: 8px;
+                        border-radius: 4px;
+                        progress: root.mic-level;
+                        accessible-name: "Microphone input level";
+                    }
+                    if root.mic-error != "" : VerticalLayout {
+                        spacing: Theme.space-8;
+                        Text {
+                            text: root.mic-error;
+                            font-size: Theme.font-size-base;
+                            color: Theme.warning;
+                            wrap: word-wrap;
+                        }
+                        HorizontalLayout {
+                            spacing: Theme.space-8;
+                            alignment: start;
+                            Button {
+                                text: "Open Windows settings";
+                                kind: ButtonKind.outline;
+                                clicked => { root.open-mic-settings(); }
+                            }
+                            Button {
+                                text: "Try again";
+                                kind: ButtonKind.outline;
+                                clicked => { root.retry-mic(); }
+                            }
+                        }
+                    }
+                }
+
+                // Step 3: Model
+                if root.step == 3 : VerticalLayout {
+                    spacing: Theme.space-12;
+                    Text {
+                        text: "The speech model";
+                        font-size: Theme.font-size-title;
+                        font-weight: 700;
+                        color: Theme.text;
+                    }
+                    Text {
+                        text: root.model-summary != "" ? root.model-summary : "Eqho needs to download its speech model once. It stays on this computer.";
+                        font-size: Theme.font-size-base;
+                        color: Theme.text;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        spacing: Theme.space-8;
+                        alignment: start;
+                        Button {
+                            text: "Download now";
+                            kind: ButtonKind.accent;
+                            clicked => { root.download-model(); }
+                        }
+                        Button {
+                            text: "Later";
+                            kind: ButtonKind.outline;
+                            clicked => { root.later-model(); }
+                        }
+                    }
+                    ProgressLine {
+                        height: 6px;
+                        border-radius: 3px;
+                        progress: root.download-progress;
+                        accessible-name: "Model download progress";
+                    }
+                    if root.download-status != "" : Text {
+                        text: root.download-status;
+                        font-size: Theme.font-size-base;
+                        color: Theme.text-muted;
+                        wrap: word-wrap;
+                    }
+                }
+
+                // Step 4: Sound
+                if root.step == 4 : VerticalLayout {
+                    spacing: Theme.space-12;
+                    Text {
+                        text: "Other sounds";
+                        font-size: Theme.font-size-title;
+                        font-weight: 700;
+                        color: Theme.text;
+                    }
+                    Text {
+                        text: "Turn other sounds off while you dictate? It helps Eqho hear you.";
+                        font-size: Theme.font-size-base;
+                        color: Theme.text;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        spacing: Theme.space-8;
+                        alignment: start;
+                        Button {
+                            text: "Yes, turn them off";
+                            kind: root.duck-mute ? ButtonKind.accent : ButtonKind.outline;
+                            clicked => {
+                                root.duck-mute = true;
+                                root.sound-chosen(true);
+                            }
+                        }
+                        Button {
+                            text: "No, leave them";
+                            kind: !root.duck-mute ? ButtonKind.accent : ButtonKind.outline;
+                            clicked => {
+                                root.duck-mute = false;
+                                root.sound-chosen(false);
+                            }
+                        }
+                    }
+                }
+
+                // Step 5: Try it
+                if root.step == 5 : VerticalLayout {
+                    spacing: Theme.space-12;
+                    Text {
+                        text: "Try it";
+                        font-size: Theme.font-size-title;
+                        font-weight: 700;
+                        color: Theme.text;
+                    }
+                    Text {
+                        text: root.try-hint != "" ? root.try-hint : "Press Alt + Q, say a sentence, press Alt + Q again. Your words appear where your cursor is.";
+                        font-size: Theme.font-size-base;
+                        color: Theme.text;
+                        wrap: word-wrap;
+                    }
+                    ThemedTextEdit {
+                        height: 140px;
+                        text <=> root.try-text;
+                        font-size: Theme.font-size-lg;
+                    }
+                }
+            }
+        }
+
+        // Bottom nav bar
+        Rectangle {
+            height: 60px;
+            background: Theme.bg;
+
+            Rectangle {
+                y: 0;
+                width: parent.width;
+                height: 1px;
+                background: Theme.border-subtle;
+            }
+
+            HorizontalLayout {
+                padding-left: Theme.space-24;
+                padding-right: Theme.space-24;
+                alignment: space-between;
+
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        text: "Skip setup";
+                        kind: ButtonKind.text;
+                        clicked => { root.skip-clicked(); }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: Theme.space-12;
+                    alignment: end;
+
+                    Text {
+                        text: "Step " + (root.step + 1) + " of 6";
+                        font-size: Theme.font-size-sm;
+                        color: Theme.text-muted;
+                        vertical-alignment: center;
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Back";
+                            kind: ButtonKind.outline;
+                            enabled: root.step > 0;
+                            clicked => {
+                                if (root.step > 0) {
+                                    root.step -= 1;
+                                    root.step-changed(root.step);
+                                }
+                            }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: root.step >= 5 ? "Finish" : "Next";
+                            kind: ButtonKind.accent;
+                            clicked => {
+                                if (root.step < 5) {
+                                    root.step += 1;
+                                    root.step-changed(root.step);
+                                } else {
+                                    root.finish-clicked();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

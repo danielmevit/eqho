@@ -1,0 +1,445 @@
+// Settings Tab (Gear view): Appearance, Dictation Extras, System, Overlay, About.
+import { Theme } from "@app-theme/theme.slint";
+import { Button, ButtonKind, Dropdown, Slider, TabList, Toggle, CompactRow } from "@damt-ui/kit.slint";
+import { ScrollArea, SectionHeader, SectionCard, StackedSettingRow, ThemedTextEdit } from "components.slint";
+
+export component SettingsTab inherits Rectangle {
+    in property <length> window-height: 560px;
+
+    in-out property <int> theme-mode-index: 1;
+    in-out property <int> ui-scale-index: 1;
+
+    in-out property <bool> remove-fillers: false;
+    in-out property <bool> voice-commands: false;
+    in-out property <string> replacements-text: "";
+    in-out property <string> paste-rules-text: "";
+
+    in-out property <int> volume-duck-index: 0;
+    in-out property <bool> start-with-windows: false;
+
+    in-out property <bool> overlay-enabled: true;
+    in-out property <bool> overlay-show-level: true;
+    in-out property <int> overlay-position-index: 0;
+    in-out property <int> overlay-pill-scale-pct: 80;
+    in-out property <int> overlay-see-through-pct: 15;
+    in-out property <int> overlay-panel-see-through-pct: 15;
+    in-out property <int> overlay-font-size: 14;
+
+    in property <string> app-version: "0.9.0-dev";
+
+    callback theme-mode-changed(int);
+    callback ui-scale-changed(int);
+    callback remove-fillers-toggled(bool);
+    callback voice-commands-toggled(bool);
+    callback save-replacements(string);
+    callback save-paste-rules(string);
+    callback volume-duck-selected(int);
+    callback start-with-windows-toggled(bool);
+    callback overlay-enabled-toggled(bool);
+    callback overlay-show-level-toggled(bool);
+    callback overlay-position-selected(int);
+    callback overlay-pill-scale-changed(int);
+    callback overlay-see-through-changed(int);
+    callback overlay-panel-see-through-changed(int);
+    callback overlay-font-size-changed(int);
+    callback start-onboarding();
+
+    property <bool> two-col: root.width >= 760px;
+
+    ScrollArea {
+        width: parent.width;
+        height: parent.height;
+
+        VerticalLayout {
+            padding: Theme.space-16;
+            spacing: Theme.space-12;
+
+            // APPEARANCE
+            SectionHeader { text: "APPEARANCE"; }
+            SectionCard {
+                StackedSettingRow {
+                    label: "Theme";
+                    help: "Light, dark, or follow Windows";
+                    TabList {
+                        items: ["Light", "Dark", "System"];
+                        selected <=> root.theme-mode-index;
+                        accessible-name: "Theme";
+                        picked(i) => { root.theme-mode-changed(i); }
+                    }
+                }
+                StackedSettingRow {
+                    label: "UI Zoom";
+                    help: "Scale the whole dashboard";
+                    TabList {
+                        items: ["100%", "125%", "150%", "175%", "200%"];
+                        selected <=> root.ui-scale-index;
+                        accessible-name: "UI Zoom";
+                        picked(i) => { root.ui-scale-changed(i); }
+                    }
+                }
+            }
+
+            // DICTATION EXTRAS + SYSTEM
+            if root.two-col : HorizontalLayout {
+                spacing: Theme.space-16;
+                alignment: stretch;
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: Theme.space-12;
+                    alignment: start;
+
+                    SectionHeader { text: "DICTATION EXTRAS"; }
+                    SectionCard {
+                        CompactRow {
+                            label: "Remove Filler Words";
+                            help: "\"um\", \"uh\", \"er\" (needs auto-format)";
+                            Toggle {
+                                checked <=> root.remove-fillers;
+                                accessible-name: "Remove Filler Words";
+                                toggled(v) => { root.remove-fillers-toggled(v); }
+                            }
+                        }
+                        CompactRow {
+                            label: "Voice Commands";
+                            help: "\"new line\", \"period\", \"delete that\"";
+                            Toggle {
+                                checked <=> root.voice-commands;
+                                accessible-name: "Voice Commands";
+                                toggled(v) => { root.voice-commands-toggled(v); }
+                            }
+                        }
+                        StackedSettingRow {
+                            label: "Text Replacements";
+                            help: "One rule per line: spoken => written";
+                            ThemedTextEdit {
+                                height: 72px;
+                                text <=> root.replacements-text;
+                                font-size: Theme.font-size-sm;
+                            }
+                            HorizontalLayout {
+                                alignment: end;
+                                Button {
+                                    text: "Save";
+                                    kind: ButtonKind.outline;
+                                    clicked => { root.save-replacements(root.replacements-text); }
+                                }
+                            }
+                        }
+                        StackedSettingRow {
+                            label: "Per-App Paste Rules";
+                            help: "One rule per line: app.exe = typing (or = clipboard)";
+                            ThemedTextEdit {
+                                height: 72px;
+                                text <=> root.paste-rules-text;
+                                font-size: Theme.font-size-sm;
+                            }
+                            HorizontalLayout {
+                                alignment: end;
+                                Button {
+                                    text: "Save";
+                                    kind: ButtonKind.outline;
+                                    clicked => { root.save-paste-rules(root.paste-rules-text); }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: Theme.space-12;
+                    alignment: start;
+
+                    SectionHeader { text: "SYSTEM"; }
+                    SectionCard {
+                        StackedSettingRow {
+                            label: "Volume While Speaking";
+                            help: "System volume during dictation";
+                            Dropdown {
+                                model: ["Off", "50%", "25%", "10%", "Mute"];
+                                current-index <=> root.volume-duck-index;
+                                window-height: root.window-height;
+                                accessible-name: "Volume While Speaking";
+                                selected(i) => { root.volume-duck-selected(i); }
+                            }
+                        }
+                        CompactRow {
+                            label: "Start with Windows";
+                            help: "Launch Eqho on login";
+                            Toggle {
+                                checked <=> root.start-with-windows;
+                                accessible-name: "Start with Windows";
+                                toggled(v) => { root.start-with-windows-toggled(v); }
+                            }
+                        }
+                    }
+
+                    SectionHeader { text: "OVERLAY"; }
+                    SectionCard {
+                        CompactRow {
+                            label: "Show Overlay";
+                            help: "Display transcription text while dictating";
+                            Toggle {
+                                checked <=> root.overlay-enabled;
+                                accessible-name: "Show Overlay";
+                                toggled(v) => { root.overlay-enabled-toggled(v); }
+                            }
+                        }
+                        CompactRow {
+                            label: "Audio Level Indicator";
+                            help: "Small line that moves with your voice";
+                            Toggle {
+                                checked <=> root.overlay-show-level;
+                                accessible-name: "Audio Level Indicator";
+                                toggled(v) => { root.overlay-show-level-toggled(v); }
+                            }
+                        }
+                        StackedSettingRow {
+                            label: "Screen Position";
+                            help: "Where the overlay appears";
+                            Dropdown {
+                                model: ["Bottom Center", "Top Center", "Top Left", "Top Right", "Bottom Left", "Bottom Right"];
+                                current-index <=> root.overlay-position-index;
+                                window-height: root.window-height;
+                                accessible-name: "Screen Position";
+                                selected(i) => { root.overlay-position-selected(i); }
+                            }
+                        }
+                        Slider {
+                            label: "Pill Size";
+                            value-text: root.overlay-pill-scale-pct + "%";
+                            value <=> root.overlay-pill-scale-pct;
+                            minimum: 60;
+                            maximum: 140;
+                            step: 10;
+                            edited(v) => { root.overlay-pill-scale-changed(v); }
+                        }
+                        Slider {
+                            label: "Pill See-Through";
+                            value-text: root.overlay-see-through-pct + "%";
+                            value <=> root.overlay-see-through-pct;
+                            minimum: 0;
+                            maximum: 70;
+                            step: 5;
+                            edited(v) => { root.overlay-see-through-changed(v); }
+                        }
+                        Slider {
+                            label: "Text Box See-Through";
+                            value-text: root.overlay-panel-see-through-pct + "%";
+                            value <=> root.overlay-panel-see-through-pct;
+                            minimum: 0;
+                            maximum: 70;
+                            step: 5;
+                            edited(v) => { root.overlay-panel-see-through-changed(v); }
+                        }
+                        Slider {
+                            label: "Text Size";
+                            value-text: root.overlay-font-size + "px";
+                            value <=> root.overlay-font-size;
+                            minimum: 10;
+                            maximum: 28;
+                            step: 1;
+                            edited(v) => { root.overlay-font-size-changed(v); }
+                        }
+                    }
+                }
+            }
+
+            if !root.two-col : VerticalLayout {
+                spacing: Theme.space-12;
+
+                SectionHeader { text: "DICTATION EXTRAS"; }
+                SectionCard {
+                    CompactRow {
+                        label: "Remove Filler Words";
+                        help: "\"um\", \"uh\", \"er\" (needs auto-format)";
+                        Toggle {
+                            checked <=> root.remove-fillers;
+                            accessible-name: "Remove Filler Words";
+                            toggled(v) => { root.remove-fillers-toggled(v); }
+                        }
+                    }
+                    CompactRow {
+                        label: "Voice Commands";
+                        help: "\"new line\", \"period\", \"delete that\"";
+                        Toggle {
+                            checked <=> root.voice-commands;
+                            accessible-name: "Voice Commands";
+                            toggled(v) => { root.voice-commands-toggled(v); }
+                        }
+                    }
+                    StackedSettingRow {
+                        label: "Text Replacements";
+                        help: "One rule per line: spoken => written";
+                        ThemedTextEdit {
+                            height: 72px;
+                            text <=> root.replacements-text;
+                            font-size: Theme.font-size-sm;
+                        }
+                        HorizontalLayout {
+                            alignment: end;
+                            Button {
+                                text: "Save";
+                                kind: ButtonKind.outline;
+                                clicked => { root.save-replacements(root.replacements-text); }
+                            }
+                        }
+                    }
+                    StackedSettingRow {
+                        label: "Per-App Paste Rules";
+                        help: "One rule per line: app.exe = typing (or = clipboard)";
+                        ThemedTextEdit {
+                            height: 72px;
+                            text <=> root.paste-rules-text;
+                            font-size: Theme.font-size-sm;
+                        }
+                        HorizontalLayout {
+                            alignment: end;
+                            Button {
+                                text: "Save";
+                                kind: ButtonKind.outline;
+                                clicked => { root.save-paste-rules(root.paste-rules-text); }
+                            }
+                        }
+                    }
+                }
+
+                SectionHeader { text: "SYSTEM"; }
+                SectionCard {
+                    StackedSettingRow {
+                        label: "Volume While Speaking";
+                        help: "System volume during dictation";
+                        Dropdown {
+                            model: ["Off", "50%", "25%", "10%", "Mute"];
+                            current-index <=> root.volume-duck-index;
+                            window-height: root.window-height;
+                            accessible-name: "Volume While Speaking";
+                            selected(i) => { root.volume-duck-selected(i); }
+                        }
+                    }
+                    CompactRow {
+                        label: "Start with Windows";
+                        help: "Launch Eqho on login";
+                        Toggle {
+                            checked <=> root.start-with-windows;
+                            accessible-name: "Start with Windows";
+                            toggled(v) => { root.start-with-windows-toggled(v); }
+                        }
+                    }
+                }
+
+                SectionHeader { text: "OVERLAY"; }
+                SectionCard {
+                    CompactRow {
+                        label: "Show Overlay";
+                        help: "Display transcription text while dictating";
+                        Toggle {
+                            checked <=> root.overlay-enabled;
+                            accessible-name: "Show Overlay";
+                            toggled(v) => { root.overlay-enabled-toggled(v); }
+                        }
+                    }
+                    CompactRow {
+                        label: "Audio Level Indicator";
+                        help: "Small line that moves with your voice";
+                        Toggle {
+                            checked <=> root.overlay-show-level;
+                            accessible-name: "Audio Level Indicator";
+                            toggled(v) => { root.overlay-show-level-toggled(v); }
+                        }
+                    }
+                    StackedSettingRow {
+                        label: "Screen Position";
+                        help: "Where the overlay appears";
+                        Dropdown {
+                            model: ["Bottom Center", "Top Center", "Top Left", "Top Right", "Bottom Left", "Bottom Right"];
+                            current-index <=> root.overlay-position-index;
+                            window-height: root.window-height;
+                            accessible-name: "Screen Position";
+                            selected(i) => { root.overlay-position-selected(i); }
+                        }
+                    }
+                    Slider {
+                        label: "Pill Size";
+                        value-text: root.overlay-pill-scale-pct + "%";
+                        value <=> root.overlay-pill-scale-pct;
+                        minimum: 60;
+                        maximum: 140;
+                        step: 10;
+                        edited(v) => { root.overlay-pill-scale-changed(v); }
+                    }
+                    Slider {
+                        label: "Pill See-Through";
+                        value-text: root.overlay-see-through-pct + "%";
+                        value <=> root.overlay-see-through-pct;
+                        minimum: 0;
+                        maximum: 70;
+                        step: 5;
+                        edited(v) => { root.overlay-see-through-changed(v); }
+                    }
+                    Slider {
+                        label: "Text Box See-Through";
+                        value-text: root.overlay-panel-see-through-pct + "%";
+                        value <=> root.overlay-panel-see-through-pct;
+                        minimum: 0;
+                        maximum: 70;
+                        step: 5;
+                        edited(v) => { root.overlay-panel-see-through-changed(v); }
+                    }
+                    Slider {
+                        label: "Text Size";
+                        value-text: root.overlay-font-size + "px";
+                        value <=> root.overlay-font-size;
+                        minimum: 10;
+                        maximum: 28;
+                        step: 1;
+                        edited(v) => { root.overlay-font-size-changed(v); }
+                    }
+                }
+            }
+
+            // ABOUT EQHO
+            SectionHeader { text: "ABOUT EQHO"; }
+            SectionCard {
+                for row in [
+                    { label: "Version", val: root.app-version },
+                    { label: "Engine", val: "whisper.cpp 1.8.4 (Vulkan / CPU)" },
+                    { label: "Author", val: "Daniel Mevit" },
+                    { label: "Website", val: "damt.xyz" },
+                ] : HorizontalLayout {
+                    spacing: Theme.space-12;
+                    Text {
+                        width: 110px;
+                        text: row.label;
+                        font-size: Theme.font-size-sm;
+                        color: Theme.text-muted;
+                    }
+                    Text {
+                        text: row.val;
+                        font-size: Theme.font-size-sm;
+                        color: Theme.text;
+                        horizontal-stretch: 1;
+                    }
+                }
+
+                HorizontalLayout {
+                    padding-top: Theme.space-4;
+                    alignment: start;
+                    Button {
+                        text: "Run first-time setup again";
+                        kind: ButtonKind.outline;
+                        clicked => { root.start-onboarding(); }
+                    }
+                }
+
+                Text {
+                    text: "Powered by whisper.cpp · Slint · Rust · Inter";
+                    font-size: Theme.font-size-xs;
+                    color: Theme.text-subtle;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+}
