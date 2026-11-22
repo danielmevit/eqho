@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use eqho_core::history::TranscriptEntry;
+use eqho_core::history::{TranscriptEntry, format_timestamp_local, local_day_ordinal};
 use eqho_core::modelpick::{HardwareClass, recommend_model};
 use eqho_core::modelstore::{MODELS, model_info};
 use eqho_core::settings::{
@@ -46,12 +46,14 @@ pub fn hardware_summary_text(hw: HardwareClass) -> String {
     }
 }
 
-/// Build Slint `ModelCardItem` rows for all 9 supported Whisper models.
+/// Build Slint `ModelCardItem` rows for all supported Whisper models.
+#[allow(clippy::too_many_arguments)]
 pub fn build_model_cards(
     selected_key: &str,
     cached_keys: &[&str],
     downloading_key: Option<&str>,
     progress: f32,
+    download_detail: &str,
     error_key: Option<&str>,
     hw: HardwareClass,
     lang: &str,
@@ -98,6 +100,7 @@ pub fn build_model_cards(
             } else {
                 ""
             };
+            let card_download_detail = if is_downloading { download_detail } else { "" };
 
             ModelCardItem {
                 key: m.key.into(),
@@ -111,6 +114,7 @@ pub fn build_model_cards(
                 has_error,
                 progress: card_progress,
                 status_text: status_text.into(),
+                download_detail: card_download_detail.into(),
             }
         })
         .collect()
@@ -151,7 +155,7 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     (year, m as u32, d as u32)
 }
 
-/// Convert `TranscriptEntry` items into Slint `HistoryRowItem` structs.
+/// Convert `TranscriptEntry` items into Slint `HistoryRowItem` structs (local timezone timestamps).
 pub fn build_history_rows(entries: &[TranscriptEntry]) -> Vec<HistoryRowItem> {
     entries
         .iter()
@@ -165,7 +169,7 @@ pub fn build_history_rows(entries: &[TranscriptEntry]) -> Vec<HistoryRowItem> {
             }
             HistoryRowItem {
                 ts_key: format!("{:.6}", e.ts).into(),
-                timestamp_text: format_timestamp_utc(e.ts).into(),
+                timestamp_text: format_timestamp_local(e.ts).into(),
                 meta_text: meta_parts.join("  ·  ").into(),
                 text: e.text.clone().into(),
             }
@@ -182,20 +186,18 @@ pub fn filter_history_entries(
     now_epoch_s: f64,
 ) -> Vec<TranscriptEntry> {
     let q = query.trim().to_lowercase();
-    let now_day = (now_epoch_s.floor() as i64).div_euclid(86_400);
-    let today_start = (now_day * 86_400) as f64;
-    let yesterday_start = ((now_day - 1) * 86_400) as f64;
-    let week_start = ((now_day - 6) * 86_400) as f64;
-    let month_start = ((now_day - 29) * 86_400) as f64;
+    let now_day = local_day_ordinal(now_epoch_s);
 
     entries
         .iter()
         .filter(|e| {
+            let entry_day = local_day_ordinal(e.ts);
+            let day_delta = now_day - entry_day;
             let period_ok = match period_index {
-                1 => e.ts >= today_start,
-                2 => e.ts >= yesterday_start && e.ts < today_start,
-                3 => e.ts >= week_start,
-                4 => e.ts >= month_start,
+                1 => day_delta == 0,
+                2 => day_delta == 1,
+                3 => (0..=6).contains(&day_delta),
+                4 => (0..=29).contains(&day_delta),
                 _ => true,
             };
             if !period_ok {
@@ -205,6 +207,7 @@ pub fn filter_history_entries(
                 return true;
             }
             e.text.to_lowercase().contains(&q)
+                || format_timestamp_local(e.ts).to_lowercase().contains(&q)
                 || format_timestamp_utc(e.ts).to_lowercase().contains(&q)
         })
         .cloned()
@@ -475,6 +478,34 @@ pub fn ui_scale_value(idx: i32) -> f64 {
         .unwrap_or(1.25)
 }
 
+/// Map `Settings::engine_backend` to the Models tab `TabList` index (`0` = Auto, `1` = GPU/Vulkan, `2` = CPU).
+pub fn engine_backend_index(backend: &str) -> i32 {
+    match backend.trim().to_ascii_lowercase().as_str() {
+        "vulkan" | "gpu" => 1,
+        "cpu" => 2,
+        _ => 0,
+    }
+}
+
+/// Map the Models tab `TabList` index back to a stored `Settings::engine_backend` string.
+pub fn engine_backend_key(idx: i32) -> &'static str {
+    match idx {
+        1 => "vulkan",
+        2 => "cpu",
+        _ => "auto",
+    }
+}
+
+/// Dynamic window title showing the active model (and live listening indicator when dictating).
+pub fn dashboard_window_title(model_key: &str, is_dictating: bool) -> String {
+    let model = model_short_name(model_key);
+    if is_dictating {
+        format!("Eqho — {model} · Listening…")
+    } else {
+        format!("Eqho — {model}")
+    }
+}
+
 /// Push `Settings` and hardware metadata onto a live `DashboardWindow`.
 pub fn apply_settings_to_window(
     window: &DashboardWindow,
@@ -483,6 +514,7 @@ pub fn apply_settings_to_window(
     is_dark: bool,
 ) {
     window.global::<Theme>().set_dark(is_dark);
+    window.set_window_title(dashboard_window_title(&settings.model_size, false).into());
 
     window.set_language_options(ModelRc::new(VecModel::from(build_language_options())));
     window.set_language_index(language_index_for_code(&settings.language));
@@ -500,6 +532,7 @@ pub fn apply_settings_to_window(
     window.set_paste_mode_index(if settings.auto_paste { 0 } else { 1 });
 
     window.set_hardware_summary(hardware_summary_text(hw).into());
+    window.set_engine_backend_index(engine_backend_index(&settings.engine_backend));
     window.set_model_dir_display(settings.resolve_model_dir().display().to_string().into());
 
     window.set_theme_mode_index(theme_mode_index(&settings.theme));

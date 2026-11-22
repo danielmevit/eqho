@@ -1,6 +1,6 @@
-// Models Tab: Whisper model cards (English Optimized & Multilingual) + Storage.
+// Models Tab: Inference Engine, Whisper model cards (English Optimized & Multilingual), Storage.
 import { Theme } from "@app-theme/theme.slint";
-import { Button, ButtonKind, ProgressLine } from "@damt-ui/kit.slint";
+import { Button, ButtonKind, ProgressLine, TabList } from "@damt-ui/kit.slint";
 import { ModelCardItem } from "types.slint";
 import { ScrollArea, SectionCard } from "components.slint";
 
@@ -74,6 +74,13 @@ component ModelCard inherits Rectangle {
             wrap: word-wrap;
         }
 
+        if root.item.is_downloading && root.item.download_detail != "" : Text {
+            text: root.item.download_detail;
+            font-size: Theme.font-size-xs;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+
         if root.item.is_downloading : ProgressLine {
             progress: root.item.progress;
             accessible-name: root.item.name + " download progress";
@@ -114,10 +121,12 @@ component ModelCard inherits Rectangle {
 
 export component ModelsTab inherits Rectangle {
     in-out property <string> hardware-summary: "On this PC, speech models run on your graphics card.";
+    in-out property <int> engine-backend-index: 0;
     in property <[ModelCardItem]> english-models: [];
     in property <[ModelCardItem]> multilingual-models: [];
     in-out property <string> model-dir-display: "";
 
+    callback engine-backend-changed(int);
     callback select-model(string);
     callback download-model(string);
     callback delete-model(string);
@@ -133,12 +142,21 @@ export component ModelsTab inherits Rectangle {
             padding: Theme.space-16;
             spacing: Theme.space-12;
 
-            // Hardware banner
-            Text {
-                text: root.hardware-summary;
-                font-size: Theme.font-size-sm;
-                color: Theme.text-muted;
-                wrap: word-wrap;
+            // INFERENCE ENGINE
+            SectionCard {
+                title: "INFERENCE ENGINE";
+                Text {
+                    text: root.hardware-summary;
+                    font-size: Theme.font-size-sm;
+                    color: Theme.text-muted;
+                    wrap: word-wrap;
+                }
+                TabList {
+                    items: ["Auto", "GPU (Vulkan)", "CPU"];
+                    selected <=> root.engine-backend-index;
+                    accessible-name: "Inference Engine";
+                    picked(i) => { root.engine-backend-changed(i); }
+                }
             }
 
             // ENGLISH OPTIMIZED

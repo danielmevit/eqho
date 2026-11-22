@@ -10,8 +10,9 @@ use std::time::{Duration, Instant};
 
 use eqho_core::chime::{CHIME_SAMPLE_RATE, start_chime, stop_chime};
 use eqho_core::history::TranscriptHistory;
+use eqho_core::modelpick::{HardwareClass, recommend_model};
 use eqho_core::modelstore::{
-    LOW_MEMORY_LOAD_TEXT, low_memory_warning, required_memory_mb,
+    LOW_MEMORY_LOAD_TEXT, low_memory_warning, model_info, required_memory_mb,
 };
 use eqho_core::recovery::LastDictationBuffer;
 use eqho_core::settings::{Settings, is_english_only_model, volume_duck_level};
@@ -35,6 +36,7 @@ const AUDIO_QUEUE_CAPACITY: usize = 64;
 const CLIPBOARD_RESTORE_DELAY: Duration = Duration::from_millis(120);
 const DISCRETE_GPU_MIN_VRAM_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_BACKSPACE_CHARS: usize = 400;
+const SLOW_MODEL_HINT_SECS: f64 = 6.0;
 
 const STILL_WRITING_TEXT: &str = "Still writing your last dictation — one moment.";
 const WRITING_TEXT: &str = "Writing it down…";
@@ -538,6 +540,7 @@ impl CoordinatorInner {
                 };
                 let elapsed = t0.elapsed().as_secs_f64();
                 lock_unpoisoned(&self.state).last_infer_s = Some(elapsed);
+                self.maybe_notify_slow_model(elapsed);
 
                 match res {
                     Ok(segs) => {
@@ -591,6 +594,7 @@ impl CoordinatorInner {
                 };
                 let elapsed = t0.elapsed().as_secs_f64();
                 lock_unpoisoned(&self.state).last_infer_s = Some(elapsed);
+                self.maybe_notify_slow_model(elapsed);
 
                 match res {
                     Ok(segs) => {
@@ -1002,6 +1006,38 @@ impl CoordinatorInner {
         }
     }
 
+    fn maybe_notify_slow_model(&self, elapsed_s: f64) {
+        if elapsed_s <= SLOW_MODEL_HINT_SECS {
+            return;
+        }
+        let hint_msg = {
+            let mut s = lock_unpoisoned(&self.settings);
+            if s.slow_hint_shown_for == s.model_size {
+                return;
+            }
+            let faster_key = recommend_model(HardwareClass::Cpu, &s.language);
+            let cur_size = model_info(&s.model_size).map(|m| m.size_mb).unwrap_or(0);
+            let faster_size = model_info(faster_key).map(|m| m.size_mb).unwrap_or(0);
+            if faster_key == s.model_size || faster_size >= cur_size {
+                return;
+            }
+            let cur_name = model_info(&s.model_size)
+                .map(|m| m.label.split(" (").next().unwrap_or(m.label))
+                .unwrap_or(&s.model_size)
+                .to_owned();
+            let faster_name = model_info(faster_key)
+                .map(|m| m.label.split(" (").next().unwrap_or(m.label))
+                .unwrap_or(faster_key);
+            let msg = format!(
+                "{cur_name} took {elapsed_s:.1} s on this PC. For faster replies, try {faster_name} in Eqho → Models."
+            );
+            s.slow_hint_shown_for = s.model_size.clone();
+            let _ = s.save_to_path(&self.settings_path);
+            msg
+        };
+        self.ui.notify(&hint_msg);
+    }
+
     fn is_session_current(&self, sid: u64) -> bool {
         let st = lock_unpoisoned(&self.state);
         st.active_session == sid && st.running
@@ -1014,8 +1050,12 @@ impl CoordinatorInner {
 }
 
 fn has_discrete_gpu(platform: &dyn EqhoPlatform, engine_backend: &str) -> bool {
-    if engine_backend.eq_ignore_ascii_case("cpu") {
+    let backend = engine_backend.trim().to_ascii_lowercase();
+    if backend == "cpu" {
         return false;
+    }
+    if backend == "vulkan" || backend == "gpu" {
+        return true;
     }
     platform
         .list_adapters()
@@ -1776,6 +1816,55 @@ mod tests {
 
         bg.join().expect("background download/preload thread should not deadlock");
         ui_t.join().expect("UI settings thread should not deadlock");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn slow_model_hint_fires_once_per_model_and_engine_backend_override_works() {
+        let dir = temp_dir("slow_hint");
+        let settings_path = dir.join("settings.json");
+        let platform = Arc::new(FakePlatform::new(WindowHandle(42)));
+        let ui = Arc::new(RecordingUi::new());
+        let speech = FakeSpeech::with_responses(vec![]);
+        let hist = TranscriptHistory::with_default_cap(dir.join("history.jsonl"));
+
+        assert!(!has_discrete_gpu(platform.as_ref(), "cpu"));
+        assert!(has_discrete_gpu(platform.as_ref(), "vulkan"));
+        assert!(has_discrete_gpu(platform.as_ref(), "gpu"));
+
+        let s = Settings {
+            model_size: "distil-large-v3".to_owned(),
+            language: "en".to_owned(),
+            ..Settings::default()
+        };
+        let coord = DictationCoordinator::new(
+            s,
+            settings_path.clone(),
+            hist,
+            platform,
+            Box::new(speech),
+            Arc::clone(&ui) as Arc<dyn UiEventSink>,
+        );
+
+        // Below threshold: no notification.
+        coord.inner.maybe_notify_slow_model(2.5);
+        assert!(ui.notifications.lock().unwrap().is_empty());
+
+        // Above 6s threshold: fires once and records slow_hint_shown_for.
+        coord.inner.maybe_notify_slow_model(8.2);
+        {
+            let notes = ui.notifications.lock().unwrap();
+            assert_eq!(notes.len(), 1);
+            assert!(notes[0].contains("Distil Large v3"));
+            assert!(notes[0].contains("Small EN Q5"));
+        }
+
+        // Second slow utterance for same model: does NOT spam.
+        coord.inner.maybe_notify_slow_model(9.5);
+        assert_eq!(ui.notifications.lock().unwrap().len(), 1);
+
+        let persisted = Settings::load_from_path(&settings_path);
+        assert_eq!(persisted.slow_hint_shown_for, "distil-large-v3");
         let _ = fs::remove_dir_all(&dir);
     }
 }

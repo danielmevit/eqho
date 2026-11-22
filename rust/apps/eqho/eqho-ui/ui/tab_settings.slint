@@ -12,7 +12,9 @@ export component SettingsTab inherits Rectangle {
     in-out property <bool> remove-fillers: false;
     in-out property <bool> voice-commands: false;
     in-out property <string> replacements-text: "";
+    in-out property <string> replacements-status: "";
     in-out property <string> paste-rules-text: "";
+    in-out property <string> paste-rules-status: "";
 
     in-out property <int> volume-duck-index: 0;
     in-out property <bool> start-with-windows: false;
@@ -115,10 +117,19 @@ export component SettingsTab inherits Rectangle {
                             ThemedTextEdit {
                                 height: 72px;
                                 text <=> root.replacements-text;
+                                placeholder-text: "e.g. my email => name@example.com";
                                 font-size: Theme.font-size-sm;
                             }
                             HorizontalLayout {
                                 alignment: end;
+                                spacing: Theme.space-8;
+                                if root.replacements-status != "" : Text {
+                                    text: root.replacements-status;
+                                    font-size: Theme.font-size-xs;
+                                    font-weight: 600;
+                                    color: Theme.accent-text;
+                                    vertical-alignment: center;
+                                }
                                 Button {
                                     text: "Save";
                                     kind: ButtonKind.outline;
@@ -132,10 +143,19 @@ export component SettingsTab inherits Rectangle {
                             ThemedTextEdit {
                                 height: 72px;
                                 text <=> root.paste-rules-text;
+                                placeholder-text: "e.g. notepad.exe = typing";
                                 font-size: Theme.font-size-sm;
                             }
                             HorizontalLayout {
                                 alignment: end;
+                                spacing: Theme.space-8;
+                                if root.paste-rules-status != "" : Text {
+                                    text: root.paste-rules-status;
+                                    font-size: Theme.font-size-xs;
+                                    font-weight: 600;
+                                    color: Theme.accent-text;
+                                    vertical-alignment: center;
+                                }
                                 Button {
                                     text: "Save";
                                     kind: ButtonKind.outline;
@@ -275,10 +295,19 @@ export component SettingsTab inherits Rectangle {
                         ThemedTextEdit {
                             height: 72px;
                             text <=> root.replacements-text;
+                            placeholder-text: "e.g. my email => name@example.com";
                             font-size: Theme.font-size-sm;
                         }
                         HorizontalLayout {
                             alignment: end;
+                            spacing: Theme.space-8;
+                            if root.replacements-status != "" : Text {
+                                text: root.replacements-status;
+                                font-size: Theme.font-size-xs;
+                                font-weight: 600;
+                                color: Theme.accent-text;
+                                vertical-alignment: center;
+                            }
                             Button {
                                 text: "Save";
                                 kind: ButtonKind.outline;
@@ -292,10 +321,19 @@ export component SettingsTab inherits Rectangle {
                         ThemedTextEdit {
                             height: 72px;
                             text <=> root.paste-rules-text;
+                            placeholder-text: "e.g. notepad.exe = typing";
                             font-size: Theme.font-size-sm;
                         }
                         HorizontalLayout {
                             alignment: end;
+                            spacing: Theme.space-8;
+                            if root.paste-rules-status != "" : Text {
+                                text: root.paste-rules-status;
+                                font-size: Theme.font-size-xs;
+                                font-weight: 600;
+                                color: Theme.accent-text;
+                                vertical-alignment: center;
+                            }
                             Button {
                                 text: "Save";
                                 kind: ButtonKind.outline;

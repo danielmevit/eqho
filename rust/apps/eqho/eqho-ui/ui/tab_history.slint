@@ -10,6 +10,7 @@ export component HistoryTab inherits Rectangle {
     in-out property <string> history-query: "";
     in-out property <int> history-period-index: 0;
     in property <[HistoryRowItem]> history-rows: [];
+    in-out property <string> history-status: "";
 
     callback history-filter-changed();
     callback export-history();
@@ -44,12 +45,34 @@ export component HistoryTab inherits Rectangle {
                 Button {
                     text: "Export .txt";
                     kind: ButtonKind.outline;
+                    enabled: root.history-rows.length > 0;
                     clicked => { root.export-history(); }
                 }
                 Button {
                     text: "Clear All";
                     kind: ButtonKind.outline;
+                    enabled: root.history-rows.length > 0;
                     clicked => { root.clear-history(); }
+                }
+            }
+
+            if root.history-rows.length > 0 || root.history-status != "" : HorizontalLayout {
+                alignment: space-between;
+                spacing: Theme.space-8;
+                Text {
+                    text: root.history-rows.length == 0
+                        ? ""
+                        : root.history-rows.length == 1
+                            ? "1 transcript"
+                            : root.history-rows.length + " transcripts";
+                    font-size: Theme.font-size-xs;
+                    color: Theme.text-muted;
+                }
+                if root.history-status != "" : Text {
+                    text: root.history-status;
+                    font-size: Theme.font-size-xs;
+                    font-weight: 600;
+                    color: Theme.accent-text;
                 }
             }
 

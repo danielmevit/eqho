@@ -22,7 +22,10 @@ use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
 use windows::core::{GUID, HRESULT, Interface, PWSTR};
 
 use crate::com::{ComGuard, activate_mm_device};
-use crate::pure::{downmix_f32_to_mono, downmix_i16_to_mono, linear_resample_mono};
+use crate::pure::{
+    downmix_f32_to_mono, downmix_i16_to_mono, downmix_i24_to_mono, downmix_i32_to_mono,
+    linear_resample_mono,
+};
 
 const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: GUID =
     GUID::from_u128(0x00000003_0000_0010_8000_00aa00389b71);
@@ -158,7 +161,9 @@ fn inspect_mix_format(wf_ptr: *const WAVEFORMATEX) -> Result<MixFormatInfo, Plat
         )));
     };
 
-    if (is_float && bits_per_sample != 32) || (!is_float && bits_per_sample != 16) {
+    if (is_float && bits_per_sample != 32)
+        || (!is_float && !matches!(bits_per_sample, 16 | 24 | 32))
+    {
         return Err(PlatformError(format!(
             "unsupported WASAPI bit depth: {bits_per_sample} (float={is_float})"
         )));
@@ -374,6 +379,14 @@ fn run_capture_loop(
                 // SAFETY: `data_ptr` holds `num_frames * channels` `f32` samples until `ReleaseBuffer`.
                 let slice = unsafe { std::slice::from_raw_parts(data_ptr.cast::<f32>(), sample_count) };
                 downmix_f32_to_mono(slice, fmt.channels)
+            } else if fmt.bits_per_sample == 24 {
+                // SAFETY: `data_ptr` holds `num_frames * channels * 3` packed 24-bit PCM bytes until `ReleaseBuffer`.
+                let bytes = unsafe { std::slice::from_raw_parts(data_ptr, sample_count * 3) };
+                downmix_i24_to_mono(bytes, fmt.channels)
+            } else if fmt.bits_per_sample == 32 {
+                // SAFETY: `data_ptr` holds `num_frames * channels` `i32` samples until `ReleaseBuffer`.
+                let slice = unsafe { std::slice::from_raw_parts(data_ptr.cast::<i32>(), sample_count) };
+                downmix_i32_to_mono(slice, fmt.channels)
             } else {
                 // SAFETY: `data_ptr` holds `num_frames * channels` `i16` samples until `ReleaseBuffer`.
                 let slice = unsafe { std::slice::from_raw_parts(data_ptr.cast::<i16>(), sample_count) };
@@ -474,6 +487,33 @@ fn play_pcm_blocking(samples: &[f32], sample_rate: u32) -> Result<(), PlatformEr
                 let base = frame_idx * fmt.channels;
                 for ch in 0..fmt.channels {
                     dst[base + ch] = sample;
+                }
+            }
+        } else if fmt.bits_per_sample == 24 {
+            // SAFETY: `ptr` has space for `to_write * fmt.channels * 3` bytes.
+            let dst = unsafe {
+                std::slice::from_raw_parts_mut(ptr, to_write * fmt.channels * 3)
+            };
+            for (frame_idx, &sample) in resampled[offset..offset + to_write].iter().enumerate() {
+                let q = (sample.clamp(-1.0, 1.0) * 8_388_607.0) as i32;
+                let le = q.to_le_bytes();
+                let base = frame_idx * fmt.channels * 3;
+                for ch in 0..fmt.channels {
+                    dst[base + ch * 3] = le[0];
+                    dst[base + ch * 3 + 1] = le[1];
+                    dst[base + ch * 3 + 2] = le[2];
+                }
+            }
+        } else if fmt.bits_per_sample == 32 {
+            // SAFETY: `ptr` has space for `to_write * fmt.channels` `i32` samples.
+            let dst = unsafe {
+                std::slice::from_raw_parts_mut(ptr.cast::<i32>(), to_write * fmt.channels)
+            };
+            for (frame_idx, &sample) in resampled[offset..offset + to_write].iter().enumerate() {
+                let q = (f64::from(sample.clamp(-1.0, 1.0)) * 2_147_483_647.0) as i32;
+                let base = frame_idx * fmt.channels;
+                for ch in 0..fmt.channels {
+                    dst[base + ch] = q;
                 }
             }
         } else {

@@ -241,6 +241,37 @@ impl TranscriptHistory {
     }
 }
 
+/// Format a Unix epoch timestamp (seconds) in the user's local timezone as `YYYY-MM-DD HH:MM`.
+#[must_use]
+pub fn format_timestamp_local(ts_secs: f64) -> String {
+    let secs = if ts_secs.is_finite() && ts_secs >= 0.0 {
+        ts_secs.floor() as i64
+    } else {
+        0
+    };
+    Timestamp::new(secs, 0)
+        .unwrap_or(Timestamp::UNIX_EPOCH)
+        .to_zoned_datetime(TimeZone::system())
+        .strftime("%Y-%m-%d %H:%M")
+        .to_string()
+}
+
+/// Return a monotonic local calendar day ordinal (days since Unix epoch in local timezone)
+/// so "Today", "Yesterday", and "Last 7/30 days" align with the user's local midnight.
+#[must_use]
+pub fn local_day_ordinal(ts_secs: f64) -> i64 {
+    let secs = if ts_secs.is_finite() {
+        ts_secs.floor() as i64
+    } else {
+        0
+    };
+    let zdt = Timestamp::new(secs, 0)
+        .unwrap_or(Timestamp::UNIX_EPOCH)
+        .to_zoned_datetime(TimeZone::system());
+    let offset_secs = i64::from(zdt.offset().seconds());
+    secs.saturating_add(offset_secs).div_euclid(86_400)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -310,5 +341,16 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].text, "ok");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn local_timestamp_and_day_ordinal_behave_consistently() {
+        let s = format_timestamp_local(1_763_816_400.0);
+        assert_eq!(s.len(), 16);
+        assert_eq!(&s[4..5], "-");
+        assert_eq!(&s[10..11], " ");
+        let d0 = local_day_ordinal(1_763_816_400.0);
+        let d1 = local_day_ordinal(1_763_816_400.0 + 86_400.0);
+        assert_eq!(d1 - d0, 1);
     }
 }

@@ -66,10 +66,12 @@ export component DashboardWindow inherits Window {
 
     // Models tab properties & callbacks
     in-out property <string> hardware-summary: "On this PC, speech models run on your graphics card.";
+    in-out property <int> engine-backend-index: 0;
     in property <[ModelCardItem]> english-models: [];
     in property <[ModelCardItem]> multilingual-models: [];
     in-out property <string> model-dir-display: "";
 
+    callback engine-backend-changed(int);
     callback select-model(string);
     callback download-model(string);
     callback delete-model(string);
@@ -79,6 +81,7 @@ export component DashboardWindow inherits Window {
     in-out property <string> history-query: "";
     in-out property <int> history-period-index: 0;
     in property <[HistoryRowItem]> history-rows: [];
+    in-out property <string> history-status: "";
 
     callback history-filter-changed();
     callback export-history();
@@ -92,7 +95,9 @@ export component DashboardWindow inherits Window {
     in-out property <bool> remove-fillers: false;
     in-out property <bool> voice-commands: false;
     in-out property <string> replacements-text: "";
+    in-out property <string> replacements-status: "";
     in-out property <string> paste-rules-text: "";
+    in-out property <string> paste-rules-status: "";
     in-out property <int> volume-duck-index: 0;
     in-out property <bool> start-with-windows: false;
     in-out property <bool> overlay-enabled: true;
@@ -278,10 +283,12 @@ export component DashboardWindow inherits Window {
                 width: parent.width;
                 height: parent.height;
                 hardware-summary <=> root.hardware-summary;
+                engine-backend-index <=> root.engine-backend-index;
                 english-models: root.english-models;
                 multilingual-models: root.multilingual-models;
                 model-dir-display <=> root.model-dir-display;
 
+                engine-backend-changed(i) => { root.engine-backend-changed(i); }
                 select-model(k) => { root.select-model(k); }
                 download-model(k) => { root.download-model(k); }
                 delete-model(k) => { root.delete-model(k); }
@@ -295,6 +302,7 @@ export component DashboardWindow inherits Window {
                 history-query <=> root.history-query;
                 history-period-index <=> root.history-period-index;
                 history-rows: root.history-rows;
+                history-status <=> root.history-status;
 
                 history-filter-changed => { root.history-filter-changed(); }
                 export-history => { root.export-history(); }
@@ -312,7 +320,9 @@ export component DashboardWindow inherits Window {
                 remove-fillers <=> root.remove-fillers;
                 voice-commands <=> root.voice-commands;
                 replacements-text <=> root.replacements-text;
+                replacements-status <=> root.replacements-status;
                 paste-rules-text <=> root.paste-rules-text;
+                paste-rules-status <=> root.paste-rules-status;
                 volume-duck-index <=> root.volume-duck-index;
                 start-with-windows <=> root.start-with-windows;
                 overlay-enabled <=> root.overlay-enabled;

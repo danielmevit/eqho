@@ -9,9 +9,10 @@ use eqho_core::modelpick::HardwareClass;
 use eqho_core::settings::Settings;
 use eqho_ui::{
     DashboardWindow, EqhoTray, HistoryRowItem, Theme, apply_settings_to_window,
-    build_history_rows, build_model_cards, filter_history_entries, format_hotkey_display,
-    format_paste_rules_text, format_replacements_text, language_warning_text,
-    parse_paste_rules_text, parse_replacements_text, split_model_cards, status_summary_title,
+    build_history_rows, build_model_cards, dashboard_window_title, engine_backend_index,
+    engine_backend_key, filter_history_entries, format_hotkey_display, format_paste_rules_text,
+    format_replacements_text, language_warning_text, parse_paste_rules_text,
+    parse_replacements_text, split_model_cards, status_summary_title,
 };
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
@@ -77,11 +78,14 @@ fn model_cards_and_history_rows_populate_and_fire_callbacks() {
         &["distil-large-v3", "tiny"],
         Some("small"),
         0.42,
+        "Downloading 42% · 12.4 MB/s",
         Some("base"),
         HardwareClass::Gpu,
         "en",
     );
     assert_eq!(cards.len(), 13);
+    let dl_card = cards.iter().find(|c| c.key == "small").unwrap();
+    assert_eq!(dl_card.download_detail.as_str(), "Downloading 42% · 12.4 MB/s");
     let (en_cards, ml_cards) = split_model_cards(cards);
     assert_eq!(en_cards.len(), 4);
     assert_eq!(ml_cards.len(), 9);
@@ -190,6 +194,22 @@ fn viewmodel_parsers_formatters_and_history_filter() {
     assert_eq!(
         format_paste_rules_text(&rules),
         "code.exe = clipboard\nnotepad.exe = typing"
+    );
+
+    assert_eq!(engine_backend_index("auto"), 0);
+    assert_eq!(engine_backend_index("vulkan"), 1);
+    assert_eq!(engine_backend_index("gpu"), 1);
+    assert_eq!(engine_backend_index("cpu"), 2);
+    assert_eq!(engine_backend_key(0), "auto");
+    assert_eq!(engine_backend_key(1), "vulkan");
+    assert_eq!(engine_backend_key(2), "cpu");
+    assert_eq!(
+        dashboard_window_title("distil-large-v3", false),
+        "Eqho — Distil Large v3"
+    );
+    assert_eq!(
+        dashboard_window_title("distil-large-v3", true),
+        "Eqho — Distil Large v3 · Listening…"
     );
 
     assert_eq!(format_hotkey_display("alt+q"), "Alt + Q");

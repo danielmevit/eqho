@@ -118,6 +118,7 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
         &["distil-large-v3", "large-v3-turbo", "tiny"],
         None,
         0.0,
+        "",
         None,
         HardwareClass::Gpu,
         "en",

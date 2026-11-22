@@ -834,6 +834,66 @@ mod tests {
     }
 
     #[test]
+    fn v0811_full_schema_roundtrip() {
+        let dir = temp_dir("v0811_full");
+        let path = dir.join("settings.json");
+        let v0811_json = "\u{FEFF}{\n\
+            \"audio_device\": 2,\n\
+            \"auto_paste\": true,\n\
+            \"engine_backend\": \"vulkan\",\n\
+            \"format_cleanup\": true,\n\
+            \"history_enabled\": true,\n\
+            \"hotkey\": \"alt+q\",\n\
+            \"hotkey_backend\": \"auto\",\n\
+            \"hotkey_mode\": \"toggle\",\n\
+            \"initial_prompt\": \"Eqho, Kubernetes\",\n\
+            \"language\": \"en\",\n\
+            \"model_dir\": \"\",\n\
+            \"model_size\": \"distil-large-v3\",\n\
+            \"onboarding_done\": true,\n\
+            \"overlay_enabled\": true,\n\
+            \"overlay_font_size\": \"16\",\n\
+            \"overlay_opacity\": \"0.85\",\n\
+            \"overlay_panel_opacity\": 0.8,\n\
+            \"overlay_pill_scale\": 0.9,\n\
+            \"overlay_position\": \"top-center\",\n\
+            \"overlay_show_level\": true,\n\
+            \"paste_rules\": {\"notepad.exe\": \"typing\"},\n\
+            \"remove_fillers\": true,\n\
+            \"replacements\": {\"c plus plus\": \"C++\"},\n\
+            \"slow_hint_shown_for\": \"medium\",\n\
+            \"sound_feedback\": true,\n\
+            \"start_with_windows\": false,\n\
+            \"theme\": \"dark\",\n\
+            \"ui_scale\": 1.25,\n\
+            \"vad_sensitivity\": 1.1,\n\
+            \"voice_commands\": true,\n\
+            \"volume_duck\": \"25%\"\n\
+        }";
+        fs::write(&path, v0811_json).unwrap();
+
+        let loaded = Settings::load_from_path(&path);
+        assert_eq!(loaded.audio_device, Some(2));
+        assert!(loaded.auto_paste);
+        assert_eq!(loaded.engine_backend, "vulkan");
+        assert_eq!(loaded.hotkey, "alt+q");
+        assert_eq!(loaded.hotkey_mode, "toggle");
+        assert_eq!(loaded.initial_prompt, "Eqho, Kubernetes");
+        assert_eq!(loaded.overlay_font_size, 16);
+        assert!((loaded.overlay_opacity - 0.85).abs() < 1e-9);
+        assert_eq!(loaded.overlay_position, "top-center");
+        assert_eq!(loaded.paste_rules.get("notepad.exe").map(String::as_str), Some("typing"));
+        assert_eq!(loaded.replacements.get("c plus plus").map(String::as_str), Some("C++"));
+        assert_eq!(loaded.slow_hint_shown_for, "medium");
+        assert_eq!(loaded.volume_duck, "25%");
+        assert!(loaded.onboarding_done);
+
+        loaded.save_to_path(&path).unwrap();
+        assert_eq!(Settings::load_from_path(&path), loaded);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn save_and_reload_roundtrip() {
         let dir = temp_dir("roundtrip");
         let path = dir.join("settings.json");

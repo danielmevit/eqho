@@ -6,6 +6,18 @@ Date format: `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+### Added (0.9.0-dev Rust Rewrite — isolated `Eqho-Rust-0.9` build)
+- **Full Rust + Slint 1.19 rewrite (`Eqho.exe`, ~16 MB, static CRT, 13 MB Inno Setup 6 installer):**
+  - ~3.4 MB idle private RAM, ~38 ms tray startup, ~317 ms Vulkan transcription on RTX 3060 (~4.2× faster than 0.8.11) with 1.39% WER on LibriSpeech and real `no_speech_prob` / `avg_logprob` confidence gating.
+  - Native Win32 layered per-pixel alpha iridescent dictation pill & translucent live panel (`eqho-overlay`).
+  - Out-of-process `--model-host` child running `whisper.cpp 1.8.4` Vulkan + CPU fallback, with automatic Windows `OPENMP=1` thread-clamp safeguard and clean-PC CI workflow (`-DGGML_OPENMP=OFF -DGGML_CPU_ALL_VARIANTS=ON`).
+  - **4 quantized Q5 CPU-fast GGML models** (`Base Q5` 60 MB, `Small EN Q5` 190 MB, `Small Q5` 190 MB, `Large v3 Turbo Q5` 574 MB) alongside full-precision models, plus an **Inference Engine picker** (`Auto / GPU (Vulkan) / CPU`) in the Models tab and live byte-level download speed/ETA on both Models cards and Onboarding.
+  - **Redesigned 6-step Onboarding (`Eqho Onboarding`):** procedural 21×14 full-color country flags for all 99 Whisper languages, **Refresh devices** button on microphone step, 4 selectable light-to-heavy models with clickable `blob/main` Hugging Face link (`↗`) + Copy link, exclusive checkmarked audio-ducking cards, compact persistent background download progress bar with ETA, 6-part segmented blue step strip, and Step 6 **Readiness Checklist** + live dictation test box.
+  - **Card-integrated section headers** with 1px horizontal dividers across General, Models, Settings, and Onboarding.
+  - **24-bit and 32-bit integer WASAPI PCM capture & chime playback** (for studio USB audio interfaces/mics alongside 16-bit PCM and 32-bit float).
+  - **Full `0.8.11` settings & history parity:** UTF-8 BOM + lenient type coercion across all 31 settings keys, local-timezone History timestamps and day filters, Custom Vocabulary / Replacements / Paste Rules placeholders with inline save confirmation, one-time slow-model hint (`>6 s`), active model in window title, and DPI work-area window clamping above the taskbar.
+- **Hardened reliability:** resolved re-entrant settings-lock deadlock on background model download completion; paused global hotkey during hotkey capture; swallowed matched `WH_KEYBOARD_LL` hotkey down/up events (`LLKHF_ALTDOWN`); short-circuited self-window focus restore for Step 6 testing.
+
 ## [0.8.11] - 2026-10-17
 
 The dictation pill: it moves with your voice, and you can size and tune it.

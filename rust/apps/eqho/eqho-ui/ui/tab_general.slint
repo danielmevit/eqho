@@ -185,6 +185,7 @@ export component GeneralTab inherits Rectangle {
                             ThemedTextEdit {
                                 height: 64px;
                                 text <=> root.initial-prompt;
+                                placeholder-text: "e.g. Eqho, Kubernetes, PostgreSQL, Daniel Mevit…";
                                 font-size: Theme.font-size-sm;
                                 edited(s) => { root.initial-prompt-changed(s); }
                             }
@@ -345,6 +346,7 @@ export component GeneralTab inherits Rectangle {
                         ThemedTextEdit {
                             height: 64px;
                             text <=> root.initial-prompt;
+                            placeholder-text: "e.g. Eqho, Kubernetes, PostgreSQL, Daniel Mevit…";
                             font-size: Theme.font-size-sm;
                             edited(s) => { root.initial-prompt-changed(s); }
                         }

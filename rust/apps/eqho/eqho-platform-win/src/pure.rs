@@ -260,6 +260,51 @@ pub fn downmix_i16_to_mono(input: &[i16], channels: usize) -> Vec<f32> {
         .collect()
 }
 
+/// Downmixes interleaved packed 24-bit signed little-endian PCM bytes (`3 * channels` bytes/frame)
+/// to mono `f32` in `[-1.0, 1.0]`.
+#[must_use]
+pub fn downmix_i24_to_mono(bytes: &[u8], channels: usize) -> Vec<f32> {
+    if channels == 0 || bytes.len() < 3 * channels {
+        return Vec::new();
+    }
+    let frame_bytes = 3 * channels;
+    let scale = 1.0 / (8_388_608.0 * channels as f32);
+    bytes
+        .chunks_exact(frame_bytes)
+        .map(|frame| {
+            let mut sum = 0.0_f32;
+            for ch in 0..channels {
+                let b0 = i32::from(frame[ch * 3]);
+                let b1 = i32::from(frame[ch * 3 + 1]);
+                let b2 = i32::from(frame[ch * 3 + 2]);
+                // Sign-extend 24-bit signed value into i32.
+                let val = ((b0 | (b1 << 8) | (b2 << 16)) << 8) >> 8;
+                sum += val as f32;
+            }
+            sum * scale
+        })
+        .collect()
+}
+
+/// Downmixes interleaved 32-bit signed integer PCM with `channels` channels to mono `f32` in `[-1.0, 1.0]`.
+#[must_use]
+pub fn downmix_i32_to_mono(input: &[i32], channels: usize) -> Vec<f32> {
+    if channels == 0 || input.is_empty() {
+        return Vec::new();
+    }
+    let scale = 1.0 / (2_147_483_648.0_f64 * channels as f64);
+    if channels == 1 {
+        return input.iter().map(|&s| (f64::from(s) * scale) as f32).collect();
+    }
+    input
+        .chunks_exact(channels)
+        .map(|frame| {
+            let sum: f64 = frame.iter().map(|&s| f64::from(s)).sum();
+            (sum * scale) as f32
+        })
+        .collect()
+}
+
 /// Encodes `text` as a NUL-terminated UTF-16 buffer.
 #[must_use]
 pub fn utf16_with_nul(text: &str) -> Vec<u16> {
@@ -415,6 +460,23 @@ mod tests {
         let mono_i16 = downmix_i16_to_mono(&[16384, -16384, 32767, 32767], 2);
         assert!((mono_i16[0] - 0.0).abs() < 1e-5);
         assert!((mono_i16[1] - (32767.0 / 32768.0)).abs() < 1e-5);
+
+        // 24-bit packed LE PCM: frame 0 = (+0x400000, -0x400000) -> 0.0; frame 1 = (+0x7FFFFF, +0x7FFFFF) -> ~1.0
+        let pcm24: [u8; 12] = [
+            0x00, 0x00, 0x40, // +4_194_304 (+0.5)
+            0x00, 0x00, 0xC0, // -4_194_304 (-0.5)
+            0xFF, 0xFF, 0x7F, // +8_388_607 (~+1.0)
+            0xFF, 0xFF, 0x7F, // +8_388_607 (~+1.0)
+        ];
+        let mono_i24 = downmix_i24_to_mono(&pcm24, 2);
+        assert_eq!(mono_i24.len(), 2);
+        assert!(mono_i24[0].abs() < 1e-5);
+        assert!((mono_i24[1] - 1.0).abs() < 1e-5);
+
+        let mono_i32 = downmix_i32_to_mono(&[1_073_741_824, -1_073_741_824, i32::MAX, i32::MAX], 2);
+        assert_eq!(mono_i32.len(), 2);
+        assert!(mono_i32[0].abs() < 1e-5);
+        assert!((mono_i32[1] - 1.0).abs() < 1e-5);
     }
 
     #[test]

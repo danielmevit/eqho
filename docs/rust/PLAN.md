@@ -62,7 +62,7 @@ rust/
 - **R1 (Core):** `eqho-core` full pure-Rust port + `proptest` + Python `0.8.11` fixture parity tests.
 - **R2 (Platform + Host):** `eqho-platform-win` + `eqho-host` (`--model-host` IPC, GGML HuggingFace downloader with real byte progress, DXGI/AVX2/RAM checks) + live Windows E2E dictation test (`EQHO_TEST_AUDIO`).
 - **R3 (UI + Overlay + App):** Native per-pixel alpha pill + Slint text panel + Dashboard (General, Models, Settings, Overlay, History, About) + 6-step Onboarding + tray icon.
-- **R4 (Parity + Packaging + Merge Decision):** `--smoke`, 30-cycle soak test, installer/portable zip + VC++ runtime/static-CRT resolution + third-party notices, merge `rust-0.9` into `dev` on owner go.
+- **R4 (Parity + Packaging + Merge Decision):** `--smoke`, 30-cycle soak test, installer/portable zip + VC++ runtime/static-CRT resolution + third-party notices, full `0.8.11` parity (Inference Engine picker, 24/32-bit WASAPI PCM, slow-model hint, local-timezone History, card-integrated headers, DPI work-area clamp, redesigned Onboarding with flags/multi-model/clickable `blob/main` source link/Step 6 readiness checklist), merge `rust-0.9` into `dev` on owner go.
 
 ## 5. Worker Rules (Unio)
 - Workers run `agy` with exact `--model gemini-4-hydrogen-medium`.

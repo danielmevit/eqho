@@ -23,8 +23,8 @@ use eqho_overlay::{OverlayConfig, OverlayHandle};
 use eqho_platform::{AudioBackend, AudioDeviceInfo, AudioStreamHandle, ClipboardService, GpuProbe, MicPrivacyProbe};
 use eqho_ui::{
     DashboardWindow, EqhoTray, Theme, apply_settings_to_window, build_history_rows,
-    build_model_cards, build_onboarding_model_options, filter_history_entries,
-    language_code_for_index, language_warning_text, model_short_name,
+    build_model_cards, build_onboarding_model_options, dashboard_window_title, engine_backend_key,
+    filter_history_entries, language_code_for_index, language_warning_text, model_short_name,
     onboarding_model_copy_for_key, overlay_position_key, parse_paste_rules_text,
     parse_replacements_text, split_model_cards, status_summary_title, theme_mode_key,
     ui_scale_value, volume_duck_key,
@@ -181,6 +181,7 @@ impl AppUiSink {
                     &cached,
                     snap.downloading_key.as_deref(),
                     snap.download_progress,
+                    &snap.download_detail,
                     snap.download_error_key.as_deref(),
                     hw,
                     &settings.language,
@@ -188,6 +189,9 @@ impl AppUiSink {
                 let (en_cards, multi_cards) = split_model_cards(cards);
                 dash.set_english_models(ModelRc::new(VecModel::from(en_cards)));
                 dash.set_multilingual_models(ModelRc::new(VecModel::from(multi_cards)));
+                dash.set_window_title(
+                    dashboard_window_title(&settings.model_size, snap.is_dictating).into(),
+                );
             }
         });
     }
@@ -300,10 +304,17 @@ impl UiEventSink for AppUiSink {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
+        let model_size = self
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .model_size
+            .clone();
         if let Some(dash_weak) = dash_weak_opt {
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(dash) = dash_weak.upgrade() {
                     dash.set_onboarding_is_dictating(active);
+                    dash.set_window_title(dashboard_window_title(&model_size, active).into());
                 }
             });
         }
@@ -519,6 +530,7 @@ impl AppController {
             &cached,
             snap.downloading_key.as_deref(),
             snap.download_progress,
+            &snap.download_detail,
             snap.download_error_key.as_deref(),
             self.hw_class,
             &s.language,
@@ -526,6 +538,7 @@ impl AppController {
         let (en_cards, multi_cards) = split_model_cards(cards);
         dash.set_english_models(ModelRc::new(VecModel::from(en_cards)));
         dash.set_multilingual_models(ModelRc::new(VecModel::from(multi_cards)));
+        dash.set_window_title(dashboard_window_title(&s.model_size, snap.is_dictating).into());
         self.refresh_onboarding_models(None);
     }
 
@@ -878,6 +891,18 @@ fn ensure_dashboard(ctrl: &Rc<RefCell<AppController>>, tab: Option<&str>) {
 
                 let recovery = snap.recovery_text.unwrap_or_default();
                 dash.set_recovery_text(recovery.into());
+
+                // Clamp initial logical window size to the active monitor work area so the window
+                // and onboarding footer never slip behind the Windows taskbar at high DPI scaling.
+                if let Some(work) = c.damt_platform.active_screen().active_screen_bounds() {
+                    let scale = dash.window().scale_factor().max(1.0);
+                    let max_w = ((work.width as f32 / scale) - 32.0).max(600.0);
+                    let max_h = ((work.height as f32 / scale) - 48.0).max(420.0);
+                    let target_w = 940.0_f32.min(max_w);
+                    let target_h = 560.0_f32.min(max_h);
+                    dash.window()
+                        .set_size(slint::LogicalSize::new(target_w, target_h));
+                }
             }
             c.refresh_models();
             c.refresh_onboarding_models(Some(&initial_model_key));
@@ -1153,6 +1178,24 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     // Models tab
     {
         let ctrl_w = Rc::clone(ctrl);
+        dash.on_engine_backend_changed(move |idx| {
+            let c = ctrl_w.borrow();
+            c.settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .engine_backend = engine_backend_key(idx).to_owned();
+            c.save_settings(false);
+            c.refresh_models();
+            let coord = c.coordinator.clone();
+            let _ = thread::Builder::new()
+                .name("eqho-engine-reload".into())
+                .spawn(move || {
+                    let _ = coord.preload_model();
+                });
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
         let dash_w = dash.as_weak();
         dash.on_select_model(move |key| {
             let c = ctrl_w.borrow();
@@ -1214,14 +1257,22 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     // History tab
     {
         let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
         dash.on_history_filter_changed(move || {
+            if let Some(d) = dash_w.upgrade() {
+                d.set_history_status("".into());
+            }
             ctrl_w.borrow().refresh_history();
         });
     }
     {
         let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
         dash.on_copy_history_entry(move |txt| {
             let _ = ctrl_w.borrow().platform.set_text(&txt, false);
+            if let Some(d) = dash_w.upgrade() {
+                d.set_history_status("Copied to clipboard".into());
+            }
         });
     }
     {
@@ -1236,20 +1287,28 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     }
     {
         let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
         dash.on_clear_history(move || {
             let c = ctrl_w.borrow();
             let _ = c.history.clear();
             c.refresh_history();
+            if let Some(d) = dash_w.upgrade() {
+                d.set_history_status("History cleared".into());
+            }
         });
     }
     {
         let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
         dash.on_export_history(move || {
             let c = ctrl_w.borrow();
             let dest = c.config_dir.join("eqho-history.txt");
             if let Ok(count) = c.history.export_txt(&dest) {
                 let msg = format!("Exported {count} entries to {}", dest.display());
                 c.ui_sink.notify(&msg);
+                if let Some(d) = dash_w.upgrade() {
+                    d.set_history_status(format!("Exported {count} entries").into());
+                }
             }
         });
     }
@@ -1302,24 +1361,36 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     }
     {
         let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
         dash.on_save_replacements(move |txt| {
+            let parsed = parse_replacements_text(&txt);
+            let count = parsed.len();
             let c = ctrl_w.borrow();
             c.settings
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .replacements = parse_replacements_text(&txt);
+                .replacements = parsed;
             c.save_settings(false);
+            if let Some(d) = dash_w.upgrade() {
+                d.set_replacements_status(format!("Saved ({count})").into());
+            }
         });
     }
     {
         let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
         dash.on_save_paste_rules(move |txt| {
+            let parsed = parse_paste_rules_text(&txt);
+            let count = parsed.len();
             let c = ctrl_w.borrow();
             c.settings
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .paste_rules = parse_paste_rules_text(&txt);
+                .paste_rules = parsed;
             c.save_settings(false);
+            if let Some(d) = dash_w.upgrade() {
+                d.set_paste_rules_status(format!("Saved ({count})").into());
+            }
         });
     }
     {
