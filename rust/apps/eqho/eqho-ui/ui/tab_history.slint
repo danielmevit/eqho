@@ -1,0 +1,108 @@
+// History Tab: Search, period filter, export, clear, and transcript list.
+import { Theme } from "@app-theme/theme.slint";
+import { Button, ButtonKind, CloseButton, Dropdown } from "@damt-ui/kit.slint";
+import { HistoryRowItem } from "types.slint";
+import { ScrollArea, SectionCard, ThemedLineEdit } from "components.slint";
+
+export component HistoryTab inherits Rectangle {
+    in property <length> window-height: 560px;
+
+    in-out property <string> history-query: "";
+    in-out property <int> history-period-index: 0;
+    in property <[HistoryRowItem]> history-rows: [];
+
+    callback history-filter-changed();
+    callback export-history();
+    callback clear-history();
+    callback copy-history-entry(string);
+    callback delete-history-entry(float);
+
+    ScrollArea {
+        width: parent.width;
+        height: parent.height;
+
+        VerticalLayout {
+            padding: Theme.space-16;
+            spacing: Theme.space-12;
+
+            // Toolbar
+            HorizontalLayout {
+                spacing: Theme.space-8;
+                ThemedLineEdit {
+                    horizontal-stretch: 1;
+                    text <=> root.history-query;
+                    placeholder-text: "Search transcripts — keywords or date…";
+                    edited => { root.history-filter-changed(); }
+                }
+                Dropdown {
+                    model: ["All time", "Today", "Yesterday", "Last 7 days", "Last 30 days"];
+                    current-index <=> root.history-period-index;
+                    window-height: root.window-height;
+                    accessible-name: "Time period";
+                    selected => { root.history-filter-changed(); }
+                }
+                Button {
+                    text: "Export .txt";
+                    kind: ButtonKind.outline;
+                    clicked => { root.export-history(); }
+                }
+                Button {
+                    text: "Clear All";
+                    kind: ButtonKind.outline;
+                    clicked => { root.clear-history(); }
+                }
+            }
+
+            // Empty state
+            if root.history-rows.length == 0 : SectionCard {
+                Text {
+                    text: (root.history-query != "" || root.history-period-index != 0)
+                        ? "No matches."
+                        : "No dictations yet — press the hotkey and speak.";
+                    font-size: Theme.font-size-base;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                }
+            }
+
+            // Transcript rows
+            for row in root.history-rows : SectionCard {
+                HorizontalLayout {
+                    spacing: Theme.space-10;
+                    alignment: space-between;
+
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 4px;
+                        Text {
+                            text: row.meta_text != "" ? row.timestamp_text + "  ·  " + row.meta_text : row.timestamp_text;
+                            font-size: Theme.font-size-xs;
+                            color: Theme.text-muted;
+                        }
+                        Text {
+                            text: row.text;
+                            font-size: Theme.font-size-base;
+                            color: Theme.text;
+                            wrap: word-wrap;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        horizontal-stretch: 0;
+                        spacing: 4px;
+                        alignment: start;
+                        Button {
+                            text: "Copy";
+                            kind: ButtonKind.text;
+                            clicked => { root.copy-history-entry(row.text); }
+                        }
+                        CloseButton {
+                            accessible-name: "Delete entry";
+                            clicked => { root.delete-history-entry(row.ts); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

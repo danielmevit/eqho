@@ -1,0 +1,1 @@
+- Implemented the Slint 1.19 `renderer-software` UI in `eqho-ui`: `DashboardWindow` (General, Models, History, Settings tabs, recovery banner, and 6-step Onboarding), `EqhoTray` (`SystemTrayIcon`), `viewmodel` helpers, and headless/software-render tests.
