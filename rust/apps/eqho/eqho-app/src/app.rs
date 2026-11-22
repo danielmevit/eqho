@@ -52,11 +52,11 @@ fn build_damt_platform() -> DamtPlatformImpl {
     {
         let notifier = damt_platform_win::WinNotifier::new(
             SINGLE_INSTANCE_ID,
-            "Eqho",
-            "Eqho",
+            "Eqho (0.9 Dev)",
+            "Eqho-Rust-0.9",
             crate::assets::LOGO_32_WHITE,
         );
-        damt_platform_win::WinPlatform::new("Eqho").with_notifier(notifier)
+        damt_platform_win::WinPlatform::new("Eqho-Rust-0.9").with_notifier(notifier)
     }
     #[cfg(not(windows))]
     {
@@ -1572,12 +1572,8 @@ pub fn run_desktop_app(
 
     // Listen for second-instance signal to surface the dashboard.
     {
-        let ctrl_weak = Rc::downgrade(&ctrl);
-        // `Rc` cannot be sent across threads; signal via `invoke_from_event_loop`
-        // using a static-friendly channel or `tray_weak` + `dash_weak`.
         let dash_w = Arc::clone(&ctrl.borrow().dash_weak);
         let tray_w = tray.as_weak();
-        let _ = ctrl_weak;
         guard.listen(move || {
             let dash_w = Arc::clone(&dash_w);
             let tray_w = tray_w.clone();

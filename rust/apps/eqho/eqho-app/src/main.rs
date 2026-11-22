@@ -10,10 +10,18 @@ use eqho_app::headless::{run_e2e_wav_cli, run_smoke_cli, run_soak_cli};
 
 #[cfg(windows)]
 fn attach_parent_console() {
-    use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
-    // SAFETY: Attaches to parent console when invoked from a terminal; failure is benign in GUI launches.
+    use windows::Win32::System::Console::{
+        ATTACH_PARENT_PROCESS, AttachConsole, GetStdHandle, STD_OUTPUT_HANDLE,
+    };
+    // SAFETY: Queries the process stdout handle and only attaches to the parent console when
+    // stdout is not already redirected (e.g., pipes/files from WSL or CI stay intact).
     unsafe {
-        let _ = AttachConsole(ATTACH_PARENT_PROCESS);
+        let has_stdout = GetStdHandle(STD_OUTPUT_HANDLE)
+            .map(|h| !h.is_invalid() && !h.0.is_null())
+            .unwrap_or(false);
+        if !has_stdout {
+            let _ = AttachConsole(ATTACH_PARENT_PROCESS);
+        }
     }
 }
 

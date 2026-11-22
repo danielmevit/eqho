@@ -223,7 +223,9 @@ pub fn run_soak_cli(cycles: usize, _dll_dir_override: Option<PathBuf>) -> ExitCo
         overlay.update_text(&format!("Eqho soak cycle {cycle} transcription sample"));
         overlay.set_level(0.65);
         overlay.set_waveform(0.55, 0.45);
+        std::thread::sleep(std::time::Duration::from_millis(20));
         overlay.hide();
+        std::thread::sleep(std::time::Duration::from_millis(10));
 
         let (priv_bytes, ws_bytes) = process_memory_bytes();
         eprintln!(
