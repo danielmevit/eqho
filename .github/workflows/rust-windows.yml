@@ -61,6 +61,7 @@ jobs:
           git clone --depth 1 --branch %WHISPER_CPP_TAG% https://github.com/ggml-org/whisper.cpp.git "%RUNNER_TEMP%\whisper.cpp"
           cmake -S "%RUNNER_TEMP%\whisper.cpp" -B "%RUNNER_TEMP%\whisper-build" -G Ninja ^
             -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_POLICY_DEFAULT_CMP0091=NEW ^
             -DBUILD_SHARED_LIBS=ON ^
             -DGGML_VULKAN=ON ^
             -DGGML_OPENMP=OFF ^

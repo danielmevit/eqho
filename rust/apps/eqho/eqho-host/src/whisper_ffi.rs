@@ -229,6 +229,7 @@ struct WhisperFullParams {
 
 struct WhisperApi {
     _lib: Library,
+    _ggml_lib: Option<Library>,
     whisper_version: unsafe extern "C" fn() -> *const c_char,
     whisper_print_system_info: unsafe extern "C" fn() -> *const c_char,
     whisper_context_default_params_by_ref: unsafe extern "C" fn() -> *mut WhisperContextParams,
@@ -275,6 +276,7 @@ unsafe fn load_sym<T: Copy>(lib: &Library, name: &'static str) -> Result<T, Host
 impl WhisperApi {
     fn load(dll_dir: &Path) -> Result<Self, HostError> {
         let lib = load_whisper_library(dll_dir)?;
+        let ggml_lib = load_ggml_dynamic_backends(dll_dir);
         // SAFETY: Every symbol name and signature matches `rust/vendor/whisper-1.8.4/whisper.h`.
         unsafe {
             Ok(Self {
@@ -306,9 +308,69 @@ impl WhisperApi {
                 whisper_full_get_token_data: load_sym(&lib, "whisper_full_get_token_data")?,
                 whisper_token_eot: load_sym(&lib, "whisper_token_eot")?,
                 _lib: lib,
+                _ggml_lib: ggml_lib,
             })
         }
     }
+}
+
+/// Strip Windows verbatim `\\?\` prefix returned by `fs::canonicalize` so narrow C APIs
+/// (`ggml_backend_load_all_from_path`) can enumerate backend DLLs cleanly.
+fn strip_verbatim_prefix(s: &str) -> String {
+    if let Some(stripped) = s.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{stripped}")
+    } else if let Some(stripped) = s.strip_prefix(r"\\?\") {
+        stripped.to_owned()
+    } else {
+        s.to_owned()
+    }
+}
+
+fn normalize_backend_search_dir(dir: &Path) -> String {
+    let abs = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    strip_verbatim_prefix(&abs.to_string_lossy())
+}
+
+/// Register dynamically-loaded GGML backends (`ggml-cpu-*.dll`, `ggml-vulkan.dll`) when
+/// `whisper.cpp` was built with `-DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON`.
+///
+/// Safe no-op on non-DL builds where `ggml_backend_load_all_from_path` is absent or empty.
+fn load_ggml_dynamic_backends(dll_dir: &Path) -> Option<Library> {
+    let abs_dir = std::fs::canonicalize(dll_dir).unwrap_or_else(|_| dll_dir.to_path_buf());
+    #[cfg(windows)]
+    let ggml_path = abs_dir.join("ggml.dll");
+    #[cfg(not(windows))]
+    let ggml_path = abs_dir.join("libggml.so");
+
+    if !ggml_path.is_file() {
+        return None;
+    }
+
+    // SAFETY: Loading the co-located `ggml` library matching `whisper.dll` in `dll_dir`.
+    let ggml_lib = unsafe { Library::new(&ggml_path) }.ok()?;
+
+    let dir_str = normalize_backend_search_dir(dll_dir);
+    if let Ok(dir_cstr) = CString::new(dir_str.as_bytes()) {
+        // SAFETY: `ggml_backend_load_all_from_path(const char *)` matches `ggml-backend.h:247`.
+        if let Ok(load_from_path) = unsafe {
+            ggml_lib.get::<unsafe extern "C" fn(*const c_char)>(
+                b"ggml_backend_load_all_from_path\0",
+            )
+        } {
+            // SAFETY: `dir_cstr` is a valid null-terminated UTF-8/ASCII directory path.
+            unsafe { (load_from_path)(dir_cstr.as_ptr()) };
+            return Some(ggml_lib);
+        }
+    }
+
+    // SAFETY: Fallback `ggml_backend_load_all(void)` matches `ggml-backend.h:246`.
+    if let Ok(load_all) =
+        unsafe { ggml_lib.get::<unsafe extern "C" fn()>(b"ggml_backend_load_all\0") }
+    {
+        // SAFETY: Takes no arguments.
+        unsafe { (load_all)() };
+    }
+    Some(ggml_lib)
 }
 
 #[cfg(windows)]
@@ -581,6 +643,16 @@ impl WhisperEngine {
 mod tests {
     use super::*;
     use std::mem::{align_of, offset_of, size_of};
+
+    #[test]
+    fn strip_verbatim_prefix_handles_drive_unc_and_plain_paths() {
+        assert_eq!(strip_verbatim_prefix(r"\\?\D:\Eqho\dlls"), r"D:\Eqho\dlls");
+        assert_eq!(
+            strip_verbatim_prefix(r"\\?\UNC\server\share\dlls"),
+            r"\\server\share\dlls"
+        );
+        assert_eq!(strip_verbatim_prefix("/usr/lib/eqho"), "/usr/lib/eqho");
+    }
 
     #[test]
     fn abi_struct_layouts_match_whisper_h() {
