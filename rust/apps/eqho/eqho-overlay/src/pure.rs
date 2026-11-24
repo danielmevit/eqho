@@ -40,6 +40,11 @@ pub struct OverlayConfig {
     pub font_size: i32,
     pub show_level: bool,
     pub dark_theme: bool,
+    pub controls_enabled: bool,
+    pub controls_pinned: bool,
+    pub delivery_mode: String,
+    pub language: String,
+    pub recent_languages: Vec<String>,
 }
 
 impl Default for OverlayConfig {
@@ -55,6 +60,11 @@ impl Default for OverlayConfig {
             font_size: 14,
             show_level: true,
             dark_theme: true,
+            controls_enabled: true,
+            controls_pinned: false,
+            delivery_mode: "batch".to_owned(),
+            language: "en".to_owned(),
+            recent_languages: Vec::new(),
         }
     }
 }
@@ -83,6 +93,11 @@ impl OverlayConfig {
             "primary" => "primary".to_owned(),
             _ => "active".to_owned(),
         };
+        let language = if settings.language.trim().is_empty() {
+            "en".to_owned()
+        } else {
+            settings.language.trim().to_ascii_lowercase()
+        };
         Self {
             enabled: settings.overlay_enabled,
             show_text: settings.overlay_show_text,
@@ -94,6 +109,11 @@ impl OverlayConfig {
             font_size: settings.overlay_font_size.clamp(10, 28),
             show_level: settings.overlay_show_level,
             dark_theme: resolved_dark,
+            controls_enabled: true,
+            controls_pinned: false,
+            delivery_mode: "batch".to_owned(),
+            language,
+            recent_languages: Vec::new(),
         }
     }
 }
@@ -553,6 +573,11 @@ mod tests {
         assert!(!cfg.dark_theme);
         assert_eq!(cfg.monitor, "active");
         assert!(cfg.show_text);
+        assert!(cfg.controls_enabled);
+        assert!(!cfg.controls_pinned);
+        assert_eq!(cfg.delivery_mode, "batch");
+        assert_eq!(cfg.language, "en");
+        assert!(cfg.recent_languages.is_empty());
     }
 
     #[test]
