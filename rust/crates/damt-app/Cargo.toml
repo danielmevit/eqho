@@ -1,0 +1,14 @@
+[package]
+name = "damt-app"
+description = "App shell services for the damt.xyz apps: single instance, data paths, capped error log and panic hook."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
+
+[lints]
+workspace = true

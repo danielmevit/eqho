@@ -1,0 +1,1 @@
+- **eqho-overlay / eqho-ui / eqho-app (W6-ui-app-integration):** Wired under-pill interactive controls, SVG flag provider (`render_flag_rgba`), Batch/Live delivery mode & pill control toggles in Slint Dashboard, live `UiEventSink::on_settings_changed` / finishing sync, and compile-time `EQHO_STORE_ID` override.

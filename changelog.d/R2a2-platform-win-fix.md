@@ -1,0 +1,1 @@
+- Fixed COM refcount leak in `activate_mm_device` (`com.rs`) and `WH_KEYBOARD_LL` startup race, synchronous callback timeout risk, and stale modifier tracking (`hotkey.rs`), and added read-only `examples/probe.rs` hardware probe.

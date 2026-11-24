@@ -1,0 +1,1 @@
+- `R1b-eqho-core`: Implemented pure-Rust `eqho-core` (`settings`, `history`, `textproc`, `vad`, `pillfx`, `chime`, `modelpick`, `modelstore`, `recovery`) with 0.8.11 parity, audited fixes, unit tests, and `proptest` suites.

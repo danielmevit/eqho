@@ -1,0 +1,3 @@
+# Single exe with no VCRUNTIME140 dependency (R0 verified).
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

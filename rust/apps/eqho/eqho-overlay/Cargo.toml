@@ -1,0 +1,18 @@
+[package]
+name = "eqho-overlay"
+description = "Native layered iridescent pill and upward-growing live transcription panel overlay for Eqho."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+damt-platform.workspace = true
+eqho-core.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,44 @@
+[package]
+name = "eqho-app"
+description = "Eqho desktop application binary (tray, dashboard, onboarding, layered overlay, dictation coordinator, --model-host, --smoke, --soak)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "Eqho"
+path = "src/main.rs"
+
+[features]
+default = []
+store = ["damt-platform-win/store"]
+
+[dependencies]
+damt-app.workspace = true
+damt-platform.workspace = true
+damt-platform-win.workspace = true
+eqho-core.workspace = true
+eqho-engine.workspace = true
+eqho-host.workspace = true
+eqho-overlay.workspace = true
+eqho-platform.workspace = true
+eqho-platform-win.workspace = true
+eqho-ui.workspace = true
+jiff.workspace = true
+png.workspace = true
+raw-window-handle.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+slint.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
+
+[build-dependencies]
+damt-build.workspace = true
+embed-manifest.workspace = true
+
+[lints]
+workspace = true

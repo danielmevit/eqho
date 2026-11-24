@@ -1,0 +1,1 @@
+- **R2c (`eqho-engine`):** Implemented pure-Rust `DictationCoordinator` (session-ID fencing, chime-before-ducking, verified focus restore, `EQ-MODS`/`EQ-CLIP` injection, truthful mid-session error recovery), `EQHO_TEST_AUDIO` WAV feeder (`wav_source`), and headless `--smoke` runner (`smoke`).

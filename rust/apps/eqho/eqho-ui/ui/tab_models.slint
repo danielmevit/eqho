@@ -1,0 +1,296 @@
+// Models Tab: Inference Engine, Whisper model cards (English Optimized & Multilingual), Storage.
+import { Theme } from "@app-theme/theme.slint";
+import { Button, ButtonKind, ProgressLine, TabList } from "@damt-ui/kit.slint";
+import { ModelCardItem } from "types.slint";
+import { ScrollArea, SectionCard } from "components.slint";
+
+component ModelCard inherits Rectangle {
+    in property <ModelCardItem> item;
+    callback select-clicked(string);
+    callback download-clicked(string);
+    callback delete-clicked(string);
+
+    background: Theme.bg;
+    border-radius: Theme.radius-card;
+    border-width: root.item.is_selected ? 2px : 1px;
+    border-color: root.item.is_selected ? Theme.accent-line : Theme.border-subtle;
+    min-height: lay.preferred-height;
+    horizontal-stretch: 1;
+
+    lay := VerticalLayout {
+        padding: Theme.space-12;
+        spacing: Theme.space-8;
+
+        HorizontalLayout {
+            spacing: Theme.space-8;
+            alignment: space-between;
+
+            Text {
+                text: root.item.name;
+                font-size: Theme.font-size-base;
+                font-weight: 600;
+                color: Theme.text;
+                horizontal-stretch: 1;
+                wrap: word-wrap;
+                vertical-alignment: center;
+            }
+
+            // Status pill (accent-only semantic color: neutral surface + tiny dot + crisp text)
+            Rectangle {
+                horizontal-stretch: 0;
+                height: 22px;
+                min-width: status-row.preferred-width + 16px;
+                border-radius: 11px;
+                background: Theme.surface-tertiary;
+                border-width: 1px;
+                border-color: root.item.has_error ? Theme.error
+                    : root.item.is_downloading ? Theme.accent-line
+                    : Theme.border-subtle;
+
+                status-row := HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 5px;
+                    alignment: center;
+
+                    if root.item.has_error || root.item.is_downloading || root.item.is_cached : VerticalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: 6px;
+                            height: 6px;
+                            border-radius: 3px;
+                            background: root.item.has_error ? Theme.error
+                                : root.item.is_downloading ? Theme.accent-line
+                                : Theme.success;
+                        }
+                    }
+
+                    Text {
+                        text: root.item.status_text;
+                        font-size: Theme.font-size-xs;
+                        font-weight: 600;
+                        color: root.item.has_error ? Theme.error
+                            : root.item.is_downloading ? Theme.accent-text
+                            : root.item.is_cached ? Theme.text
+                            : Theme.text-muted;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: root.item.detail;
+            font-size: Theme.font-size-sm;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+
+        if root.item.recommendation != "" : Text {
+            text: root.item.recommendation;
+            font-size: Theme.font-size-sm;
+            color: Theme.accent-text;
+            wrap: word-wrap;
+        }
+
+        if root.item.is_downloading && root.item.download_detail != "" : Text {
+            text: root.item.download_detail;
+            font-size: Theme.font-size-xs;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+
+        if root.item.is_downloading : ProgressLine {
+            progress: root.item.progress;
+            accessible-name: root.item.name + " download progress";
+        }
+
+        HorizontalLayout {
+            spacing: Theme.space-8;
+            alignment: start;
+
+            if !root.item.is_selected && !root.item.is_downloading && root.item.is_cached : Button {
+                text: "Select";
+                kind: ButtonKind.accent;
+                clicked => { root.select-clicked(root.item.key); }
+            }
+
+            if !root.item.is_cached && !root.item.is_downloading : Button {
+                text: root.item.has_error ? "Try again" : "Download";
+                kind: root.item.has_error ? ButtonKind.outline : ButtonKind.accent;
+                clicked => { root.download-clicked(root.item.key); }
+            }
+
+            if root.item.is_cached && !root.item.is_selected && !root.item.is_downloading : Button {
+                text: "Delete";
+                kind: ButtonKind.outline;
+                clicked => { root.delete-clicked(root.item.key); }
+            }
+
+            if root.item.is_selected && root.item.is_cached : Text {
+                text: "Active model";
+                font-size: Theme.font-size-sm;
+                font-weight: 600;
+                color: Theme.accent-text;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+export component ModelsTab inherits Rectangle {
+    in-out property <string> hardware-summary: "On this PC, speech models run on your graphics card.";
+    in-out property <int> engine-backend-index: 0;
+    in property <[ModelCardItem]> english-models: [];
+    in property <[ModelCardItem]> multilingual-models: [];
+    in-out property <string> model-dir-display: "";
+
+    callback engine-backend-changed(int);
+    callback select-model(string);
+    callback download-model(string);
+    callback delete-model(string);
+    callback open-model-folder();
+
+    property <bool> two-col: root.width >= 720px;
+
+    ScrollArea {
+        width: parent.width;
+        height: parent.height;
+
+        VerticalLayout {
+            padding: Theme.space-16;
+            spacing: Theme.space-12;
+
+            // INFERENCE ENGINE
+            SectionCard {
+                title: "INFERENCE ENGINE";
+                Text {
+                    text: root.hardware-summary;
+                    font-size: Theme.font-size-sm;
+                    color: Theme.text-muted;
+                    wrap: word-wrap;
+                }
+                TabList {
+                    items: ["Auto", "GPU (Vulkan)", "CPU"];
+                    selected <=> root.engine-backend-index;
+                    accessible-name: "Inference Engine";
+                    picked(i) => { root.engine-backend-changed(i); }
+                }
+            }
+
+            // ENGLISH OPTIMIZED
+            SectionCard {
+                title: "ENGLISH OPTIMIZED";
+                if root.two-col : VerticalLayout {
+                    spacing: Theme.space-10;
+                    for row-idx in Math.ceil(root.english-models.length / 2) : HorizontalLayout {
+                        spacing: Theme.space-10;
+                        ModelCard {
+                            width: (parent.width - Theme.space-10) / 2;
+                            item: root.english-models[row-idx * 2];
+                            select-clicked(k) => { root.select-model(k); }
+                            download-clicked(k) => { root.download-model(k); }
+                            delete-clicked(k) => { root.delete-model(k); }
+                        }
+                        if row-idx * 2 + 1 < root.english-models.length : ModelCard {
+                            width: (parent.width - Theme.space-10) / 2;
+                            item: root.english-models[row-idx * 2 + 1];
+                            select-clicked(k) => { root.select-model(k); }
+                            download-clicked(k) => { root.download-model(k); }
+                            delete-clicked(k) => { root.delete-model(k); }
+                        }
+                        if row-idx * 2 + 1 >= root.english-models.length : Rectangle {
+                            width: (parent.width - Theme.space-10) / 2;
+                        }
+                    }
+                }
+                if !root.two-col : VerticalLayout {
+                    spacing: Theme.space-10;
+                    for m in root.english-models : ModelCard {
+                        item: m;
+                        select-clicked(k) => { root.select-model(k); }
+                        download-clicked(k) => { root.download-model(k); }
+                        delete-clicked(k) => { root.delete-model(k); }
+                    }
+                }
+            }
+
+            // MULTILINGUAL
+            SectionCard {
+                title: "MULTILINGUAL";
+                if root.two-col : VerticalLayout {
+                    spacing: Theme.space-10;
+                    for row-idx in Math.ceil(root.multilingual-models.length / 2) : HorizontalLayout {
+                        spacing: Theme.space-10;
+                        ModelCard {
+                            width: (parent.width - Theme.space-10) / 2;
+                            item: root.multilingual-models[row-idx * 2];
+                            select-clicked(k) => { root.select-model(k); }
+                            download-clicked(k) => { root.download-model(k); }
+                            delete-clicked(k) => { root.delete-model(k); }
+                        }
+                        if row-idx * 2 + 1 < root.multilingual-models.length : ModelCard {
+                            width: (parent.width - Theme.space-10) / 2;
+                            item: root.multilingual-models[row-idx * 2 + 1];
+                            select-clicked(k) => { root.select-model(k); }
+                            download-clicked(k) => { root.download-model(k); }
+                            delete-clicked(k) => { root.delete-model(k); }
+                        }
+                        if row-idx * 2 + 1 >= root.multilingual-models.length : Rectangle {
+                            width: (parent.width - Theme.space-10) / 2;
+                        }
+                    }
+                }
+                if !root.two-col : VerticalLayout {
+                    spacing: Theme.space-10;
+                    for m in root.multilingual-models : ModelCard {
+                        item: m;
+                        select-clicked(k) => { root.select-model(k); }
+                        download-clicked(k) => { root.download-model(k); }
+                        delete-clicked(k) => { root.delete-model(k); }
+                    }
+                }
+            }
+
+            // STORAGE
+            SectionCard {
+                title: "STORAGE";
+                HorizontalLayout {
+                    spacing: Theme.space-12;
+                    alignment: space-between;
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 2px;
+                        Text {
+                            text: "Model Storage";
+                            font-size: Theme.font-size-base;
+                            font-weight: 500;
+                            color: Theme.text;
+                        }
+                        Text {
+                            text: root.model-dir-display != "" ? root.model-dir-display : "Default cache folder";
+                            font-size: Theme.font-size-sm;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 0;
+                        alignment: center;
+                        Button {
+                            text: "Open Folder";
+                            kind: ButtonKind.outline;
+                            clicked => { root.open-model-folder(); }
+                        }
+                    }
+                }
+                Text {
+                    text: "Models download over HTTPS from huggingface.co/ggerganov/whisper.cpp (official MIT open-source release) and stay 100% offline on this PC.";
+                    font-size: Theme.font-size-xs;
+                    color: Theme.text-muted;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+}

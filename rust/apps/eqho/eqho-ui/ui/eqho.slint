@@ -1,0 +1,454 @@
+// Eqho Slint 1.19 Root UI: DashboardWindow & EqhoTray.
+import { Theme } from "@app-theme/theme.slint";
+import { ModelCardItem, HistoryRowItem, LanguageOption, OnboardingModelOption } from "types.slint";
+import { TopBar, RecoveryBanner, StoreTrialBanner, StoreTrialFooter } from "components.slint";
+import { GeneralTab } from "tab_general.slint";
+import { ModelsTab } from "tab_models.slint";
+import { HistoryTab } from "tab_history.slint";
+import { SettingsTab } from "tab_settings.slint";
+import { OnboardingView } from "onboarding.slint";
+
+export { Theme, ModelCardItem, HistoryRowItem, LanguageOption, OnboardingModelOption }
+
+export component DashboardWindow inherits Window {
+    min-width: 600px;
+    min-height: 420px;
+    preferred-width: 940px;
+    preferred-height: 560px;
+    title: root.onboarding-active ? "Eqho Onboarding" : root.window-title;
+    icon: root.window-icon;
+    background: Theme.bg;
+
+    in-out property <string> window-title: "Eqho Dashboard";
+    in property <image> window-icon;
+    in-out property <string> active-tab: "general";
+    in-out property <bool> onboarding-active: false;
+    in-out property <int> onboarding-step: 0;
+    in property <image> logo-image;
+
+    // Recovery banner
+    in-out property <string> recovery-text: "";
+    callback copy-recovery();
+    callback dismiss-recovery();
+
+    // Microsoft Store trial & purchase state (all hidden when store-build is false)
+    in-out property <bool> store-build: false;
+    in-out property <string> license-state: "unknown";
+    in-out property <int> trial-days-left: -1;
+    in-out property <string> trial-ended-title: "Your trial has ended.";
+    in-out property <string> trial-ended-body: "If you'd like to keep using Eqho, please buy it.";
+    in-out property <string> buy-label: "Buy Eqho";
+    in-out property <string> trial-days-left-text: "";
+    in-out property <string> made-with-slint-label: "Made with Slint";
+    callback buy-clicked();
+
+    property <bool> trial-ended: root.store-build && root.license-state == "trial-expired";
+    property <bool> trial-running: root.store-build && root.license-state == "trial" && root.trial-days-left > 0;
+
+    // TopBar callbacks
+    callback tab-selected(string);
+    callback theme-toggled();
+
+    // General tab properties & callbacks
+    in property <[string]> mic-names: ["System Default"];
+    in-out property <int> mic-index: 0;
+    in-out property <int> vad-sensitivity-pct: 100;
+    in-out property <string> hotkey-display: "Alt + Q";
+    in-out property <bool> hotkey-capturing: false;
+    in-out property <int> hotkey-mode-index: 0;
+    in property <[LanguageOption]> language-options: [];
+    in-out property <int> language-index: 0;
+    in-out property <string> language-warning: "";
+    in-out property <string> initial-prompt: "";
+    in-out property <bool> format-cleanup: true;
+    in-out property <bool> sound-feedback: true;
+    in-out property <bool> history-enabled: true;
+    in-out property <int> delivery-mode-index: 0;
+    in-out property <int> paste-mode-index: 0;
+
+    callback mic-selected(int);
+    callback refresh-mics();
+    callback vad-sensitivity-changed(int);
+    callback start-hotkey-capture();
+    callback cancel-hotkey-capture();
+    callback hotkey-mode-changed(int);
+    callback language-selected(int);
+    callback initial-prompt-changed(string);
+    callback format-cleanup-toggled(bool);
+    callback sound-feedback-toggled(bool);
+    callback history-enabled-toggled(bool);
+    callback delivery-mode-changed(int);
+    callback paste-mode-changed(int);
+
+    // Models tab properties & callbacks
+    in-out property <string> hardware-summary: "On this PC, speech models run on your graphics card.";
+    in-out property <int> engine-backend-index: 0;
+    in property <[ModelCardItem]> english-models: [];
+    in property <[ModelCardItem]> multilingual-models: [];
+    in-out property <string> model-dir-display: "";
+
+    callback engine-backend-changed(int);
+    callback select-model(string);
+    callback download-model(string);
+    callback delete-model(string);
+    callback open-model-folder();
+
+    // History tab properties & callbacks
+    in-out property <string> history-query: "";
+    in-out property <int> history-period-index: 0;
+    in property <[HistoryRowItem]> history-rows: [];
+    in-out property <string> history-status: "";
+
+    callback history-filter-changed();
+    callback export-history();
+    callback clear-history();
+    callback copy-history-entry(string);
+    callback delete-history-entry(string);
+
+    // Settings tab properties & callbacks
+    in-out property <int> theme-mode-index: 1;
+    in-out property <int> ui-scale-index: 1;
+    in-out property <bool> remove-fillers: false;
+    in-out property <bool> voice-commands: false;
+    in-out property <string> replacements-text: "";
+    in-out property <string> replacements-status: "";
+    in-out property <string> paste-rules-text: "";
+    in-out property <string> paste-rules-status: "";
+    in-out property <int> volume-duck-index: 0;
+    in-out property <bool> start-with-windows: false;
+    in-out property <bool> overlay-enabled: true;
+    in-out property <bool> overlay-show-text: true;
+    in-out property <bool> overlay-show-level: true;
+    in-out property <bool> overlay-controls-enabled: true;
+    in-out property <bool> overlay-controls-pinned: false;
+    in-out property <int> overlay-monitor-index: 0;
+    in-out property <int> overlay-position-index: 0;
+    in-out property <int> overlay-pill-scale-pct: 80;
+    in-out property <int> overlay-see-through-pct: 15;
+    in-out property <int> overlay-panel-see-through-pct: 15;
+    in-out property <int> overlay-font-size: 14;
+    in property <string> app-version: "0.9.0";
+
+    callback theme-mode-changed(int);
+    callback ui-scale-changed(int);
+    callback remove-fillers-toggled(bool);
+    callback voice-commands-toggled(bool);
+    callback save-replacements(string);
+    callback save-paste-rules(string);
+    callback volume-duck-selected(int);
+    callback start-with-windows-toggled(bool);
+    callback overlay-enabled-toggled(bool);
+    callback overlay-show-text-toggled(bool);
+    callback overlay-show-level-toggled(bool);
+    callback overlay-controls-enabled-toggled(bool);
+    callback overlay-controls-pinned-toggled(bool);
+    callback overlay-monitor-selected(int);
+    callback overlay-position-selected(int);
+    callback overlay-pill-scale-changed(int);
+    callback overlay-see-through-changed(int);
+    callback overlay-panel-see-through-changed(int);
+    callback overlay-font-size-changed(int);
+    callback start-onboarding();
+
+    // Onboarding properties & callbacks
+    in-out property <float> onboarding-mic-level: 0.0;
+    in-out property <string> onboarding-mic-error: "";
+    in-out property <string> onboarding-mic-status: "";
+    in property <[OnboardingModelOption]> onboarding-model-options: [];
+    in-out property <string> onboarding-selected-model: "distil-large-v3";
+    in-out property <string> onboarding-selected-model-name: "Distil Large v3";
+    in-out property <string> onboarding-model-summary: "";
+    in-out property <string> onboarding-model-url: "";
+    in-out property <bool> onboarding-model-cached: false;
+    in-out property <bool> onboarding-model-ready: false;
+    in-out property <bool> onboarding-model-loading: false;
+    in-out property <bool> onboarding-hotkey-ok: true;
+    in-out property <bool> onboarding-is-dictating: false;
+
+    // Persistent background download state (shared across onboarding steps)
+    in-out property <bool> bg-download-active: false;
+    in-out property <bool> bg-download-done: false;
+    in-out property <bool> bg-download-error: false;
+    in-out property <string> bg-download-model: "";
+    in-out property <float> bg-download-progress: 0.0;
+    in-out property <int> bg-download-pct: 0;
+    in-out property <string> bg-download-detail: "";
+
+    in-out property <bool> onboarding-duck-mute: false;
+    in-out property <string> onboarding-try-hint: "";
+    in-out property <string> onboarding-try-text: "";
+
+    callback onboarding-open-mic-settings();
+    callback onboarding-retry-mic();
+    callback onboarding-select-model(string);
+    callback onboarding-download-model();
+    callback onboarding-later-model();
+    callback open-url(string);
+    callback copy-text(string);
+    callback onboarding-sound-chosen(bool);
+    callback onboarding-toggle-test();
+    callback onboarding-go-to-step(int);
+    callback onboarding-step-changed(int);
+    callback onboarding-skip();
+    callback onboarding-finish();
+
+    if root.onboarding-active : OnboardingView {
+        width: root.width;
+        height: root.height;
+        window-height: root.height;
+        step <=> root.onboarding-step;
+        language-options: root.language-options;
+        language-index <=> root.language-index;
+        mic-names: root.mic-names;
+        mic-index <=> root.mic-index;
+        mic-status <=> root.onboarding-mic-status;
+        mic-level <=> root.onboarding-mic-level;
+        mic-error <=> root.onboarding-mic-error;
+        model-options: root.onboarding-model-options;
+        selected-model-key <=> root.onboarding-selected-model;
+        selected-model-name <=> root.onboarding-selected-model-name;
+        model-summary <=> root.onboarding-model-summary;
+        model-url <=> root.onboarding-model-url;
+        model-cached <=> root.onboarding-model-cached;
+        model-ready <=> root.onboarding-model-ready;
+        model-loading <=> root.onboarding-model-loading;
+        hotkey-display: root.hotkey-display;
+        hotkey-mode-index: root.hotkey-mode-index;
+        hotkey-ok: root.onboarding-hotkey-ok;
+        trial-ended: root.trial-ended;
+        is-dictating: root.onboarding-is-dictating;
+        bg-download-active <=> root.bg-download-active;
+        bg-download-done <=> root.bg-download-done;
+        bg-download-error <=> root.bg-download-error;
+        bg-download-model <=> root.bg-download-model;
+        bg-download-progress <=> root.bg-download-progress;
+        bg-download-pct <=> root.bg-download-pct;
+        bg-download-detail <=> root.bg-download-detail;
+        duck-mute <=> root.onboarding-duck-mute;
+        try-hint <=> root.onboarding-try-hint;
+        try-text <=> root.onboarding-try-text;
+
+        language-selected(i) => { root.language-selected(i); }
+        mic-selected(i) => { root.mic-selected(i); }
+        refresh-mics => { root.refresh-mics(); }
+        open-mic-settings => { root.onboarding-open-mic-settings(); }
+        retry-mic => { root.onboarding-retry-mic(); }
+        select-model(k) => { root.onboarding-select-model(k); }
+        download-model => { root.onboarding-download-model(); }
+        later-model => { root.onboarding-later-model(); }
+        open-url(u) => { root.open-url(u); }
+        copy-text(t) => { root.copy-text(t); }
+        sound-chosen(m) => { root.onboarding-sound-chosen(m); }
+        toggle-test-dictation => { root.onboarding-toggle-test(); }
+        go-to-step(s) => { root.onboarding-go-to-step(s); }
+        step-changed(s) => { root.onboarding-step-changed(s); }
+        skip-clicked => { root.onboarding-skip(); }
+        finish-clicked => { root.onboarding-finish(); }
+    }
+
+    if !root.onboarding-active : VerticalLayout {
+        width: root.width;
+        height: root.height;
+
+        TopBar {
+            active-tab <=> root.active-tab;
+            logo-image: root.logo-image;
+            tab-selected(t) => { root.tab-selected(t); }
+            theme-toggled => { root.theme-toggled(); }
+        }
+
+        if root.trial-ended : VerticalLayout {
+            vertical-stretch: 0;
+            padding-left: Theme.space-16;
+            padding-right: Theme.space-16;
+            padding-top: Theme.space-12;
+            StoreTrialBanner {
+                title: root.trial-ended-title;
+                body: root.trial-ended-body;
+                buy-label: root.buy-label;
+                buy-clicked => { root.buy-clicked(); }
+            }
+        }
+
+        if root.recovery-text != "" : VerticalLayout {
+            vertical-stretch: 0;
+            padding-left: Theme.space-16;
+            padding-right: Theme.space-16;
+            padding-top: Theme.space-12;
+            RecoveryBanner {
+                text: root.recovery-text;
+                copy-clicked => { root.copy-recovery(); }
+                dismiss-clicked => { root.dismiss-recovery(); }
+            }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+
+            if root.active-tab == "general" : GeneralTab {
+                width: parent.width;
+                height: parent.height;
+                window-height: root.height;
+                mic-names: root.mic-names;
+                mic-index <=> root.mic-index;
+                vad-sensitivity-pct <=> root.vad-sensitivity-pct;
+                hotkey-display <=> root.hotkey-display;
+                hotkey-capturing <=> root.hotkey-capturing;
+                hotkey-mode-index <=> root.hotkey-mode-index;
+                language-options: root.language-options;
+                language-index <=> root.language-index;
+                language-warning <=> root.language-warning;
+                initial-prompt <=> root.initial-prompt;
+                format-cleanup <=> root.format-cleanup;
+                sound-feedback <=> root.sound-feedback;
+                history-enabled <=> root.history-enabled;
+                delivery-mode-index <=> root.delivery-mode-index;
+                paste-mode-index <=> root.paste-mode-index;
+
+                mic-selected(i) => { root.mic-selected(i); }
+                refresh-mics => { root.refresh-mics(); }
+                vad-sensitivity-changed(v) => { root.vad-sensitivity-changed(v); }
+                start-hotkey-capture => { root.start-hotkey-capture(); }
+                cancel-hotkey-capture => { root.cancel-hotkey-capture(); }
+                hotkey-mode-changed(i) => { root.hotkey-mode-changed(i); }
+                language-selected(i) => { root.language-selected(i); }
+                initial-prompt-changed(s) => { root.initial-prompt-changed(s); }
+                format-cleanup-toggled(b) => { root.format-cleanup-toggled(b); }
+                sound-feedback-toggled(b) => { root.sound-feedback-toggled(b); }
+                history-enabled-toggled(b) => { root.history-enabled-toggled(b); }
+                delivery-mode-changed(i) => { root.delivery-mode-changed(i); }
+                paste-mode-changed(i) => { root.paste-mode-changed(i); }
+            }
+
+            if root.active-tab == "models" : ModelsTab {
+                width: parent.width;
+                height: parent.height;
+                hardware-summary <=> root.hardware-summary;
+                engine-backend-index <=> root.engine-backend-index;
+                english-models: root.english-models;
+                multilingual-models: root.multilingual-models;
+                model-dir-display <=> root.model-dir-display;
+
+                engine-backend-changed(i) => { root.engine-backend-changed(i); }
+                select-model(k) => { root.select-model(k); }
+                download-model(k) => { root.download-model(k); }
+                delete-model(k) => { root.delete-model(k); }
+                open-model-folder => { root.open-model-folder(); }
+            }
+
+            if root.active-tab == "history" : HistoryTab {
+                width: parent.width;
+                height: parent.height;
+                window-height: root.height;
+                history-query <=> root.history-query;
+                history-period-index <=> root.history-period-index;
+                history-rows: root.history-rows;
+                history-status <=> root.history-status;
+
+                history-filter-changed => { root.history-filter-changed(); }
+                export-history => { root.export-history(); }
+                clear-history => { root.clear-history(); }
+                copy-history-entry(t) => { root.copy-history-entry(t); }
+                delete-history-entry(ts) => { root.delete-history-entry(ts); }
+            }
+
+            if root.active-tab == "settings" : SettingsTab {
+                width: parent.width;
+                height: parent.height;
+                window-height: root.height;
+                theme-mode-index <=> root.theme-mode-index;
+                ui-scale-index <=> root.ui-scale-index;
+                remove-fillers <=> root.remove-fillers;
+                voice-commands <=> root.voice-commands;
+                replacements-text <=> root.replacements-text;
+                replacements-status <=> root.replacements-status;
+                paste-rules-text <=> root.paste-rules-text;
+                paste-rules-status <=> root.paste-rules-status;
+                volume-duck-index <=> root.volume-duck-index;
+                start-with-windows <=> root.start-with-windows;
+                overlay-enabled <=> root.overlay-enabled;
+                overlay-show-text <=> root.overlay-show-text;
+                overlay-show-level <=> root.overlay-show-level;
+                overlay-controls-enabled <=> root.overlay-controls-enabled;
+                overlay-controls-pinned <=> root.overlay-controls-pinned;
+                overlay-monitor-index <=> root.overlay-monitor-index;
+                overlay-position-index <=> root.overlay-position-index;
+                overlay-pill-scale-pct <=> root.overlay-pill-scale-pct;
+                overlay-see-through-pct <=> root.overlay-see-through-pct;
+                overlay-panel-see-through-pct <=> root.overlay-panel-see-through-pct;
+                overlay-font-size <=> root.overlay-font-size;
+                app-version: root.app-version;
+                store-build: root.store-build;
+                made-with-slint-label: root.made-with-slint-label;
+
+                theme-mode-changed(i) => { root.theme-mode-changed(i); }
+                ui-scale-changed(i) => { root.ui-scale-changed(i); }
+                remove-fillers-toggled(b) => { root.remove-fillers-toggled(b); }
+                voice-commands-toggled(b) => { root.voice-commands-toggled(b); }
+                save-replacements(s) => { root.save-replacements(s); }
+                save-paste-rules(s) => { root.save-paste-rules(s); }
+                volume-duck-selected(i) => { root.volume-duck-selected(i); }
+                start-with-windows-toggled(b) => { root.start-with-windows-toggled(b); }
+                overlay-enabled-toggled(b) => { root.overlay-enabled-toggled(b); }
+                overlay-show-text-toggled(b) => { root.overlay-show-text-toggled(b); }
+                overlay-show-level-toggled(b) => { root.overlay-show-level-toggled(b); }
+                overlay-controls-enabled-toggled(b) => { root.overlay-controls-enabled-toggled(b); }
+                overlay-controls-pinned-toggled(b) => { root.overlay-controls-pinned-toggled(b); }
+                overlay-monitor-selected(i) => { root.overlay-monitor-selected(i); }
+                overlay-position-selected(i) => { root.overlay-position-selected(i); }
+                overlay-pill-scale-changed(v) => { root.overlay-pill-scale-changed(v); }
+                overlay-see-through-changed(v) => { root.overlay-see-through-changed(v); }
+                overlay-panel-see-through-changed(v) => { root.overlay-panel-see-through-changed(v); }
+                overlay-font-size-changed(v) => { root.overlay-font-size-changed(v); }
+                start-onboarding => { root.start-onboarding(); }
+            }
+        }
+
+        if root.trial-running : StoreTrialFooter {
+            days-left-text: root.trial-days-left-text;
+            buy-label: root.buy-label;
+            made-with-slint-label: root.made-with-slint-label;
+            buy-clicked => { root.buy-clicked(); }
+        }
+    }
+}
+
+export component EqhoTray inherits SystemTrayIcon {
+    in property <image> tray-icon;
+    in property <string> tray-tooltip: "Eqho";
+    in property <bool> is-dictating: false;
+    in property <bool> dictation-allowed: true;
+    in property <bool> has-recovery: false;
+    in property <string> toggle-label: "Start Dictation";
+
+    callback tray-clicked();
+    callback toggle-dictation();
+    callback open-dashboard();
+    callback copy-last-dictation();
+    callback quit-clicked();
+
+    icon: root.tray-icon;
+    tooltip: root.tray-tooltip;
+    clicked => { root.tray-clicked(); }
+
+    Menu {
+        MenuItem {
+            title: root.toggle-label;
+            enabled: root.dictation-allowed;
+            activated => { root.toggle-dictation(); }
+        }
+        MenuItem {
+            title: "Open Dashboard";
+            activated => { root.open-dashboard(); }
+        }
+        if root.has-recovery : MenuItem {
+            title: "Copy Last Dictation";
+            activated => { root.copy-last-dictation(); }
+        }
+        MenuSeparator {}
+        MenuItem {
+            title: "Quit";
+            activated => { root.quit-clicked(); }
+        }
+    }
+}

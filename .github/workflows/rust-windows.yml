@@ -1,0 +1,94 @@
+name: Rust Windows Build & Clean-PC DLLs
+
+on:
+  push:
+    branches: ["dev", "main", "rust-0.9"]
+  pull_request:
+    branches: ["dev", "main", "rust-0.9"]
+  workflow_dispatch:
+    inputs:
+      dev_isolated:
+        description: "Build with isolated dev installer AppId (Eqho-Rust-0.9)"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  windows-rust:
+    runs-on: windows-2022
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_TERM_COLOR: always
+      WHISPER_CPP_TAG: v1.8.4
+      VULKAN_SDK_VERSION: 1.4.304.0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.95.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95.0"
+          components: clippy
+
+      - name: Cache Cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+
+      - name: Run Rust workspace tests & clippy
+        shell: pwsh
+        run: |
+          cargo test --manifest-path rust/Cargo.toml --workspace
+          cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
+
+      - name: Install Vulkan SDK (headless) & Ninja
+        shell: pwsh
+        run: |
+          choco install ninja innosetup --no-progress -y
+          $sdkUrl = "https://sdk.lunarg.com/sdk/download/$env:VULKAN_SDK_VERSION/windows/VulkanSDK-$env:VULKAN_SDK_VERSION-Installer.exe"
+          $installer = "$env:TEMP\VulkanSDK.exe"
+          Invoke-WebRequest -Uri $sdkUrl -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "--accept-licenses --default-answer --confirm-command install" -Wait
+          $sdkDir = "C:\VulkanSDK\$env:VULKAN_SDK_VERSION"
+          echo "VULKAN_SDK=$sdkDir" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "$sdkDir\Bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Build clean-PC whisper.cpp v1.8.4 DLLs (Vulkan + OpenMP OFF + All CPU ISA + static CRT)
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          git clone --depth 1 --branch %WHISPER_CPP_TAG% https://github.com/ggml-org/whisper.cpp.git "%RUNNER_TEMP%\whisper.cpp"
+          cmake -S "%RUNNER_TEMP%\whisper.cpp" -B "%RUNNER_TEMP%\whisper-build" -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_POLICY_DEFAULT_CMP0091=NEW ^
+            -DBUILD_SHARED_LIBS=ON ^
+            -DGGML_VULKAN=ON ^
+            -DGGML_OPENMP=OFF ^
+            -DGGML_CPU_ALL_VARIANTS=ON ^
+            -DGGML_BACKEND_DL=ON ^
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded ^
+            -DWHISPER_BUILD_EXAMPLES=OFF ^
+            -DWHISPER_BUILD_TESTS=OFF
+          cmake --build "%RUNNER_TEMP%\whisper-build" --config Release
+          mkdir "%RUNNER_TEMP%\whisper-dlls"
+          copy /Y "%RUNNER_TEMP%\whisper-build\bin\*.dll" "%RUNNER_TEMP%\whisper-dlls\"
+          dir "%RUNNER_TEMP%\whisper-dlls"
+
+      - name: Build Eqho.exe + portable zip + Inno Setup installer
+        shell: pwsh
+        run: |
+          $argsList = @("-DllDir", "$env:RUNNER_TEMP\whisper-dlls")
+          if ("${{ inputs.dev_isolated }}" -eq "true") {
+            $argsList += "-DevIsolated"
+          }
+          powershell -ExecutionPolicy Bypass -File packaging\windows\build-rust.ps1 @argsList
+
+      - name: Upload Windows Rust artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: eqho-rust-windows-x64
+          path: |
+            dist/Eqho-portable-*-win-x64.zip
+            dist/Eqho-Setup-*-win-x64.exe
+            dist/SHA256SUMS-*-win-x64.txt

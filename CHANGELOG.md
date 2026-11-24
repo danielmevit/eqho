@@ -4,7 +4,37 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
-## [Unreleased]
+## [0.9.0] - 2026-11-24
+
+Ground-up Rust + Slint 1.19 rewrite: ~13 MB installer, ~3.4 MB idle RAM, ~38 ms startup, ~4× faster Vulkan transcription, Deep Navy Blend dark theme, hover/pinnable under-pill controls with Batch/Live delivery, clean-PC multi-threaded CPU + Q5 models, and Microsoft Store MSIX packaging.
+
+### Added
+- **Full Rust + Slint 1.19 rewrite (`Eqho.exe`, static CRT, ~13 MB Inno Setup 6 installer — down from ~250 MB):**
+  - ~3.4 MB idle private RAM, ~38 ms tray startup, ~0.25–0.38 s RTX 3060 Vulkan transcription (~4.2× faster than 0.8.11) with 1.39% WER on LibriSpeech and real `no_speech_prob` / `avg_logprob` confidence gating.
+  - Out-of-process `--model-host` child running `whisper.cpp 1.8.4` with cross-vendor Vulkan GPU acceleration (NVIDIA, AMD, Intel) and multi-threaded CPU fallback.
+- **Clean-PC multi-threaded CPU DLLs & 4 quantized Q5 models:**
+  - Clean-PC CI workflow (`.github/workflows/rust-windows.yml`) builds `whisper.cpp v1.8.4` with `-DGGML_VULKAN=ON -DGGML_OPENMP=OFF -DGGML_CPU_ALL_VARIANTS=ON -DGGML_BACKEND_DL=ON` and static CRT (`/MT`) — unlocking multi-core CPU speed on clean Windows PCs without VC++ Redistributable, while keeping an automatic `OPENMP=1` thread-clamp safeguard for third-party DLLs.
+  - Added 4 compact **Q5 quantized GGML models** (`Base Q5` 60 MB, `Small EN Q5` 190 MB, `Small Q5` 190 MB, `Large v3 Turbo Q5` 574 MB) alongside full-precision models, plus an **Inference Engine picker** (`Auto / GPU (Vulkan) / CPU`) in the Models tab and live byte-level download speed & ETA.
+- **Native Win32 layered pill, under-pill hover/pin micro-bar & Batch/Live delivery mode:**
+  - Per-pixel alpha iridescent dictation pill & translucent upward-filling live preview panel (`eqho-overlay`) with zero focus stealing, multi-monitor following (`Follow active window` / `Follow mouse cursor` / `Primary monitor`), and `Live Text Preview` toggle.
+  - **Under-pill hover-reveal / pinnable micro-bar** for quick controls right beneath the listening pill, plus selectable **Batch / Live** text delivery mode.
+- **Dark-mode Deep Navy Blend theme & accent-only brand system:**
+  - **Deep Navy Blend (`#1A489B`)** dark theme with bright `#58A6FF` hairline accents, inset focus rings, and `#1A489B → #58A6FF` progress gradients alongside Light and System themes.
+  - Replaced full-fill semantic warning/status boxes with neutral cards + `3px` accent-only rails and status dots, codified in `docs/ai/BRAND_STYLE_GUIDE.md`.
+- **Redesigned 6-step Onboarding & HiDPI vector SVG flags:**
+  - Crisp 4× HiDPI (`84×56`) vector SVG flags rendered via `resvg` for all 99 Whisper languages (13 hand-tuned, 20 strong, 66 experimental).
+  - **Refresh devices** button on microphone step, 4 hardware-matched model cards with clickable Hugging Face links + Copy link, exclusive checkmarked audio-ducking cards, compact persistent background download bar with ETA, 6-part segmented blue step strip, and Step 6 **Readiness Checklist** + live dictation test box.
+  - Card-integrated uppercase section headers with `1px` dividers across General, Models, Settings, and Onboarding.
+- **24-bit and 32-bit integer WASAPI PCM capture & chime playback** (supporting studio USB audio interfaces alongside 16-bit PCM and 32-bit float).
+- **Full `0.8.11` settings & history parity:** UTF-8 BOM + lenient type coercion across all 31 settings keys, local-timezone History timestamps and day filters, Custom Vocabulary / Replacements / Paste Rules placeholders with inline save confirmation, one-time slow-model hint (`>6 s`), active model in window title, and DPI work-area window clamping above the taskbar.
+- **Microsoft Store MSIX packaging & 15-day free trial (`--features store`):**
+  - Complete MSIX pipeline (`packaging/windows/AppxManifest.xml`, pure-ASCII `build_msix.ps1`, `generate_assets.py` + 48 deterministic PNG logo assets) declaring `runFullTrust`, `microphone` DeviceCapability, and `EqhoStartup` startup task.
+  - Compile-time `--features store` gate keeping direct downloads 100% license-free; WinRT `StoreContext` MTA license queries, atomic offline `license.json` cache, 4-hour + OS-resume re-checks, flaky-Store guard, `IInitializeWithWindow` purchase dialog, quiet dictation suspension on `TrialExpired`, calm trial footer / expired banner UI with `"Made with Slint"` attribution and zero GitHub links, and isolated `--demo-dashboard --demo-license=<state>` testing.
+
+### Fixed
+- **Dropped & slow dictations:** fixed `worker_loop` stop drain (no longer aborts when queued chunks cross `PARTIAL_INTERVAL_S`) and flushed residual `<500 ms` `BlockAssembler` audio cleanly on stop; switched live turbo/distilled decoding to fast greedy (`beam_size = 1`, `best_of = 1`), cutting RTX 3060 latency from ~8 s down to ~0.25–0.38 s.
+- **Text injection & focus reliability:** added chunked 16-char Unicode typing with `VK_RETURN`, 20 ms focus/modifier settle delay, 200 ms clipboard restore delay, `AttachThreadInput` Win32 focus restoration, and immediate live-panel clear/hide so stale text never flashes above the pill.
+- **Deadlocks & hotkey edge cases:** resolved re-entrant settings-lock deadlock on background model download completion; paused global hotkey during hotkey capture; swallowed matched `WH_KEYBOARD_LL` hotkey down/up events (`LLKHF_ALTDOWN`); short-circuited self-window focus restore for Step 6 testing.
 
 ## [0.8.11] - 2026-10-17
 

@@ -1,0 +1,21 @@
+[package]
+name = "eqho-core"
+description = "Pure-Rust Eqho core logic: settings, transcript history, deterministic text processing, adaptive VAD, voice features, iridescent pill renderer, chime synthesis, model selection."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+jiff.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

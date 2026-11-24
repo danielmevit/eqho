@@ -1,0 +1,19 @@
+[package]
+name = "eqho-engine"
+description = "Pure-Rust dictation coordinator, EQHO_TEST_AUDIO WAV feeder, session-ID fencing, recovery, and headless --smoke runner."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+eqho-core.workspace = true
+eqho-host.workspace = true
+eqho-platform.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

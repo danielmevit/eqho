@@ -1,0 +1,919 @@
+// Reusable Toolcraft-inspired layout & chrome components for Eqho.
+import { Theme } from "@app-theme/theme.slint";
+import { Button, ButtonKind, Card } from "@damt-ui/kit.slint";
+import { LanguageOption } from "types.slint";
+
+// Scrollable container with a thin themed scrollbar when content overflows.
+export component ScrollArea inherits Rectangle {
+    in property <length> content-height: inner.preferred-height;
+    out property <length> scroll-y: -flick.content-y;
+    out property <bool> has-scroll: root.content-height > root.height;
+
+    clip: true;
+
+    flick := Flickable {
+        width: parent.width;
+        height: parent.height;
+        content-width: self.width;
+        content-height: Math.max(self.height, inner.preferred-height);
+        interactive: true;
+
+        inner := VerticalLayout {
+            width: flick.width - 10px;
+            alignment: start;
+            @children
+        }
+    }
+
+    if root.has-scroll : Rectangle {
+        property <length> track-h: Math.max(1px, root.height - 8px);
+        property <length> thumb-h: Math.max(24px, self.track-h * root.height / Math.max(1px, root.content-height));
+        property <length> max-scroll: Math.max(1px, root.content-height - root.height);
+        x: parent.width - 7px;
+        y: 4px;
+        width: 5px;
+        height: self.track-h;
+
+        Rectangle {
+            y: (parent.track-h - parent.thumb-h) * Math.clamp(-flick.content-y / parent.max-scroll, 0, 1);
+            width: drag.has-hover || drag.pressed ? 5px : 3px;
+            x: parent.width - self.width;
+            height: parent.thumb-h;
+            border-radius: 2.5px;
+            background: Theme.text-muted;
+            opacity: drag.has-hover || drag.pressed ? 0.75 : 0.4;
+        }
+
+        drag := TouchArea {
+            property <length> start-y;
+            pointer-event(e) => {
+                if (e.kind == PointerEventKind.down) {
+                    self.start-y = flick.content-y;
+                }
+            }
+            moved => {
+                let denom = Math.max(1px, parent.track-h - parent.thumb-h);
+                let delta = (self.mouse-y - self.pressed-y) * parent.max-scroll / denom;
+                flick.content-y = Math.clamp(self.start-y - delta, -parent.max-scroll, 0px);
+            }
+        }
+    }
+}
+
+// Uppercase muted section header above cards.
+export component SectionHeader inherits Rectangle {
+    in property <string> text;
+    height: label.preferred-height + 4px;
+    label := Text {
+        x: 0;
+        text: root.text;
+        font-size: Theme.font-size-sm;
+        font-weight: 700;
+        letter-spacing: 0.6px;
+        color: Theme.text-muted;
+        accessible-role: none;
+    }
+}
+
+// Stacked setting row: label + description above, control below (per DESIGN_SYSTEM.md).
+export component StackedSettingRow inherits VerticalLayout {
+    in property <string> label;
+    in property <string> help;
+    spacing: 4px;
+    Text {
+        text: root.label;
+        font-size: Theme.font-size-base;
+        font-weight: 500;
+        color: Theme.text;
+        wrap: word-wrap;
+    }
+    if root.help != "" : Text {
+        text: root.help;
+        font-size: Theme.font-size-help;
+        color: Theme.text-muted;
+        wrap: word-wrap;
+    }
+    VerticalLayout {
+        padding-top: 2px;
+        spacing: 6px;
+        @children
+    }
+}
+
+// Clean hairline card with an optional integrated header bar separated by a 1px divider line.
+export component SectionCard inherits Card {
+    in property <string> title: "";
+    shadow: false;
+    border-color: Theme.border-subtle;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        if root.title != "" : VerticalLayout {
+            spacing: 0px;
+            HorizontalLayout {
+                padding-left: Theme.space-12;
+                padding-right: Theme.space-12;
+                padding-top: Theme.space-10;
+                padding-bottom: Theme.space-8;
+                Text {
+                    text: root.title;
+                    font-size: Theme.font-size-sm;
+                    font-weight: 700;
+                    letter-spacing: 0.6px;
+                    color: Theme.text-muted;
+                    vertical-alignment: center;
+                }
+            }
+            HorizontalLayout {
+                padding-left: 1px;
+                padding-right: 1px;
+                Rectangle {
+                    height: 1px;
+                    background: Theme.border-subtle;
+                }
+            }
+        }
+
+        VerticalLayout {
+            padding: Theme.space-12;
+            spacing: Theme.space-10;
+            @children
+        }
+    }
+}
+
+// Calm banner shown in Microsoft Store builds when the 15-day trial has ended.
+export component StoreTrialBanner inherits Card {
+    in property <string> title: "Your trial has ended.";
+    in property <string> body: "If you'd like to keep using Eqho, please buy it.";
+    in property <string> buy-label: "Buy Eqho";
+    callback buy-clicked();
+
+    shadow: false;
+    border-color: Theme.border;
+    min-height: lay.preferred-height;
+
+    accessible-role: groupbox;
+    accessible-label: root.title;
+
+    lay := HorizontalLayout {
+        padding-left: Theme.space-14;
+        padding-right: Theme.space-14;
+        padding-top: Theme.space-10;
+        padding-bottom: Theme.space-10;
+        spacing: Theme.space-12;
+        alignment: space-between;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.title;
+                font-size: Theme.font-size-base;
+                font-weight: 600;
+                color: Theme.text;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.body;
+                font-size: Theme.font-size-sm;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 0;
+            alignment: center;
+            Button {
+                text: root.buy-label;
+                kind: ButtonKind.accent;
+                accessible-name: root.buy-label;
+                clicked => { root.buy-clicked(); }
+            }
+        }
+    }
+}
+
+// Quiet one-line footer shown in Microsoft Store builds while a trial is active.
+export component StoreTrialFooter inherits Rectangle {
+    in property <string> days-left-text: "";
+    in property <string> buy-label: "Buy Eqho";
+    in property <string> made-with-slint-label: "Made with Slint";
+    callback buy-clicked();
+
+    vertical-stretch: 0;
+    height: lay.preferred-height;
+    background: Theme.surface;
+
+    Rectangle {
+        y: 0;
+        width: parent.width;
+        height: 1px;
+        background: Theme.border-subtle;
+    }
+
+    lay := HorizontalLayout {
+        padding-left: Theme.space-16;
+        padding-right: Theme.space-16;
+        padding-top: 6px;
+        padding-bottom: 6px;
+        spacing: Theme.space-8;
+        alignment: space-between;
+
+        HorizontalLayout {
+            spacing: Theme.space-8;
+            alignment: start;
+
+            Text {
+                text: root.days-left-text;
+                font-size: Theme.font-size-help;
+                color: Theme.text-muted;
+                vertical-alignment: center;
+            }
+
+            Text {
+                text: "·";
+                font-size: Theme.font-size-help;
+                color: Theme.text-subtle;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+
+            buy-link := Rectangle {
+                min-width: buy-txt.preferred-width + 6px;
+                min-height: buy-txt.preferred-height + 2px;
+                accessible-role: button;
+                accessible-label: root.buy-label;
+                accessible-action-default => { root.buy-clicked(); }
+
+                buy-txt := Text {
+                    text: root.buy-label;
+                    font-size: Theme.font-size-help;
+                    font-weight: 600;
+                    color: buy-touch.pressed ? Theme.accent-text-pressed
+                        : buy-touch.has-hover ? Theme.accent-text-pressed
+                        : Theme.accent-text;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                    accessible-role: none;
+                }
+
+                buy-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.buy-clicked(); }
+                }
+            }
+        }
+
+        if root.made-with-slint-label != "" : Text {
+            text: root.made-with-slint-label;
+            font-size: Theme.font-size-help;
+            color: Theme.text-subtle;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// Recovery banner shown when an automatic paste failed.
+// Follows docs/ai/BRAND_STYLE_GUIDE.md: neutral surface with a restrained 3px left accent rail
+// and status dot — never flood containers with solid/muted yellow, green, or red fills.
+export component RecoveryBanner inherits Rectangle {
+    in property <string> text;
+    callback copy-clicked();
+    callback dismiss-clicked();
+
+    background: Theme.surface;
+    border-radius: Theme.radius-md;
+    border-width: 1px;
+    border-color: Theme.border;
+    clip: true;
+    min-height: lay.preferred-height;
+
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 3px;
+        height: parent.height;
+        background: Theme.warning;
+    }
+
+    lay := HorizontalLayout {
+        padding-left: Theme.space-16;
+        padding-right: Theme.space-12;
+        padding-top: Theme.space-10;
+        padding-bottom: Theme.space-10;
+        spacing: Theme.space-12;
+        alignment: space-between;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 4px;
+
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 7px;
+                        height: 7px;
+                        border-radius: 3.5px;
+                        background: Theme.warning;
+                    }
+                }
+                Text {
+                    text: "Dictation couldn't be pasted automatically";
+                    font-size: Theme.font-size-sm;
+                    font-weight: 600;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                }
+            }
+
+            Text {
+                text: root.text;
+                font-size: Theme.font-size-sm;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
+        }
+
+        HorizontalLayout {
+            horizontal-stretch: 0;
+            spacing: Theme.space-6;
+            alignment: center;
+            Button {
+                text: "Copy";
+                kind: ButtonKind.accent;
+                clicked => { root.copy-clicked(); }
+            }
+            Button {
+                text: "Dismiss";
+                kind: ButtonKind.outline;
+                clicked => { root.dismiss-clicked(); }
+            }
+        }
+    }
+}
+
+// Circular icon button for TopBar (Theme toggle & Settings gear).
+export component CircleIconButton inherits Rectangle {
+    in property <bool> active: false;
+    in property <string> accessible-name;
+    callback clicked();
+
+    width: 34px;
+    height: 34px;
+    border-radius: 17px;
+    border-width: 1px;
+    border-color: root.active ? Theme.accent-line : Theme.border-subtle;
+    background: root.active ? Theme.accent-muted
+        : touch.pressed ? Theme.button-outline-pressed
+        : touch.has-hover ? Theme.surface-hover
+        : Theme.surface;
+
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    accessible-action-default => { root.clicked(); }
+
+    @children
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Themed single-line text input using built-in TextInput (no std-widgets dependency).
+export component ThemedLineEdit inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder-text;
+    in property <length> font-size: Theme.font-size-base;
+    callback edited(string);
+
+    height: 32px;
+    border-radius: Theme.radius-sm;
+    background: Theme.surface-tertiary;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.accent-line : Theme.input-border;
+    clip: true;
+
+    if root.text == "" && root.placeholder-text != "" : Text {
+        x: 10px;
+        width: parent.width - 20px;
+        text: root.placeholder-text;
+        font-size: root.font-size;
+        color: Theme.text-muted;
+        vertical-alignment: center;
+        overflow: elide;
+        accessible-role: none;
+    }
+
+    input := TextInput {
+        x: 10px;
+        width: parent.width - 20px;
+        height: parent.height;
+        text <=> root.text;
+        font-size: root.font-size;
+        color: Theme.text;
+        vertical-alignment: center;
+        single-line: true;
+        edited => { root.edited(self.text); }
+    }
+}
+
+// Themed multi-line text input using built-in TextInput (no std-widgets dependency).
+export component ThemedTextEdit inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder-text;
+    in property <length> font-size: Theme.font-size-sm;
+    callback edited(string);
+
+    min-height: 64px;
+    border-radius: Theme.radius-sm;
+    background: Theme.surface-tertiary;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.accent-line : Theme.input-border;
+    clip: true;
+
+    if root.text == "" && root.placeholder-text != "" : Text {
+        x: 10px;
+        y: 8px;
+        width: parent.width - 20px;
+        text: root.placeholder-text;
+        font-size: root.font-size;
+        color: Theme.text-muted;
+        wrap: word-wrap;
+        accessible-role: none;
+    }
+
+    input := TextInput {
+        x: 10px;
+        y: 8px;
+        width: parent.width - 20px;
+        height: parent.height - 16px;
+        text <=> root.text;
+        font-size: root.font-size;
+        color: Theme.text;
+        single-line: false;
+        wrap: word-wrap;
+        edited => { root.edited(self.text); }
+    }
+}
+
+// 64 px top bar with brand wordmark, capsule pill nav, and theme/settings buttons.
+export component TopBar inherits Rectangle {
+    in-out property <string> active-tab;
+    in property <image> logo-image;
+    callback tab-selected(string);
+    callback theme-toggled();
+
+    height: 64px;
+    background: Theme.bg;
+
+    HorizontalLayout {
+        padding-left: Theme.space-16;
+        padding-right: Theme.space-16;
+        alignment: space-between;
+
+        // Left: brand horizontal wordmark (or text fallback when no image is set)
+        HorizontalLayout {
+            spacing: Theme.space-8;
+            alignment: start;
+            width: 120px;
+
+            if root.logo-image.width > 0 : VerticalLayout {
+                alignment: center;
+                Image {
+                    source: root.logo-image;
+                    width: 72px;
+                    height: 31px;
+                    image-fit: contain;
+                    accessible-role: none;
+                }
+            }
+            if root.logo-image.width == 0 : Text {
+                text: "Eqho";
+                font-size: Theme.font-size-xl;
+                font-weight: 700;
+                color: Theme.text;
+                vertical-alignment: center;
+            }
+        }
+
+        // Center: capsule pill nav bar
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                height: 36px;
+                border-radius: 18px;
+                background: Theme.surface;
+                border-width: 1px;
+                border-color: Theme.border-subtle;
+
+                HorizontalLayout {
+                    padding: 4px;
+                    spacing: 4px;
+
+                    for nav-item in [
+                        { id: "general", label: "General" },
+                        { id: "models", label: "Models" },
+                        { id: "history", label: "History" },
+                    ] : pill := Rectangle {
+                        property <bool> is-active: root.active-tab == nav-item.id;
+                        min-width: 84px;
+                        height: 28px;
+                        border-radius: 14px;
+                        background: pill.is-active ? Theme.accent
+                            : nav-touch.pressed ? Theme.button-outline-pressed
+                            : nav-touch.has-hover ? Theme.surface-hover
+                            : transparent;
+
+                        accessible-role: AccessibleRole.tab;
+                        accessible-label: nav-item.label;
+                        accessible-item-selected: pill.is-active;
+                        accessible-action-default => {
+                            root.active-tab = nav-item.id;
+                            root.tab-selected(nav-item.id);
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 14px;
+                            padding-right: 14px;
+                            Text {
+                                text: nav-item.label;
+                                font-size: Theme.font-size-base;
+                                font-weight: pill.is-active ? 600 : 500;
+                                color: pill.is-active ? Theme.on-accent : Theme.text-muted;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                accessible-role: none;
+                            }
+                        }
+
+                        nav-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.active-tab = nav-item.id;
+                                root.tab-selected(nav-item.id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Right: Theme toggle (Sun/Moon Path) + Settings gear (Path)
+        HorizontalLayout {
+            width: 120px;
+            alignment: end;
+            spacing: Theme.space-8;
+
+            VerticalLayout {
+                alignment: center;
+                CircleIconButton {
+                    accessible-name: Theme.dark ? "Switch to light theme" : "Switch to dark theme";
+                    clicked => {
+                        Theme.dark = !Theme.dark;
+                        root.theme-toggled();
+                    }
+                    // Sun in dark mode, crescent Moon in light mode (clean Path, no emoji).
+                    if Theme.dark : Path {
+                        width: 16px;
+                        height: 16px;
+                        viewbox-width: 24;
+                        viewbox-height: 24;
+                        commands: "M12 7 A5 5 0 1 0 12 17 A5 5 0 1 0 12 7 M12 1 L12 4 M12 20 L12 23 M4.22 4.22 L6.34 6.34 M17.66 17.66 L19.78 19.78 M1 12 L4 12 M20 12 L23 12 M4.22 19.78 L6.34 17.66 M17.66 6.34 L19.78 4.22";
+                        stroke: Theme.text;
+                        stroke-width: 1.8px;
+                        fill: transparent;
+                    }
+                    if !Theme.dark : Path {
+                        width: 16px;
+                        height: 16px;
+                        viewbox-width: 24;
+                        viewbox-height: 24;
+                        commands: "M21 12.79 A9 9 0 1 1 11.21 3 A7 7 0 0 0 21 12.79 Z";
+                        stroke: Theme.text;
+                        stroke-width: 1.8px;
+                        fill: transparent;
+                    }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                CircleIconButton {
+                    active: root.active-tab == "settings";
+                    accessible-name: "Settings";
+                    clicked => {
+                        root.active-tab = "settings";
+                        root.tab-selected("settings");
+                    }
+                    Path {
+                        width: 16px;
+                        height: 16px;
+                        viewbox-width: 24;
+                        viewbox-height: 24;
+                        commands: "M12 15 A3 3 0 1 0 12 9 A3 3 0 1 0 12 15 M19.4 15 A1.65 1.65 0 0 0 19.73 16.82 L19.79 16.88 A2 2 0 1 1 16.96 19.71 L16.9 19.65 A1.65 1.65 0 0 0 15.08 19.32 A1.65 1.65 0 0 0 14.08 20.83 L14.08 21 A2 2 0 1 1 10.08 21 L10.08 20.91 A1.65 1.65 0 0 0 9 19.4 A1.65 1.65 0 0 0 7.18 19.73 L7.12 19.79 A2 2 0 1 1 4.29 16.96 L4.35 16.9 A1.65 1.65 0 0 0 4.68 15.08 A1.65 1.65 0 0 0 3.17 14.08 L3 14.08 A2 2 0 1 1 3 10.08 L3.09 10.08 A1.65 1.65 0 0 0 4.6 9 A1.65 1.65 0 0 0 4.27 7.18 L4.21 7.12 A2 2 0 1 1 7.04 4.29 L7.1 4.35 A1.65 1.65 0 0 0 8.92 4.68 L9 4.68 A1.65 1.65 0 0 0 10 3.17 L10 3 A2 2 0 1 1 14 3 L14 3.09 A1.65 1.65 0 0 0 15 4.6 A1.65 1.65 0 0 0 16.82 4.27 L16.88 4.21 A2 2 0 1 1 19.71 7.04 L19.65 7.1 A1.65 1.65 0 0 0 19.32 8.92 L19.32 9 A1.65 1.65 0 0 0 20.83 10 L21 10 A2 2 0 1 1 21 14 L20.91 14 A1.65 1.65 0 0 0 19.4 15 Z";
+                        stroke: root.active-tab == "settings" ? Theme.accent-line : Theme.text;
+                        stroke-width: 1.7px;
+                        fill: transparent;
+                    }
+                }
+            }
+        }
+    }
+
+    // 1 px bottom hairline
+    Rectangle {
+        y: parent.height - 1px;
+        width: parent.width;
+        height: 1px;
+        background: Theme.border-subtle;
+    }
+}
+
+// Language dropdown displaying a crisp 21x14 country flag before each language name.
+export component FlagDropdown inherits Rectangle {
+    in property <[LanguageOption]> model: [];
+    in-out property <int> current-index: 0;
+    in property <bool> enabled: true;
+    in property <int> max-rows: 8;
+    in property <length> window-height: 0px;
+    in property <string> accessible-name: "Language";
+    callback selected(int);
+
+    property <length> row-h: 28px;
+    property <length> pad: 4px;
+    property <int> visible-rows: Math.max(1, Math.min(root.model.length, root.max-rows));
+    property <bool> list-scrolls: root.model.length > root.max-rows;
+    property <length> content-h: root.model.length * root.row-h + 2 * root.pad;
+    property <length> popup-h: root.visible-rows * root.row-h + 2 * root.pad;
+    property <length> max-scroll: Math.max(0px, root.content-h - root.popup-h);
+    property <bool> opens-up: root.window-height > 0px
+        && root.absolute-position.y + root.height + 4px + root.popup-h > root.window-height
+        && root.absolute-position.y >= root.popup-h + 4px;
+    property <int> hl: 0;
+    property <length> scroll-y: 0px;
+
+    function clamp-index(idx: int) -> int {
+        Math.max(0, Math.min(idx, Math.max(0, root.model.length - 1)))
+    }
+
+    function scroll-into-view(i: int) {
+        if (!root.list-scrolls) {
+            root.scroll-y = 0px;
+            return;
+        }
+        let top = root.pad + i * root.row-h;
+        let bot = top + root.row-h;
+        if (top < -root.scroll-y) {
+            root.scroll-y = -Math.min(top, root.max-scroll);
+        } else if (bot > -root.scroll-y + root.popup-h) {
+            root.scroll-y = -Math.min(Math.max(0px, bot - root.popup-h), root.max-scroll);
+        }
+    }
+
+    function move-to(idx: int) {
+        let clamped = root.clamp-index(idx);
+        root.hl = clamped;
+        root.scroll-into-view(clamped);
+    }
+
+    function pick(idx: int) {
+        if (idx >= 0 && idx < root.model.length && idx != root.current-index) {
+            root.current-index = idx;
+            root.selected(idx);
+        }
+    }
+
+    function open-popup() {
+        if (!root.enabled || root.model.length == 0) { return; }
+        root.hl = root.clamp-index(root.current-index);
+        root.scroll-into-view(root.hl);
+        popup.show();
+    }
+
+    height: 32px;
+    border-radius: Theme.radius-button;
+    border-width: 1px;
+    border-color: focus.has-focus ? Theme.accent-line : Theme.input-border;
+    background: !root.enabled ? Theme.surface-tertiary
+        : touch.pressed ? Theme.button-outline-pressed
+        : touch.has-hover ? Theme.surface-hover
+        : Theme.surface;
+    opacity: root.enabled ? 1.0 : 0.45;
+
+    accessible-role: combobox;
+    accessible-label: root.accessible-name;
+    accessible-value: root.current-index >= 0 && root.current-index < root.model.length
+        ? root.model[root.current-index].label : "";
+    accessible-enabled: root.enabled;
+    accessible-action-default => { root.open-popup(); }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+        alignment: space-between;
+
+        HorizontalLayout {
+            spacing: 8px;
+            horizontal-stretch: 1;
+            alignment: start;
+
+            if root.current-index >= 0 && root.current-index < root.model.length
+                && root.model[root.current-index].flag.width > 0 : VerticalLayout {
+                alignment: center;
+                Image {
+                    source: root.model[root.current-index].flag;
+                    width: 21px;
+                    height: 14px;
+                    image-fit: contain;
+                    image-rendering: smooth;
+                    accessible-role: none;
+                }
+            }
+
+            Text {
+                text: root.current-index >= 0 && root.current-index < root.model.length
+                    ? root.model[root.current-index].label : "";
+                font-size: Theme.font-size-label;
+                color: Theme.text;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+                accessible-role: none;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            Path {
+                width: 10px;
+                height: 6px;
+                viewbox-width: 10;
+                viewbox-height: 6;
+                commands: "M1 1 L5 5 L9 1";
+                stroke: Theme.text-muted;
+                stroke-width: 1.5px;
+                fill: transparent;
+            }
+        }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if (event.text == "\n" || event.text == " " || event.text == Key.DownArrow) {
+                root.open-popup();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            focus.focus();
+            root.open-popup();
+        }
+    }
+
+    popup := PopupWindow {
+        x: 0px;
+        y: root.opens-up ? -(root.popup-h + 4px) : root.height + 4px;
+        width: root.width;
+        height: root.popup-h;
+        close-policy: close-on-click-outside;
+
+        Rectangle {
+            width: parent.width;
+            height: parent.height;
+            border-radius: Theme.radius-button;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.surface;
+            clip: true;
+
+            popup-focus := FocusScope {
+                width: parent.width;
+                height: parent.height;
+                init => { self.focus(); }
+                key-pressed(event) => {
+                    if (event.text == Key.UpArrow) { root.move-to(root.hl - 1); return accept; }
+                    if (event.text == Key.DownArrow) { root.move-to(root.hl + 1); return accept; }
+                    if (event.text == Key.Home) { root.move-to(0); return accept; }
+                    if (event.text == Key.End) { root.move-to(root.model.length - 1); return accept; }
+                    if (event.text == Key.PageUp) { root.move-to(root.hl - root.max-rows); return accept; }
+                    if (event.text == Key.PageDown) { root.move-to(root.hl + root.max-rows); return accept; }
+                    if (event.text == "\n" || event.text == " ") {
+                        root.pick(root.hl);
+                        popup.close();
+                        focus.focus();
+                        return accept;
+                    }
+                    if (event.text == Key.Escape) {
+                        popup.close();
+                        focus.focus();
+                        return accept;
+                    }
+                    reject
+                }
+
+                flick := Flickable {
+                    width: parent.width;
+                    height: parent.height;
+                    content-height: root.content-h;
+                    content-width: self.width;
+                    content-y <=> root.scroll-y;
+
+                    VerticalLayout {
+                        padding: root.pad;
+                        padding-right: root.pad + (root.list-scrolls ? 8px : 0px);
+
+                        for item[i] in root.model : Rectangle {
+                            min-height: root.row-h;
+                            max-height: root.row-h;
+                            border-radius: Theme.radius-button - 1px;
+                            background: i == root.hl ? Theme.button-outline-pressed
+                                : row.has-hover ? Theme.surface-hover
+                                : transparent;
+
+                            accessible-role: list-item;
+                            accessible-label: item.label;
+                            accessible-item-selectable: true;
+                            accessible-item-selected: i == root.current-index;
+                            accessible-action-default => { root.pick(i); popup.close(); }
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                spacing: 8px;
+                                alignment: start;
+
+                                if item.flag.width > 0 : VerticalLayout {
+                                    alignment: center;
+                                    Image {
+                                        source: item.flag;
+                                        width: 21px;
+                                        height: 14px;
+                                        image-fit: contain;
+                                        image-rendering: smooth;
+                                        accessible-role: none;
+                                    }
+                                }
+
+                                Text {
+                                    text: item.label;
+                                    font-size: Theme.font-size-label;
+                                    font-weight: i == root.current-index ? 600 : 400;
+                                    color: i == root.current-index ? Theme.accent-text : Theme.text;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                    horizontal-stretch: 1;
+                                    accessible-role: none;
+                                }
+                            }
+
+                            row := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    root.pick(i);
+                                    popup.close();
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Thin scrollbar when list overflows
+                if root.list-scrolls : Rectangle {
+                    property <length> track-h: Math.max(1px, parent.height - 8px);
+                    property <length> thumb-h: Math.max(22px, self.track-h * root.popup-h / Math.max(1px, root.content-h));
+                    x: parent.width - 7px;
+                    y: 4px;
+                    width: 4px;
+                    height: self.track-h;
+
+                    Rectangle {
+                        y: (parent.track-h - parent.thumb-h) * Math.clamp(-root.scroll-y / Math.max(1px, root.max-scroll), 0, 1);
+                        width: 4px;
+                        height: parent.thumb-h;
+                        border-radius: 2px;
+                        background: Theme.text-muted;
+                        opacity: 0.45;
+                    }
+                }
+            }
+        }
+    }
+}

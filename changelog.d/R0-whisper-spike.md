@@ -1,0 +1,1 @@
+- `eqho-spike`: implemented R0 measurement spike binary (`transcribe` via `whisper.cpp` 1.8.4 dynamic FFI, `pill-bench` premultiplied BGRA + Win32 `UpdateLayeredWindow`, `tray-bench` Slint software renderer startup/memory probe).
