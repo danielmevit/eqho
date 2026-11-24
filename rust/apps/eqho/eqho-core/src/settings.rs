@@ -17,6 +17,10 @@ pub const DEV_CONFIG_DIR_NAME: &str = "Eqho-Rust-0.9";
 
 pub const HOTKEY_MODES: [&str; 2] = ["toggle", "hold"];
 
+pub const DELIVERY_MODES: [&str; 2] = ["batch", "live"];
+
+pub const MAX_RECENT_LANGUAGES: usize = 8;
+
 pub const OVERLAY_POSITIONS: [&str; 6] = [
     "bottom-center",
     "top-center",
@@ -177,6 +181,16 @@ pub fn volume_duck_level(option: &str) -> Option<f32> {
         .and_then(|(_, v)| *v)
 }
 
+/// Normalize a dictation delivery mode string (`"live"` -> `"live"`,
+/// anything else -> `"batch"`), case-insensitively.
+pub fn normalize_delivery_mode(raw: &str) -> &'static str {
+    if raw.trim().eq_ignore_ascii_case("live") {
+        "live"
+    } else {
+        "batch"
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum SettingsError {
     #[error("I/O error: {0}")]
@@ -221,6 +235,10 @@ pub struct Settings {
     pub paste_rules: BTreeMap<String, String>,
     pub onboarding_done: bool,
     pub slow_hint_shown_for: String,
+    pub delivery_mode: String,
+    pub overlay_controls_enabled: bool,
+    pub overlay_controls_pinned: bool,
+    pub recent_languages: Vec<String>,
 }
 
 impl Default for Settings {
@@ -259,6 +277,10 @@ impl Default for Settings {
             paste_rules: BTreeMap::new(),
             onboarding_done: false,
             slow_hint_shown_for: String::new(),
+            delivery_mode: "batch".to_owned(),
+            overlay_controls_enabled: true,
+            overlay_controls_pinned: false,
+            recent_languages: Vec::new(),
         }
     }
 }
@@ -420,9 +442,42 @@ impl Settings {
         if let Some(v) = obj.get("slow_hint_shown_for") {
             s.slow_hint_shown_for = coerce_string(v, &s.slow_hint_shown_for);
         }
+        if let Some(v) = obj.get("delivery_mode") {
+            let raw = coerce_string(v, &s.delivery_mode);
+            s.delivery_mode = normalize_delivery_mode(&raw).to_owned();
+        }
+        if let Some(v) = obj.get("overlay_controls_enabled") {
+            s.overlay_controls_enabled = coerce_bool(v, s.overlay_controls_enabled);
+        }
+        if let Some(v) = obj.get("overlay_controls_pinned") {
+            s.overlay_controls_pinned = coerce_bool(v, s.overlay_controls_pinned);
+        }
+        if let Some(v) = obj.get("recent_languages") {
+            s.recent_languages = coerce_recent_languages(v);
+        }
 
         s.clamp_ranges();
         s
+    }
+
+    /// Normalize a dictation delivery mode string (`"live"` -> `"live"`,
+    /// anything else -> `"batch"`), case-insensitively.
+    pub fn normalize_delivery_mode(raw: &str) -> &'static str {
+        normalize_delivery_mode(raw)
+    }
+
+    /// Record a Whisper language code in the MRU `recent_languages` list.
+    ///
+    /// Ignores invalid codes not present in [`LANGUAGE_TIERS`], moves `code`
+    /// to the front, deduplicates, and truncates to [`MAX_RECENT_LANGUAGES`].
+    pub fn record_recent_language(&mut self, code: &str) {
+        let normalized = code.trim().to_ascii_lowercase();
+        if supported_language_name(&normalized).is_none() {
+            return;
+        }
+        self.recent_languages.retain(|c| c != &normalized);
+        self.recent_languages.insert(0, normalized);
+        self.recent_languages.truncate(MAX_RECENT_LANGUAGES);
     }
 
     pub fn clamp_ranges(&mut self) {
@@ -618,6 +673,24 @@ fn coerce_string_map(val: &Value) -> BTreeMap<String, String> {
                 out.insert(k.clone(), s.clone());
             } else if let Value::Number(n) = v {
                 out.insert(k.clone(), n.to_string());
+            }
+        }
+    }
+    out
+}
+
+fn coerce_recent_languages(val: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Value::Array(items) = val {
+        for item in items {
+            if let Value::String(raw) = item {
+                let code = raw.trim().to_ascii_lowercase();
+                if supported_language_name(&code).is_some() && !out.contains(&code) {
+                    out.push(code);
+                    if out.len() >= MAX_RECENT_LANGUAGES {
+                        break;
+                    }
+                }
             }
         }
     }
@@ -902,10 +975,97 @@ mod tests {
         assert_eq!(loaded.slow_hint_shown_for, "medium");
         assert_eq!(loaded.volume_duck, "25%");
         assert!(loaded.onboarding_done);
+        assert_eq!(loaded.delivery_mode, "batch");
+        assert!(loaded.overlay_controls_enabled);
+        assert!(!loaded.overlay_controls_pinned);
+        assert!(loaded.recent_languages.is_empty());
 
         loaded.save_to_path(&path).unwrap();
         assert_eq!(Settings::load_from_path(&path), loaded);
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn delivery_mode_overlay_controls_and_recent_languages_defaults_and_coercion() {
+        let def = Settings::default();
+        assert_eq!(def.delivery_mode, "batch");
+        assert!(def.overlay_controls_enabled);
+        assert!(!def.overlay_controls_pinned);
+        assert!(def.recent_languages.is_empty());
+
+        assert_eq!(normalize_delivery_mode("live"), "live");
+        assert_eq!(normalize_delivery_mode("LIVE"), "live");
+        assert_eq!(normalize_delivery_mode(" Live "), "live");
+        assert_eq!(normalize_delivery_mode("batch"), "batch");
+        assert_eq!(normalize_delivery_mode("streaming"), "batch");
+        assert_eq!(Settings::normalize_delivery_mode("LIVE"), "live");
+        assert_eq!(Settings::normalize_delivery_mode(""), "batch");
+
+        // Case-insensitive valid delivery_mode + coercion of overlay controls + dedup/filter/cap recent_languages.
+        let raw: Value = serde_json::from_str(
+            r#"{
+                "delivery_mode": "LIVE",
+                "overlay_controls_enabled": "off",
+                "overlay_controls_pinned": 1,
+                "recent_languages": ["de", "xx", "fr", "DE", 123, null, "es", "ja", "ko", "it", "pt", "nl", "pl", "tr"]
+            }"#,
+        )
+        .unwrap();
+        let s = Settings::from_json_object(raw.as_object().unwrap());
+        assert_eq!(s.delivery_mode, "live");
+        assert!(!s.overlay_controls_enabled);
+        assert!(s.overlay_controls_pinned);
+        assert_eq!(
+            s.recent_languages,
+            vec!["de", "fr", "es", "ja", "ko", "it", "pt", "nl"]
+        );
+        assert_eq!(s.recent_languages.len(), MAX_RECENT_LANGUAGES);
+
+        // Invalid delivery_mode and non-array recent_languages fall back cleanly.
+        let invalid: Value = serde_json::from_str(
+            r#"{
+                "delivery_mode": "instant-magic",
+                "recent_languages": "not-an-array"
+            }"#,
+        )
+        .unwrap();
+        let s_inv = Settings::from_json_object(invalid.as_object().unwrap());
+        assert_eq!(s_inv.delivery_mode, "batch");
+        assert!(s_inv.recent_languages.is_empty());
+    }
+
+    #[test]
+    fn record_recent_language_maintains_mru_order_and_cap() {
+        let mut s = Settings::default();
+        // Invalid codes are ignored.
+        s.record_recent_language("xx");
+        s.record_recent_language("");
+        assert!(s.recent_languages.is_empty());
+
+        for code in ["en", "de", "fr", "es", "ja", "ko", "it", "pt", "nl"] {
+            s.record_recent_language(code);
+        }
+        // "en" was pushed out once the 9th unique code arrived.
+        assert_eq!(s.recent_languages.len(), MAX_RECENT_LANGUAGES);
+        assert_eq!(
+            s.recent_languages,
+            vec!["nl", "pt", "it", "ko", "ja", "es", "fr", "de"]
+        );
+
+        // Re-recording an existing code moves it to the front without duplicating.
+        s.record_recent_language("fr");
+        assert_eq!(s.recent_languages.len(), MAX_RECENT_LANGUAGES);
+        assert_eq!(
+            s.recent_languages,
+            vec!["fr", "nl", "pt", "it", "ko", "ja", "es", "de"]
+        );
+
+        // Invalid code after populating does not alter list.
+        s.record_recent_language("klingon");
+        assert_eq!(
+            s.recent_languages,
+            vec!["fr", "nl", "pt", "it", "ko", "ja", "es", "de"]
+        );
     }
 
     #[test]

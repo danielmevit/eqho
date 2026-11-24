@@ -55,6 +55,7 @@ pub trait UiEventSink: Send + Sync + 'static {
     fn on_recovery_available(&self, text: Option<&str>);
     fn on_dictation_committed(&self, _text: &str) {}
     fn on_history_changed(&self);
+    fn on_settings_changed(&self, _settings: &eqho_core::settings::Settings) {}
 }
 
 /// No-op [`UiEventSink`] for `--smoke` and headless tests.

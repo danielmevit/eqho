@@ -15,7 +15,10 @@ use eqho_core::modelstore::{
     LOW_MEMORY_LOAD_TEXT, low_memory_warning, model_info, required_memory_mb,
 };
 use eqho_core::recovery::LastDictationBuffer;
-use eqho_core::settings::{Settings, is_english_only_model, volume_duck_level};
+use eqho_core::settings::{
+    Settings, is_english_only_model, normalize_delivery_mode, supported_language_name,
+    volume_duck_level,
+};
 use eqho_core::textproc::{
     apply_replacements, clean_text, is_delete_command, match_command, smart_join,
 };
@@ -47,13 +50,21 @@ const MIC_UNAVAILABLE_TEXT: &str =
     "No microphone found. Plug one in, or choose another one in Eqho → General → Microphone.";
 
 #[derive(Debug)]
+enum InjectError {
+    FocusRestoreFailed,
+    Platform(String),
+}
+
+#[derive(Debug)]
 struct CoordinatorState {
     next_session_id: u64,
     active_session: u64,
+    finishing_session: u64,
     running: bool,
     finishing: bool,
     target_hwnd: WindowHandle,
     pending_text: Vec<String>,
+    live_committed: Vec<String>,
     saved_volume: Option<f32>,
     last_injected: String,
     dictation_start: Option<Instant>,
@@ -67,10 +78,12 @@ impl Default for CoordinatorState {
         Self {
             next_session_id: 0,
             active_session: 0,
+            finishing_session: 0,
             running: false,
             finishing: false,
             target_hwnd: WindowHandle::NONE,
             pending_text: Vec::new(),
+            live_committed: Vec::new(),
             saved_volume: None,
             last_injected: String::new(),
             dictation_start: None,
@@ -94,7 +107,7 @@ struct CoordinatorInner {
     assembler: Mutex<Option<Arc<Mutex<BlockAssembler>>>>,
     audio_tx: Mutex<Option<mpsc::SyncSender<Vec<f32>>>>,
     stop_flag: Mutex<Option<Arc<AtomicBool>>>,
-    worker_handle: Mutex<Option<JoinHandle<()>>>,
+    worker_handle: Mutex<Option<(u64, JoinHandle<()>)>>,
     finish_handle: Mutex<Option<JoinHandle<()>>>,
     hotkey_reg: Mutex<Option<Box<dyn HotkeyRegistration>>>,
     dictation_suspended: AtomicBool,
@@ -195,6 +208,25 @@ impl DictationCoordinator {
         self.inner.toggle();
     }
 
+    /// Silently abort active capture or finishing without pasting, overwriting
+    /// recovery, writing history, or playing a stop chime.
+    pub fn cancel(&self) {
+        self.inner.cancel();
+    }
+
+    /// Update dictation delivery mode (`"batch"` or `"live"`), persist it, and
+    /// notify UI listeners. Takes effect immediately on the next phrase.
+    pub fn set_delivery_mode(&self, mode: &str) {
+        self.inner.set_delivery_mode(mode);
+    }
+
+    /// Switch Whisper dictation language live (validating against supported
+    /// Whisper codes), update `recent_languages`, persist settings, and notify
+    /// UI listeners. Returns `false` for invalid language codes.
+    pub fn set_language_live(&self, lang_code: &str) -> bool {
+        self.inner.set_language_live(lang_code)
+    }
+
     pub fn register_hotkey(&self) -> Result<(), String> {
         self.inner.register_hotkey()
     }
@@ -266,6 +298,8 @@ impl CoordinatorInner {
 
             st.target_hwnd = self.platform.get_foreground_window();
             st.pending_text.clear();
+            st.live_committed.clear();
+            st.finishing_session = 0;
             st.next_session_id += 1;
             let sid = st.next_session_id;
             st.active_session = sid;
@@ -370,7 +404,7 @@ impl CoordinatorInner {
             .spawn(move || inner.worker_loop(sid, rx, stop_worker))
         {
             Ok(handle) => {
-                *lock_unpoisoned(&self.worker_handle) = Some(handle);
+                *lock_unpoisoned(&self.worker_handle) = Some((sid, handle));
             }
             Err(e) => {
                 let msg = format!("Failed to start transcription worker: {e}");
@@ -380,18 +414,20 @@ impl CoordinatorInner {
     }
 
     fn deactivate(self: &Arc<Self>) {
-        let sound_feedback = {
+        let (sid, sound_feedback) = {
             let _guard = lock_unpoisoned(&self.session_lock);
             let sound_feedback = lock_unpoisoned(&self.settings).sound_feedback;
 
-            {
+            let sid = {
                 let mut st = lock_unpoisoned(&self.state);
                 if !st.running || st.finishing {
                     return;
                 }
                 st.running = false;
                 st.finishing = true;
-            }
+                st.finishing_session = st.active_session;
+                st.active_session
+            };
 
             // Immediately close mic stream so the OS mic indicator turns off right away.
             *lock_unpoisoned(&self.stream) = None;
@@ -416,7 +452,7 @@ impl CoordinatorInner {
             self.ui.set_tray_active(false);
             self.ui.update_overlay_text(WRITING_TEXT);
 
-            sound_feedback
+            (sid, sound_feedback)
         };
 
         if sound_feedback {
@@ -428,15 +464,48 @@ impl CoordinatorInner {
         let inner = Arc::clone(self);
         match thread::Builder::new()
             .name("eqho-finish".into())
-            .spawn(move || inner.finish_dictation())
+            .spawn(move || inner.finish_dictation(sid))
         {
             Ok(handle) => {
                 *lock_unpoisoned(&self.finish_handle) = Some(handle);
             }
             Err(_) => {
-                self.finish_dictation();
+                self.finish_dictation(sid);
             }
         }
+    }
+
+    fn cancel(&self) {
+        let _guard = lock_unpoisoned(&self.session_lock);
+        {
+            let mut st = lock_unpoisoned(&self.state);
+            if !st.running && !st.finishing {
+                return;
+            }
+            st.active_session = 0;
+            st.finishing_session = 0;
+            st.running = false;
+            st.finishing = false;
+            st.pending_text.clear();
+            st.live_committed.clear();
+            st.dictation_start = None;
+        }
+
+        // Drop audio stream, assembler, and sender WITHOUT flushing tail audio.
+        *lock_unpoisoned(&self.stream) = None;
+        *lock_unpoisoned(&self.assembler) = None;
+        *lock_unpoisoned(&self.audio_tx) = None;
+        if let Some(flag) = lock_unpoisoned(&self.stop_flag).take() {
+            flag.store(true, Ordering::Release);
+        }
+
+        // Detach any running worker without blocking the caller/UI thread; the cleared
+        // `active_session = 0` fence discards any in-flight transcription cleanly.
+        let _detached_worker = lock_unpoisoned(&self.worker_handle).take();
+
+        self.restore_volume();
+        self.ui.set_tray_active(false);
+        self.ui.hide_overlay();
     }
 
     fn toggle(self: &Arc<Self>) {
@@ -459,27 +528,52 @@ impl CoordinatorInner {
         }
     }
 
-    fn finish_dictation(self: &Arc<Self>) {
-        let worker_handle = lock_unpoisoned(&self.worker_handle).take();
+    fn finish_dictation(self: &Arc<Self>, sid: u64) {
+        let worker_handle = {
+            let mut slot = lock_unpoisoned(&self.worker_handle);
+            if slot.as_ref().is_some_and(|(w_sid, _)| *w_sid == sid) {
+                slot.take().map(|(_, h)| h)
+            } else {
+                None
+            }
+        };
         if let Some(handle) = worker_handle {
             let _ = handle.join();
         }
 
-        // Bump/clear active_session to fence any late results before injection.
-        {
+        // Verify this session was not cancelled while draining, then clear active_session
+        // to fence any late results before final injection.
+        let proceed = {
             let mut st = lock_unpoisoned(&self.state);
-            st.active_session = 0;
+            if st.active_session != sid || !st.finishing || st.finishing_session != sid {
+                false
+            } else {
+                st.active_session = 0;
+                true
+            }
+        };
+        if !proceed {
+            return;
         }
 
         self.inject_pending();
 
         let _guard = lock_unpoisoned(&self.session_lock);
-        {
+        let should_hide = {
             let mut st = lock_unpoisoned(&self.state);
-            st.pending_text.clear();
-            st.finishing = false;
+            if st.finishing && st.finishing_session == sid {
+                st.pending_text.clear();
+                st.live_committed.clear();
+                st.finishing = false;
+                st.finishing_session = 0;
+                true
+            } else {
+                false
+            }
+        };
+        if should_hide {
+            self.ui.hide_overlay();
         }
-        self.ui.hide_overlay();
     }
 
     fn worker_loop(
@@ -488,8 +582,8 @@ impl CoordinatorInner {
         rx: mpsc::Receiver<Vec<f32>>,
         stop_flag: Arc<AtomicBool>,
     ) {
-        let settings = lock_unpoisoned(&self.settings).clone();
-        if let Err(err_msg) = self.ensure_model_loaded(&settings) {
+        let initial_settings = lock_unpoisoned(&self.settings).clone();
+        if let Err(err_msg) = self.ensure_model_loaded(&initial_settings) {
             self.abort_session(sid, &err_msg);
             return;
         }
@@ -498,7 +592,7 @@ impl CoordinatorInner {
             self.ui.update_overlay_text("Listening...");
         }
 
-        let mut segmenter = PhraseSegmenter::new(settings.vad_sensitivity as f32, 2, 30.0);
+        let mut segmenter = PhraseSegmenter::new(initial_settings.vad_sensitivity as f32, 2, 30.0);
 
         loop {
             if !self.is_session_current(sid) {
@@ -520,8 +614,7 @@ impl CoordinatorInner {
                     for (idx, item) in batch.into_iter().enumerate() {
                         let skip_partials =
                             idx < last_idx || stop_flag.load(Ordering::Acquire);
-                        if !self.process_chunk(sid, &item, &mut segmenter, &settings, skip_partials)
-                        {
+                        if !self.process_chunk(sid, &item, &mut segmenter, skip_partials) {
                             return;
                         }
                     }
@@ -537,7 +630,7 @@ impl CoordinatorInner {
             if !self.is_session_current_for_flush(sid) {
                 return;
             }
-            if !self.process_chunk(sid, &chunk, &mut segmenter, &settings, true) {
+            if !self.process_chunk(sid, &chunk, &mut segmenter, true) {
                 return;
             }
         }
@@ -546,6 +639,7 @@ impl CoordinatorInner {
             return;
         }
         if let Some(ev) = segmenter.flush_on_stop() {
+            let settings = lock_unpoisoned(&self.settings).clone();
             let _ = self.handle_vad_event(sid, ev, &settings, true);
         }
     }
@@ -555,7 +649,6 @@ impl CoordinatorInner {
         sid: u64,
         chunk: &[f32],
         segmenter: &mut PhraseSegmenter,
-        settings: &Settings,
         skip_partials: bool,
     ) -> bool {
         let rms = compute_rms(chunk);
@@ -564,7 +657,8 @@ impl CoordinatorInner {
         }
 
         for ev in segmenter.push_chunk(chunk) {
-            if !self.handle_vad_event(sid, ev, settings, skip_partials) {
+            let settings = lock_unpoisoned(&self.settings).clone();
+            if !self.handle_vad_event(sid, ev, &settings, skip_partials) {
                 return false;
             }
         }
@@ -610,6 +704,9 @@ impl CoordinatorInner {
                     let mut backend = lock_unpoisoned(&self.speech);
                     backend.transcribe(&audio, lang, 1, &settings.initial_prompt)
                 };
+                if !self.is_session_current_for_flush(sid) {
+                    return false;
+                }
                 let elapsed = t0.elapsed().as_secs_f64();
                 lock_unpoisoned(&self.state).last_infer_s = Some(elapsed);
                 self.maybe_notify_slow_model(elapsed);
@@ -632,7 +729,7 @@ impl CoordinatorInner {
                         true
                     }
                     Err(err) => {
-                        self.preserve_pending_on_error(settings);
+                        self.preserve_pending_on_error(sid, settings);
                         let msg = format_transcribe_error(&err);
                         self.abort_session(sid, &msg);
                         false
@@ -670,6 +767,9 @@ impl CoordinatorInner {
                     let mut backend = lock_unpoisoned(&self.speech);
                     backend.transcribe(&audio, lang, beam_size, &settings.initial_prompt)
                 };
+                if !self.is_session_current_for_flush(sid) {
+                    return false;
+                }
                 let elapsed = t0.elapsed().as_secs_f64();
                 lock_unpoisoned(&self.state).last_infer_s = Some(elapsed);
                 self.maybe_notify_slow_model(elapsed);
@@ -681,12 +781,15 @@ impl CoordinatorInner {
                         if let Some(text) =
                             filter_segments(&vad_segs, duration_s, Some(peak_rms), threshold)
                         {
-                            self.deliver_complete(sid, text, settings);
+                            // Re-read fresh settings so mid-session Batch <-> Live toggles
+                            // made during inference take effect immediately.
+                            let latest_settings = lock_unpoisoned(&self.settings).clone();
+                            self.deliver_complete(sid, text, &latest_settings);
                         }
                         true
                     }
                     Err(err) => {
-                        self.preserve_pending_on_error(settings);
+                        self.preserve_pending_on_error(sid, settings);
                         let msg = format_transcribe_error(&err);
                         self.abort_session(sid, &msg);
                         false
@@ -707,18 +810,106 @@ impl CoordinatorInner {
             }
         }
 
-        let (full_so_far, finishing) = {
+        let is_live = normalize_delivery_mode(&settings.delivery_mode) == "live";
+
+        let live_payload = {
             let mut st = lock_unpoisoned(&self.state);
             if st.active_session != sid {
                 return;
             }
             st.pending_text.push(text);
-            let refs: Vec<&str> = st.pending_text.iter().map(String::as_str).collect();
-            (smart_join(&refs), st.finishing)
+            if is_live && st.running && !st.finishing {
+                let to_flush = std::mem::take(&mut st.pending_text);
+                let prior = st.live_committed.clone();
+                let target_hwnd = st.target_hwnd;
+                Some((to_flush, prior, target_hwnd))
+            } else {
+                let display = combine_display_text(&st.live_committed, &st.pending_text);
+                let finishing = st.finishing;
+                drop(st);
+                if !finishing {
+                    self.ui.update_overlay_text(&display);
+                }
+                return;
+            }
         };
 
-        if !finishing {
-            self.ui.update_overlay_text(&full_so_far);
+        let Some((to_flush, prior_committed, target_hwnd)) = live_payload else {
+            return;
+        };
+
+        let cleaned = format_phrase_parts(&to_flush, settings);
+        if cleaned.is_empty() {
+            return;
+        }
+
+        let chunk_to_inject = prefix_for_continuation(&prior_committed, &cleaned);
+        let combined_so_far = format!("{}{}", prior_committed.concat(), chunk_to_inject);
+
+        // Verify session fence and snapshot full session text into recovery before injecting.
+        {
+            let mut st = lock_unpoisoned(&self.state);
+            if st.active_session != sid {
+                return;
+            }
+            st.recovery.store(&combined_so_far);
+        }
+
+        match self.inject_text_chunk(&chunk_to_inject, target_hwnd, settings) {
+            Ok(()) => {
+                let (full_display, finishing) = {
+                    let mut st = lock_unpoisoned(&self.state);
+                    if st.active_session != sid {
+                        return;
+                    }
+                    st.live_committed.push(chunk_to_inject.clone());
+                    st.last_injected = chunk_to_inject.clone();
+                    let full = combine_display_text(&st.live_committed, &st.pending_text);
+                    st.recovery.store(&full);
+                    (full, st.finishing)
+                };
+                self.ui.on_dictation_committed(&chunk_to_inject);
+                if !finishing {
+                    self.ui.update_overlay_text(&full_display);
+                }
+            }
+            Err(err) => {
+                let recovery_text = {
+                    let mut st = lock_unpoisoned(&self.state);
+                    if st.active_session != sid {
+                        return;
+                    }
+                    // Restore un-injected phrases at the front of pending_text so order is preserved.
+                    st.pending_text.splice(0..0, to_flush);
+                    let live_text = st.live_committed.concat();
+                    let pending_fmt = format_phrase_parts(&st.pending_text, settings);
+                    let combined = if live_text.is_empty() {
+                        pending_fmt
+                    } else if pending_fmt.is_empty() {
+                        live_text
+                    } else {
+                        let cont = prefix_for_continuation(&st.live_committed, &pending_fmt);
+                        format!("{live_text}{cont}")
+                    };
+                    if !combined.is_empty() {
+                        st.recovery.store(&combined);
+                    }
+                    combined
+                };
+                if !recovery_text.is_empty() {
+                    self.ui.on_recovery_available(Some(&recovery_text));
+                }
+                match err {
+                    InjectError::FocusRestoreFailed => {
+                        self.ui.notify(FOCUS_RESTORE_FAILED_TEXT);
+                    }
+                    InjectError::Platform(msg) => {
+                        self.ui.notify(&format!(
+                            "Couldn't insert your dictation ({msg}). It is saved in Eqho."
+                        ));
+                    }
+                }
+            }
         }
     }
 
@@ -730,11 +921,21 @@ impl CoordinatorInner {
             }
             if !st.pending_text.is_empty() {
                 st.pending_text.pop();
-                let refs: Vec<&str> = st.pending_text.iter().map(String::as_str).collect();
-                (Some(smart_join(&refs)), None, st.finishing)
+                let display = combine_display_text(&st.live_committed, &st.pending_text);
+                (Some(display), None, st.finishing)
             } else if !st.last_injected.is_empty() {
                 let prev = std::mem::take(&mut st.last_injected);
-                (None, Some(prev), st.finishing)
+                let live_display = if !st.live_committed.is_empty() {
+                    st.live_committed.pop();
+                    let joined = st.live_committed.concat();
+                    if !joined.is_empty() {
+                        st.recovery.store(&joined);
+                    }
+                    Some(joined)
+                } else {
+                    None
+                };
+                (live_display, Some(prev), st.finishing)
             } else {
                 (Some(String::new()), None, st.finishing)
             }
@@ -745,7 +946,6 @@ impl CoordinatorInner {
             if count <= MAX_BACKSPACE_CHARS {
                 let _ = self.platform.send_backspaces(count);
             }
-            return;
         }
 
         if let Some(rem) = remaining
@@ -756,16 +956,21 @@ impl CoordinatorInner {
         }
     }
 
-    fn preserve_pending_on_error(&self, settings: &Settings) {
+    fn preserve_pending_on_error(&self, sid: u64, settings: &Settings) {
         let text = {
             let st = lock_unpoisoned(&self.state);
-            let refs: Vec<&str> = st.pending_text.iter().map(String::as_str).collect();
-            let joined = smart_join(&refs);
-            let replaced = apply_replacements(&joined, &settings.replacements);
-            if settings.format_cleanup {
-                clean_text(&replaced, &settings.language, settings.remove_fillers)
+            if st.active_session != sid {
+                return;
+            }
+            let live_text = st.live_committed.concat();
+            let pending_formatted = format_phrase_parts(&st.pending_text, settings);
+            if live_text.is_empty() {
+                pending_formatted
+            } else if pending_formatted.is_empty() {
+                live_text
             } else {
-                replaced
+                let cont = prefix_for_continuation(&st.live_committed, &pending_formatted);
+                format!("{live_text}{cont}")
             }
         };
 
@@ -789,7 +994,12 @@ impl CoordinatorInner {
                 return;
             }
             st.active_session = 0;
+            st.finishing_session = 0;
             st.running = false;
+            if sid.is_none() {
+                st.finishing = false;
+            }
+            st.live_committed.clear();
         }
 
         *lock_unpoisoned(&self.stream) = None;
@@ -809,33 +1019,12 @@ impl CoordinatorInner {
         }
     }
 
-    fn inject_pending(&self) {
-        let settings = lock_unpoisoned(&self.settings).clone();
-        let (raw_text, target_hwnd, duration_s) = {
-            let mut st = lock_unpoisoned(&self.state);
-            let refs: Vec<&str> = st.pending_text.iter().map(String::as_str).collect();
-            let joined = smart_join(&refs);
-            st.pending_text.clear();
-            let dur = st
-                .dictation_start
-                .take()
-                .map(|t| t.elapsed().as_secs_f64())
-                .unwrap_or(0.0);
-            (joined, st.target_hwnd, dur)
-        };
-
-        let mut full_text = apply_replacements(&raw_text, &settings.replacements);
-        if settings.format_cleanup {
-            full_text = clean_text(&full_text, &settings.language, settings.remove_fillers);
-        }
-
-        if full_text.is_empty() {
-            return;
-        }
-
-        // Always store in LastDictationBuffer BEFORE attempting injection.
-        lock_unpoisoned(&self.state).recovery.store(&full_text);
-
+    fn inject_text_chunk(
+        &self,
+        text: &str,
+        target_hwnd: WindowHandle,
+        settings: &Settings,
+    ) -> Result<(), InjectError> {
         let mut use_clipboard = settings.auto_paste;
         if target_hwnd.is_valid()
             && !settings.paste_rules.is_empty()
@@ -868,9 +1057,7 @@ impl CoordinatorInner {
             let already_focused = self.platform.get_foreground_window() == target_hwnd;
             let restored = self.platform.restore_foreground_window(target_hwnd);
             if !restored && self.platform.get_foreground_window() != target_hwnd {
-                self.ui.on_recovery_available(Some(&full_text));
-                self.ui.notify(FOCUS_RESTORE_FAILED_TEXT);
-                return;
+                return Err(InjectError::FocusRestoreFailed);
             }
             if !already_focused {
                 need_settle = true;
@@ -883,7 +1070,7 @@ impl CoordinatorInner {
         let inject_res = if use_clipboard {
             let prev = self.platform.get_text();
             self.platform
-                .set_text(&full_text, true)
+                .set_text(text, true)
                 .and_then(|()| self.platform.send_paste_shortcut())
                 .map(|()| {
                     thread::sleep(CLIPBOARD_RESTORE_DELAY);
@@ -892,21 +1079,73 @@ impl CoordinatorInner {
                     }
                 })
         } else {
-            self.platform.type_unicode_text(&full_text)
+            self.platform.type_unicode_text(text)
         };
 
-        if let Err(err) = inject_res {
-            self.ui.on_recovery_available(Some(&full_text));
-            self.ui
-                .notify(&format!("Couldn't insert your dictation ({err}). It is saved in Eqho."));
+        inject_res.map_err(|err| InjectError::Platform(err.to_string()))
+    }
+
+    fn inject_pending(&self) {
+        let settings = lock_unpoisoned(&self.settings).clone();
+        let (live_committed, pending_parts, target_hwnd, duration_s) = {
+            let mut st = lock_unpoisoned(&self.state);
+            let live = std::mem::take(&mut st.live_committed);
+            let pending = std::mem::take(&mut st.pending_text);
+            let dur = st
+                .dictation_start
+                .take()
+                .map(|t| t.elapsed().as_secs_f64())
+                .unwrap_or(0.0);
+            (live, pending, st.target_hwnd, dur)
+        };
+
+        let pending_formatted = format_phrase_parts(&pending_parts, &settings);
+        let live_text = live_committed.concat();
+
+        if live_text.is_empty() && pending_formatted.is_empty() {
             return;
         }
 
-        lock_unpoisoned(&self.state).last_injected = full_text.clone();
-        self.ui.on_dictation_committed(&full_text);
-        if settings.history_enabled {
+        let pending_chunk = if pending_formatted.is_empty() {
+            String::new()
+        } else {
+            prefix_for_continuation(&live_committed, &pending_formatted)
+        };
+        let combined_text = format!("{live_text}{pending_chunk}");
+
+        // Always store full session text in LastDictationBuffer BEFORE attempting injection.
+        lock_unpoisoned(&self.state).recovery.store(&combined_text);
+
+        let mut committed_text = live_text;
+        if !pending_chunk.is_empty() {
+            match self.inject_text_chunk(&pending_chunk, target_hwnd, &settings) {
+                Ok(()) => {
+                    lock_unpoisoned(&self.state).last_injected = pending_chunk.clone();
+                    self.ui.on_dictation_committed(&pending_chunk);
+                    committed_text = combined_text;
+                }
+                Err(InjectError::FocusRestoreFailed) => {
+                    self.ui.on_recovery_available(Some(&combined_text));
+                    self.ui.notify(FOCUS_RESTORE_FAILED_TEXT);
+                    if committed_text.is_empty() {
+                        return;
+                    }
+                }
+                Err(InjectError::Platform(err)) => {
+                    self.ui.on_recovery_available(Some(&combined_text));
+                    self.ui.notify(&format!(
+                        "Couldn't insert your dictation ({err}). It is saved in Eqho."
+                    ));
+                    if committed_text.is_empty() {
+                        return;
+                    }
+                }
+            }
+        }
+
+        if settings.history_enabled && !committed_text.is_empty() {
             let _ = self.history.append(
-                &full_text,
+                &committed_text,
                 duration_s,
                 &settings.model_size,
                 &settings.language,
@@ -1010,15 +1249,47 @@ impl CoordinatorInner {
         *lock_unpoisoned(&self.hotkey_reg) = None;
     }
 
-    fn apply_settings(self: &Arc<Self>, new_settings: Settings, reload_model: bool) {
-        let hotkey_changed = {
+    fn set_delivery_mode(&self, mode: &str) {
+        let normalized = normalize_delivery_mode(mode);
+        let updated = {
+            let mut s = lock_unpoisoned(&self.settings);
+            s.delivery_mode = normalized.to_owned();
+            s.clone()
+        };
+        let _ = updated.save_to_path(&self.settings_path);
+        self.ui.on_settings_changed(&updated);
+    }
+
+    fn set_language_live(&self, lang_code: &str) -> bool {
+        let normalized = lang_code.trim().to_ascii_lowercase();
+        if supported_language_name(&normalized).is_none() {
+            return false;
+        }
+        let updated = {
+            let mut s = lock_unpoisoned(&self.settings);
+            s.language = normalized.clone();
+            s.record_recent_language(&normalized);
+            s.clone()
+        };
+        let _ = updated.save_to_path(&self.settings_path);
+        self.ui.on_settings_changed(&updated);
+        true
+    }
+
+    fn apply_settings(self: &Arc<Self>, mut new_settings: Settings, reload_model: bool) {
+        new_settings.delivery_mode = normalize_delivery_mode(&new_settings.delivery_mode).to_owned();
+        let (hotkey_changed, saved_settings) = {
             let mut s = lock_unpoisoned(&self.settings);
             let changed =
                 s.hotkey != new_settings.hotkey || s.hotkey_mode != new_settings.hotkey_mode;
+            if s.language != new_settings.language {
+                let lang = new_settings.language.clone();
+                new_settings.record_recent_language(&lang);
+            }
             *s = new_settings.clone();
-            changed
+            (changed, new_settings)
         };
-        let _ = new_settings.save_to_path(&self.settings_path);
+        let _ = saved_settings.save_to_path(&self.settings_path);
         if hotkey_changed {
             self.unregister_hotkey();
             let _ = self.register_hotkey();
@@ -1036,7 +1307,7 @@ impl CoordinatorInner {
             self.teardown_session_locked(None, None, true);
         }
 
-        if let Some(handle) = lock_unpoisoned(&self.worker_handle).take() {
+        if let Some((_, handle)) = lock_unpoisoned(&self.worker_handle).take() {
             let _ = handle.join();
         }
         if let Some(handle) = lock_unpoisoned(&self.finish_handle).take() {
@@ -1138,6 +1409,73 @@ impl CoordinatorInner {
     fn is_session_current_for_flush(&self, sid: u64) -> bool {
         let st = lock_unpoisoned(&self.state);
         st.active_session == sid
+    }
+}
+
+fn format_phrase_parts(parts: &[String], settings: &Settings) -> String {
+    let refs: Vec<&str> = parts.iter().map(String::as_str).collect();
+    let joined = smart_join(&refs);
+    if joined.is_empty() {
+        return String::new();
+    }
+    if settings.voice_commands
+        && parts.len() == 1
+        && matches!(
+            joined.as_str(),
+            "\n" | "\n\n" | "." | "," | "?" | "!" | ":" | ";"
+        )
+    {
+        return joined;
+    }
+    let replaced = apply_replacements(&joined, &settings.replacements);
+    if settings.format_cleanup {
+        clean_text(&replaced, &settings.language, settings.remove_fillers)
+    } else {
+        replaced
+    }
+}
+
+fn needs_leading_space(prior: &str, next: &str) -> bool {
+    if prior.is_empty() || next.is_empty() {
+        return false;
+    }
+    if prior.ends_with(char::is_whitespace) {
+        return false;
+    }
+    let Some(first) = next.chars().next() else {
+        return false;
+    };
+    !matches!(
+        first,
+        '.' | ',' | '?' | '!' | ':' | ';' | '\n' | '\r' | ' ' | '\t'
+    )
+}
+
+fn prefix_for_continuation(prior_chunks: &[String], next: &str) -> String {
+    let last_prior = prior_chunks
+        .iter()
+        .rev()
+        .find(|s| !s.is_empty())
+        .map(String::as_str)
+        .unwrap_or("");
+    if needs_leading_space(last_prior, next) {
+        format!(" {next}")
+    } else {
+        next.to_owned()
+    }
+}
+
+fn combine_display_text(live_committed: &[String], pending_text: &[String]) -> String {
+    let live = live_committed.concat();
+    let refs: Vec<&str> = pending_text.iter().map(String::as_str).collect();
+    let pending = smart_join(&refs);
+    if live.is_empty() {
+        pending
+    } else if pending.is_empty() {
+        live
+    } else {
+        let cont = prefix_for_continuation(live_committed, &pending);
+        format!("{live}{cont}")
     }
 }
 
@@ -1403,18 +1741,24 @@ mod tests {
 
     struct RecordingUi {
         overlay_texts: Mutex<Vec<String>>,
+        overlay_hidden: Mutex<usize>,
+        tray_states: Mutex<Vec<bool>>,
         notifications: Mutex<Vec<String>>,
         recovery_events: Mutex<Vec<Option<String>>>,
         history_changes: Mutex<usize>,
+        settings_changes: Mutex<Vec<Settings>>,
     }
 
     impl RecordingUi {
         fn new() -> Self {
             Self {
                 overlay_texts: Mutex::new(Vec::new()),
+                overlay_hidden: Mutex::new(0),
+                tray_states: Mutex::new(Vec::new()),
                 notifications: Mutex::new(Vec::new()),
                 recovery_events: Mutex::new(Vec::new()),
                 history_changes: Mutex::new(0),
+                settings_changes: Mutex::new(Vec::new()),
             }
         }
     }
@@ -1428,8 +1772,12 @@ mod tests {
         }
         fn set_overlay_level(&self, _level: f32) {}
         fn set_overlay_waveform(&self, _loud: f32, _tone: f32) {}
-        fn hide_overlay(&self) {}
-        fn set_tray_active(&self, _active: bool) {}
+        fn hide_overlay(&self) {
+            *lock_unpoisoned(&self.overlay_hidden) += 1;
+        }
+        fn set_tray_active(&self, active: bool) {
+            lock_unpoisoned(&self.tray_states).push(active);
+        }
         fn notify(&self, message: &str) {
             lock_unpoisoned(&self.notifications).push(message.to_owned());
         }
@@ -1440,6 +1788,9 @@ mod tests {
         fn on_history_changed(&self) {
             *lock_unpoisoned(&self.history_changes) += 1;
         }
+        fn on_settings_changed(&self, settings: &Settings) {
+            lock_unpoisoned(&self.settings_changes).push(settings.clone());
+        }
     }
 
     struct FakeSpeech {
@@ -1447,6 +1798,7 @@ mod tests {
         info: Option<ModelInfo>,
         responses: VecDeque<Result<Vec<HostSegment>, ModelHostError>>,
         delay: Duration,
+        recorded_languages: Arc<Mutex<Vec<String>>>,
     }
 
     impl FakeSpeech {
@@ -1456,6 +1808,7 @@ mod tests {
                 info: None,
                 responses: responses.into_iter().collect(),
                 delay: Duration::ZERO,
+                recorded_languages: Arc::new(Mutex::new(Vec::new())),
             }
         }
     }
@@ -1486,10 +1839,11 @@ mod tests {
         fn transcribe(
             &mut self,
             _audio: &[f32],
-            _language: &str,
+            language: &str,
             _beam_size: u32,
             _initial_prompt: &str,
         ) -> Result<Vec<HostSegment>, ModelHostError> {
+            lock_unpoisoned(&self.recorded_languages).push(language.to_owned());
             if !self.delay.is_zero() {
                 thread::sleep(self.delay);
             }
@@ -2024,6 +2378,652 @@ mod tests {
             "utterance must NOT be dropped during drain: actions={actions:?}"
         );
         assert!(actions.contains(&Action::SendPaste));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn wait_for_condition(timeout: Duration, mut pred: impl FnMut() -> bool) -> bool {
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            if pred() {
+                return true;
+            }
+            thread::sleep(Duration::from_millis(15));
+        }
+        pred()
+    }
+
+    #[test]
+    fn cancel_silently_discards_active_dictation_and_preserves_recovery() {
+        let dir = temp_dir("cancel_silent");
+        let settings = Settings {
+            volume_duck: "50%".to_owned(),
+            sound_feedback: true,
+            delivery_mode: "batch".to_owned(),
+            ..Settings::default()
+        };
+        let platform = Arc::new(FakePlatform::new(WindowHandle(42)));
+        let ui = Arc::new(RecordingUi::new());
+        let speech = FakeSpeech::with_responses(vec![Ok(vec![seg("discard this phrase")])]);
+        let hist = TranscriptHistory::with_default_cap(dir.join("history.jsonl"));
+        let coord = DictationCoordinator::new(
+            settings,
+            dir.join("settings.json"),
+            hist,
+            platform.clone(),
+            Box::new(speech),
+            ui.clone(),
+        );
+
+        // Pre-seed prior recovery text that cancel() must NOT overwrite.
+        lock_unpoisoned(&coord.inner.state)
+            .recovery
+            .store("Prior saved dictation");
+
+        // Cancelling while idle is a clean no-op.
+        coord.cancel();
+        assert_eq!(*lock_unpoisoned(&ui.overlay_hidden), 0);
+
+        coord.activate();
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            lock_unpoisoned(&platform.audio_cb).is_some()
+        }));
+
+        // Feed a phrase and wait for it to land in pending_text.
+        feed_speech_then_silence(&platform, 2, 3);
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            !lock_unpoisoned(&coord.inner.state).pending_text.is_empty()
+        }));
+
+        coord.cancel();
+
+        assert!(!coord.is_running());
+        assert!(!coord.is_finishing());
+        assert!(lock_unpoisoned(&coord.inner.state).pending_text.is_empty());
+        assert!(lock_unpoisoned(&coord.inner.state).dictation_start.is_none());
+        assert_eq!(*lock_unpoisoned(&ui.overlay_hidden), 1);
+        assert_eq!(lock_unpoisoned(&ui.tray_states).last(), Some(&false));
+        assert!((*lock_unpoisoned(&platform.volume) - 0.8).abs() < 1e-5);
+
+        let actions = platform.actions();
+        // Zero injections and zero stop chimes (blocking: false).
+        assert!(!actions.contains(&Action::SendPaste));
+        assert!(
+            !actions
+                .iter()
+                .any(|a| matches!(a, Action::TypeText(_) | Action::SetClipboard { .. }))
+        );
+        assert!(
+            !actions
+                .iter()
+                .any(|a| matches!(a, Action::PlayPcm { blocking: false, .. }))
+        );
+
+        // Zero history writes and prior recovery preserved verbatim.
+        assert!(coord.inner.history.read_all().is_empty());
+        assert_eq!(*lock_unpoisoned(&ui.history_changes), 0);
+        assert_eq!(
+            coord.last_dictation().as_deref(),
+            Some("Prior saved dictation")
+        );
+
+        coord.shutdown();
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn batch_mode_holds_multiple_phrases_and_injects_once_on_deactivate() {
+        let dir = temp_dir("batch_multi");
+        let settings = Settings {
+            delivery_mode: "batch".to_owned(),
+            auto_paste: true,
+            ..Settings::default()
+        };
+        let platform = Arc::new(FakePlatform::new(WindowHandle(51)));
+        let ui = Arc::new(RecordingUi::new());
+        let speech = FakeSpeech::with_responses(vec![
+            Ok(vec![seg("first sentence.")]),
+            Ok(vec![seg("second sentence.")]),
+        ]);
+        let hist = TranscriptHistory::with_default_cap(dir.join("history.jsonl"));
+        let coord = DictationCoordinator::new(
+            settings,
+            dir.join("settings.json"),
+            hist,
+            platform.clone(),
+            Box::new(speech),
+            ui.clone(),
+        );
+
+        coord.activate();
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            lock_unpoisoned(&platform.audio_cb).is_some()
+        }));
+
+        feed_speech_then_silence(&platform, 2, 3);
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            lock_unpoisoned(&coord.inner.state).pending_text.len() == 1
+        }));
+
+        feed_speech_then_silence(&platform, 2, 3);
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            lock_unpoisoned(&coord.inner.state).pending_text.len() == 2
+        }));
+
+        // While active in batch mode, zero injections have occurred.
+        assert_eq!(
+            platform
+                .actions()
+                .iter()
+                .filter(|a| matches!(a, Action::SendPaste))
+                .count(),
+            0
+        );
+
+        coord.deactivate();
+        wait_until_not_finishing(&coord);
+
+        let actions = platform.actions();
+        let paste_count = actions
+            .iter()
+            .filter(|a| matches!(a, Action::SendPaste))
+            .count();
+        assert_eq!(paste_count, 1, "batch mode must inject exactly once");
+        assert!(actions.contains(&Action::SetClipboard {
+            text: "First sentence. Second sentence.".to_owned(),
+            private: true,
+        }));
+
+        let entries = coord.inner.history.read_all();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].text, "First sentence. Second sentence.");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn live_mode_injects_each_phrase_never_double_pastes_and_writes_one_history_entry() {
+        let dir = temp_dir("live_mode");
+        let settings = Settings {
+            delivery_mode: "live".to_owned(),
+            auto_paste: true,
+            ..Settings::default()
+        };
+        let platform = Arc::new(FakePlatform::new(WindowHandle(61)));
+        let ui = Arc::new(RecordingUi::new());
+        let speech = FakeSpeech::with_responses(vec![
+            Ok(vec![seg("first sentence.")]),
+            Ok(vec![seg("second sentence.")]),
+        ]);
+        let hist = TranscriptHistory::with_default_cap(dir.join("history.jsonl"));
+        let coord = DictationCoordinator::new(
+            settings,
+            dir.join("settings.json"),
+            hist,
+            platform.clone(),
+            Box::new(speech),
+            ui.clone(),
+        );
+
+        coord.activate();
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            lock_unpoisoned(&platform.audio_cb).is_some()
+        }));
+
+        // Phrase 1 injected live while running.
+        feed_speech_then_silence(&platform, 2, 3);
+        assert!(wait_for_condition(Duration::from_secs(3), || {
+            platform
+                .actions()
+                .iter()
+                .filter(|a| matches!(a, Action::SendPaste))
+                .count()
+                == 1
+        }));
+        assert!(coord.is_running());
+
+        // Phrase 2 injected live with leading space while running.
+        feed_speech_then_silence(&platform, 2, 3);
+        assert!(wait_for_condition(Duration::from_secs(3), || {
+            platform
+                .actions()
+                .iter()
+                .filter(|a| matches!(a, Action::SendPaste))
+                .count()
+                == 2
+        }));
+        assert_eq!(
+            coord.last_dictation().as_deref(),
+            Some("First sentence. Second sentence.")
+        );
+
+        // Stop must NOT double-paste already-live-injected phrases.
+        coord.deactivate();
+        wait_until_not_finishing(&coord);
+
+        let actions = platform.actions();
+        let pasted_texts: Vec<String> = actions
+            .iter()
+            .filter_map(|a| match a {
+                Action::SetClipboard { text, private: true } => Some(text.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            pasted_texts,
+            vec!["First sentence.".to_owned(), " Second sentence.".to_owned()]
+        );
+        assert_eq!(
+            actions
+                .iter()
+                .filter(|a| matches!(a, Action::SendPaste))
+                .count(),
+            2
+        );
+
+        // Exactly ONE combined history entry for the entire dictation session.
+        let entries = coord.inner.history.read_all();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].text, "First sentence. Second sentence.");
+        assert_eq!(*lock_unpoisoned(&ui.history_changes), 1);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn live_mode_flushes_tail_phrase_on_stop_without_double_pasting_prior() {
+        let dir = temp_dir("live_tail");
+        let settings = Settings {
+            delivery_mode: "live".to_owned(),
+            auto_paste: true,
+            ..Settings::default()
+        };
+        let platform = Arc::new(FakePlatform::new(WindowHandle(62)));
+        let ui = Arc::new(RecordingUi::new());
+        let speech = FakeSpeech::with_responses(vec![
+            Ok(vec![seg("first part.")]),
+            Ok(vec![seg("final part.")]),
+        ]);
+        let hist = TranscriptHistory::with_default_cap(dir.join("history.jsonl"));
+        let coord = DictationCoordinator::new(
+            settings,
+            dir.join("settings.json"),
+            hist,
+            platform.clone(),
+            Box::new(speech),
+            ui.clone(),
+        );
+
+        coord.activate();
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            lock_unpoisoned(&platform.audio_cb).is_some()
+        }));
+
+        // Phrase 1 completes live.
+        feed_speech_then_silence(&platform, 2, 3);
+        assert!(wait_for_condition(Duration::from_secs(3), || {
+            platform
+                .actions()
+                .iter()
+                .filter(|a| matches!(a, Action::SendPaste))
+                .count()
+                == 1
+        }));
+
+        // Push tail speech with zero trailing silence and deactivate immediately.
+        let speech_block = vec![0.05_f32; WAVE_BLOCK_SAMPLES];
+        for _ in 0..20 {
+            platform.push_block(&speech_block);
+        }
+        coord.deactivate();
+        wait_until_not_finishing(&coord);
+
+        let pasted_texts: Vec<String> = platform
+            .actions()
+            .iter()
+            .filter_map(|a| match a {
+                Action::SetClipboard { text, private: true } => Some(text.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            pasted_texts,
+            vec!["First part.".to_owned(), " Final part.".to_owned()]
+        );
+        let entries = coord.inner.history.read_all();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].text, "First part. Final part.");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn live_mode_focus_restore_failure_buffers_to_recovery_without_losing_words() {
+        let dir = temp_dir("live_focus_fail");
+        let settings = Settings {
+            delivery_mode: "live".to_owned(),
+            ..Settings::default()
+        };
+        let platform = Arc::new(FakePlatform::new(WindowHandle(63)));
+        *lock_unpoisoned(&platform.restore_succeeds) = false;
+        let ui = Arc::new(RecordingUi::new());
+        let speech = FakeSpeech::with_responses(vec![Ok(vec![seg("dont lose this")])]);
+        let hist = TranscriptHistory::with_default_cap(dir.join("history.jsonl"));
+        let coord = DictationCoordinator::new(
+            settings,
+            dir.join("settings.json"),
+            hist,
+            platform.clone(),
+            Box::new(speech),
+            ui.clone(),
+        );
+
+        coord.activate();
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            lock_unpoisoned(&platform.audio_cb).is_some()
+        }));
+        *lock_unpoisoned(&platform.foreground) = WindowHandle(777);
+
+        feed_speech_then_silence(&platform, 2, 3);
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            !lock_unpoisoned(&ui.recovery_events).is_empty()
+        }));
+
+        assert!(!platform.actions().contains(&Action::SendPaste));
+        assert_eq!(coord.last_dictation().as_deref(), Some("Dont lose this"));
+        assert!(
+            lock_unpoisoned(&ui.recovery_events)
+                .contains(&Some("Dont lose this".to_owned()))
+        );
+
+        coord.cancel();
+        coord.shutdown();
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn mid_session_set_language_live_persists_records_recent_notifies_and_switches_backend_lang() {
+        let dir = temp_dir("live_lang");
+        let settings_path = dir.join("settings.json");
+        let settings = Settings {
+            model_size: "large-v3-turbo".to_owned(),
+            language: "en".to_owned(),
+            delivery_mode: "batch".to_owned(),
+            ..Settings::default()
+        };
+        let platform = Arc::new(FakePlatform::new(WindowHandle(71)));
+        let ui = Arc::new(RecordingUi::new());
+        let speech = FakeSpeech::with_responses(vec![
+            Ok(vec![seg("hello")]),
+            Ok(vec![seg("hallo welt")]),
+        ]);
+        let recorded_langs = Arc::clone(&speech.recorded_languages);
+        let hist = TranscriptHistory::with_default_cap(dir.join("history.jsonl"));
+        let coord = DictationCoordinator::new(
+            settings,
+            settings_path.clone(),
+            hist,
+            platform.clone(),
+            Box::new(speech),
+            ui.clone(),
+        );
+
+        coord.activate();
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            lock_unpoisoned(&platform.audio_cb).is_some()
+        }));
+
+        // Phrase 1 transcribed in English.
+        feed_speech_then_silence(&platform, 2, 3);
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            lock_unpoisoned(&recorded_langs).len() == 1
+        }));
+        assert_eq!(lock_unpoisoned(&recorded_langs)[0], "en");
+
+        // Invalid language code is rejected without modifying settings or notifying UI.
+        assert!(!coord.set_language_live("not-a-lang"));
+        assert!(lock_unpoisoned(&ui.settings_changes).is_empty());
+
+        // Mid-session switch to German without restarting capture.
+        assert!(coord.set_language_live("de"));
+        let persisted = Settings::load_from_path(&settings_path);
+        assert_eq!(persisted.language, "de");
+        assert_eq!(persisted.recent_languages, vec!["de".to_owned()]);
+        {
+            let changes = lock_unpoisoned(&ui.settings_changes);
+            assert_eq!(changes.len(), 1);
+            assert_eq!(changes[0].language, "de");
+            assert_eq!(changes[0].recent_languages, vec!["de".to_owned()]);
+        }
+
+        // Phrase 2 transcribed in German immediately on the very next phrase!
+        feed_speech_then_silence(&platform, 2, 3);
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            lock_unpoisoned(&recorded_langs).len() == 2
+        }));
+        assert_eq!(lock_unpoisoned(&recorded_langs)[1], "de");
+
+        coord.deactivate();
+        wait_until_not_finishing(&coord);
+
+        // apply_settings() also records changed language into recent_languages.
+        let mut next = Settings::load_from_path(&settings_path);
+        next.language = "fr".to_owned();
+        coord.apply_settings(next, false);
+        let after_apply = Settings::load_from_path(&settings_path);
+        assert_eq!(
+            after_apply.recent_languages,
+            vec!["fr".to_owned(), "de".to_owned()]
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn mid_session_set_delivery_mode_live_persists_and_takes_effect_without_restart() {
+        let dir = temp_dir("live_mode_switch");
+        let settings_path = dir.join("settings.json");
+        let settings = Settings {
+            delivery_mode: "batch".to_owned(),
+            auto_paste: true,
+            ..Settings::default()
+        };
+        let platform = Arc::new(FakePlatform::new(WindowHandle(81)));
+        let ui = Arc::new(RecordingUi::new());
+        let speech = FakeSpeech::with_responses(vec![
+            Ok(vec![seg("buffered first.")]),
+            Ok(vec![seg("switched to live.")]),
+        ]);
+        let hist = TranscriptHistory::with_default_cap(dir.join("history.jsonl"));
+        let coord = DictationCoordinator::new(
+            settings,
+            settings_path.clone(),
+            hist,
+            platform.clone(),
+            Box::new(speech),
+            ui.clone(),
+        );
+
+        coord.activate();
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            lock_unpoisoned(&platform.audio_cb).is_some()
+        }));
+
+        // Phrase 1 arrives in batch mode: buffered, zero pastes.
+        feed_speech_then_silence(&platform, 2, 3);
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            lock_unpoisoned(&coord.inner.state).pending_text.len() == 1
+        }));
+        assert_eq!(
+            platform
+                .actions()
+                .iter()
+                .filter(|a| matches!(a, Action::SendPaste))
+                .count(),
+            0
+        );
+
+        // Switch to live mode mid-session without restarting capture.
+        coord.set_delivery_mode("LIVE");
+        assert!(coord.is_running());
+        let persisted = Settings::load_from_path(&settings_path);
+        assert_eq!(persisted.delivery_mode, "live");
+        {
+            let changes = lock_unpoisoned(&ui.settings_changes);
+            assert_eq!(changes.len(), 1);
+            assert_eq!(changes[0].delivery_mode, "live");
+        }
+
+        // Phrase 2 arrives: live injection fires immediately while still running,
+        // preserving order of buffered Phrase 1 + Phrase 2.
+        feed_speech_then_silence(&platform, 2, 3);
+        assert!(wait_for_condition(Duration::from_secs(3), || {
+            platform
+                .actions()
+                .iter()
+                .filter(|a| matches!(a, Action::SendPaste))
+                .count()
+                == 1
+        }));
+        assert!(coord.is_running());
+
+        // Stopping does not double-paste and writes 1 combined history entry.
+        coord.deactivate();
+        wait_until_not_finishing(&coord);
+        assert_eq!(
+            platform
+                .actions()
+                .iter()
+                .filter(|a| matches!(a, Action::SendPaste))
+                .count(),
+            1
+        );
+        let entries = coord.inner.history.read_all();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].text, "Buffered first. Switched to live.");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cancel_during_inflight_transcription_returns_without_blocking_and_discards_late_result() {
+        let dir = temp_dir("cancel_inflight");
+        let settings = Settings {
+            delivery_mode: "live".to_owned(),
+            ..Settings::default()
+        };
+        let platform = Arc::new(FakePlatform::new(WindowHandle(91)));
+        let ui = Arc::new(RecordingUi::new());
+        let mut speech = FakeSpeech::with_responses(vec![Ok(vec![seg("late cancelled result")])]);
+        speech.delay = Duration::from_millis(250);
+        let hist = TranscriptHistory::with_default_cap(dir.join("history.jsonl"));
+        let coord = DictationCoordinator::new(
+            settings,
+            dir.join("settings.json"),
+            hist,
+            platform.clone(),
+            Box::new(speech),
+            ui.clone(),
+        );
+        lock_unpoisoned(&coord.inner.state)
+            .recovery
+            .store("Untouched prior text");
+
+        coord.activate();
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            lock_unpoisoned(&platform.audio_cb).is_some()
+        }));
+
+        // Trigger PhraseReady so worker enters the 250ms delayed transcribe().
+        feed_speech_then_silence(&platform, 2, 3);
+        thread::sleep(Duration::from_millis(60));
+
+        let t0 = Instant::now();
+        coord.cancel();
+        let cancel_elapsed = t0.elapsed();
+        assert!(
+            cancel_elapsed < Duration::from_millis(150),
+            "cancel() must not block on in-flight transcription (took {cancel_elapsed:?})"
+        );
+
+        // Wait past the delayed transcription completion and verify nothing leaked.
+        thread::sleep(Duration::from_millis(300));
+        assert!(!platform.actions().contains(&Action::SendPaste));
+        assert!(coord.inner.history.read_all().is_empty());
+        assert_eq!(
+            coord.last_dictation().as_deref(),
+            Some("Untouched prior text")
+        );
+
+        coord.shutdown();
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn live_mode_delete_that_backspaces_last_chunk_and_updates_history() {
+        let dir = temp_dir("live_delete_cmd");
+        let settings = Settings {
+            delivery_mode: "live".to_owned(),
+            voice_commands: true,
+            ..Settings::default()
+        };
+        let platform = Arc::new(FakePlatform::new(WindowHandle(92)));
+        let ui = Arc::new(RecordingUi::new());
+        let speech = FakeSpeech::with_responses(vec![
+            Ok(vec![seg("keep this.")]),
+            Ok(vec![seg("oops wrong")]),
+            Ok(vec![seg("delete that")]),
+        ]);
+        let hist = TranscriptHistory::with_default_cap(dir.join("history.jsonl"));
+        let coord = DictationCoordinator::new(
+            settings,
+            dir.join("settings.json"),
+            hist,
+            platform.clone(),
+            Box::new(speech),
+            ui.clone(),
+        );
+
+        coord.activate();
+        assert!(wait_for_condition(Duration::from_secs(2), || {
+            lock_unpoisoned(&platform.audio_cb).is_some()
+        }));
+
+        feed_speech_then_silence(&platform, 2, 3);
+        assert!(wait_for_condition(Duration::from_secs(3), || {
+            platform
+                .actions()
+                .iter()
+                .filter(|a| matches!(a, Action::SendPaste))
+                .count()
+                == 1
+        }));
+
+        feed_speech_then_silence(&platform, 2, 3);
+        assert!(wait_for_condition(Duration::from_secs(3), || {
+            platform
+                .actions()
+                .iter()
+                .filter(|a| matches!(a, Action::SendPaste))
+                .count()
+                == 2
+        }));
+
+        feed_speech_then_silence(&platform, 2, 3);
+        assert!(wait_for_condition(Duration::from_secs(3), || {
+            platform
+                .actions()
+                .iter()
+                .any(|a| matches!(a, Action::SendBackspaces(_)))
+        }));
+        // " Oops wrong" has 11 chars including the leading space.
+        assert!(platform.actions().contains(&Action::SendBackspaces(11)));
+
+        coord.deactivate();
+        wait_until_not_finishing(&coord);
+        let entries = coord.inner.history.read_all();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].text, "Keep this.");
+
         let _ = fs::remove_dir_all(&dir);
     }
 }
