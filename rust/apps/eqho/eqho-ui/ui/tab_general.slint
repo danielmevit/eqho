@@ -23,6 +23,7 @@ export component GeneralTab inherits Rectangle {
     in-out property <bool> format-cleanup: true;
     in-out property <bool> sound-feedback: true;
     in-out property <bool> history-enabled: true;
+    in-out property <int> delivery-mode-index: 0;
     in-out property <int> paste-mode-index: 0;
 
     callback mic-selected(int);
@@ -36,6 +37,7 @@ export component GeneralTab inherits Rectangle {
     callback format-cleanup-toggled(bool);
     callback sound-feedback-toggled(bool);
     callback history-enabled-toggled(bool);
+    callback delivery-mode-changed(int);
     callback paste-mode-changed(int);
 
     property <bool> two-col: root.width >= 760px;
@@ -222,6 +224,16 @@ export component GeneralTab inherits Rectangle {
                             }
                         }
                         StackedSettingRow {
+                            label: "Delivery Mode";
+                            help: "Paste all at once when you stop (Batch), or phrase by phrase while speaking (Live)";
+                            TabList {
+                                items: ["Batch", "Live"];
+                                selected <=> root.delivery-mode-index;
+                                accessible-name: "Delivery Mode";
+                                picked(i) => { root.delivery-mode-changed(i); }
+                            }
+                        }
+                        StackedSettingRow {
                             label: "Paste Mode";
                             help: "How dictated text enters the active app";
                             TabList {
@@ -380,6 +392,16 @@ export component GeneralTab inherits Rectangle {
                             checked <=> root.history-enabled;
                             accessible-name: "Save History";
                             toggled(v) => { root.history-enabled-toggled(v); }
+                        }
+                    }
+                    StackedSettingRow {
+                        label: "Delivery Mode";
+                        help: "Paste all at once when you stop (Batch), or phrase by phrase while speaking (Live)";
+                        TabList {
+                            items: ["Batch", "Live"];
+                            selected <=> root.delivery-mode-index;
+                            accessible-name: "Delivery Mode";
+                            picked(i) => { root.delivery-mode-changed(i); }
                         }
                     }
                     StackedSettingRow {

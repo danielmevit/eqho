@@ -510,6 +510,22 @@ pub fn engine_backend_key(idx: i32) -> &'static str {
     }
 }
 
+/// Map `Settings::delivery_mode` to the General tab `TabList` index (`0` = Batch, `1` = Live).
+#[must_use]
+pub fn delivery_mode_index(mode: &str) -> i32 {
+    if mode.trim().eq_ignore_ascii_case("live") {
+        1
+    } else {
+        0
+    }
+}
+
+/// Map the General tab `TabList` index back to a stored `Settings::delivery_mode` string.
+#[must_use]
+pub fn delivery_mode_key(idx: i32) -> &'static str {
+    if idx == 1 { "live" } else { "batch" }
+}
+
 /// Dynamic window title showing the active model (and live listening indicator when dictating).
 pub fn dashboard_window_title(model_key: &str, is_dictating: bool) -> String {
     let model = model_short_name(model_key);
@@ -543,6 +559,7 @@ pub fn apply_settings_to_window(
     window.set_format_cleanup(settings.format_cleanup);
     window.set_sound_feedback(settings.sound_feedback);
     window.set_history_enabled(settings.history_enabled);
+    window.set_delivery_mode_index(delivery_mode_index(&settings.delivery_mode));
     window.set_paste_mode_index(if settings.auto_paste { 0 } else { 1 });
 
     window.set_hardware_summary(hardware_summary_text(hw).into());
@@ -561,6 +578,8 @@ pub fn apply_settings_to_window(
     window.set_overlay_enabled(settings.overlay_enabled);
     window.set_overlay_show_text(settings.overlay_show_text);
     window.set_overlay_show_level(settings.overlay_show_level);
+    window.set_overlay_controls_enabled(settings.overlay_controls_enabled);
+    window.set_overlay_controls_pinned(settings.overlay_controls_pinned);
     window.set_overlay_monitor_index(overlay_monitor_index(&settings.overlay_monitor));
     window.set_overlay_position_index(overlay_position_index(&settings.overlay_position));
     window.set_overlay_pill_scale_pct((settings.overlay_pill_scale * 100.0).round() as i32);
@@ -595,4 +614,26 @@ pub fn apply_settings_to_window(
     window.set_onboarding_try_hint(
         format!("{how} Your words appear where your cursor is. Try it here:").into(),
     );
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn delivery_mode_index_and_key_normalize_case_and_fallback() {
+        assert_eq!(delivery_mode_index("batch"), 0);
+        assert_eq!(delivery_mode_index("BATCH"), 0);
+        assert_eq!(delivery_mode_index("live"), 1);
+        assert_eq!(delivery_mode_index("LIVE"), 1);
+        assert_eq!(delivery_mode_index("  LiVe  "), 1);
+        assert_eq!(delivery_mode_index(""), 0);
+        assert_eq!(delivery_mode_index("unknown"), 0);
+
+        assert_eq!(delivery_mode_key(0), "batch");
+        assert_eq!(delivery_mode_key(1), "live");
+        assert_eq!(delivery_mode_key(-1), "batch");
+        assert_eq!(delivery_mode_key(2), "batch");
+    }
 }

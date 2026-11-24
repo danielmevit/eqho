@@ -22,6 +22,8 @@ export component SettingsTab inherits Rectangle {
     in-out property <bool> overlay-enabled: true;
     in-out property <bool> overlay-show-text: true;
     in-out property <bool> overlay-show-level: true;
+    in-out property <bool> overlay-controls-enabled: true;
+    in-out property <bool> overlay-controls-pinned: false;
     in-out property <int> overlay-monitor-index: 0;
     in-out property <int> overlay-position-index: 0;
     in-out property <int> overlay-pill-scale-pct: 80;
@@ -44,6 +46,8 @@ export component SettingsTab inherits Rectangle {
     callback overlay-enabled-toggled(bool);
     callback overlay-show-text-toggled(bool);
     callback overlay-show-level-toggled(bool);
+    callback overlay-controls-enabled-toggled(bool);
+    callback overlay-controls-pinned-toggled(bool);
     callback overlay-monitor-selected(int);
     callback overlay-position-selected(int);
     callback overlay-pill-scale-changed(int);
@@ -228,6 +232,24 @@ export component SettingsTab inherits Rectangle {
                                 checked <=> root.overlay-show-level;
                                 accessible-name: "Audio Level Indicator";
                                 toggled(v) => { root.overlay-show-level-toggled(v); }
+                            }
+                        }
+                        CompactRow {
+                            label: "Show Pill Controls";
+                            help: "Hover the pill for quick cancel, language, and Batch/Live controls";
+                            Toggle {
+                                checked <=> root.overlay-controls-enabled;
+                                accessible-name: "Show Pill Controls";
+                                toggled(v) => { root.overlay-controls-enabled-toggled(v); }
+                            }
+                        }
+                        CompactRow {
+                            label: "Pin Pill Controls Open";
+                            help: "Keep the control bar visible below the pill without hovering";
+                            Toggle {
+                                checked <=> root.overlay-controls-pinned;
+                                accessible-name: "Pin Pill Controls Open";
+                                toggled(v) => { root.overlay-controls-pinned-toggled(v); }
                             }
                         }
                         StackedSettingRow {
@@ -420,6 +442,24 @@ export component SettingsTab inherits Rectangle {
                             checked <=> root.overlay-show-level;
                             accessible-name: "Audio Level Indicator";
                             toggled(v) => { root.overlay-show-level-toggled(v); }
+                        }
+                    }
+                    CompactRow {
+                        label: "Show Pill Controls";
+                        help: "Hover the pill for quick cancel, language, and Batch/Live controls";
+                        Toggle {
+                            checked <=> root.overlay-controls-enabled;
+                            accessible-name: "Show Pill Controls";
+                            toggled(v) => { root.overlay-controls-enabled-toggled(v); }
+                        }
+                    }
+                    CompactRow {
+                        label: "Pin Pill Controls Open";
+                        help: "Keep the control bar visible below the pill without hovering";
+                        Toggle {
+                            checked <=> root.overlay-controls-pinned;
+                            accessible-name: "Pin Pill Controls Open";
+                            toggled(v) => { root.overlay-controls-pinned-toggled(v); }
                         }
                     }
                     StackedSettingRow {

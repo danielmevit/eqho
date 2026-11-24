@@ -109,11 +109,12 @@ impl OverlayConfig {
             font_size: settings.overlay_font_size.clamp(10, 28),
             show_level: settings.overlay_show_level,
             dark_theme: resolved_dark,
-            controls_enabled: true,
-            controls_pinned: false,
-            delivery_mode: "batch".to_owned(),
+            controls_enabled: settings.overlay_controls_enabled,
+            controls_pinned: settings.overlay_controls_pinned,
+            delivery_mode: eqho_core::settings::normalize_delivery_mode(&settings.delivery_mode)
+                .to_owned(),
             language,
-            recent_languages: Vec::new(),
+            recent_languages: crate::underbar::sanitize_recent_languages(&settings.recent_languages),
         }
     }
 }
@@ -578,6 +579,37 @@ mod tests {
         assert_eq!(cfg.delivery_mode, "batch");
         assert_eq!(cfg.language, "en");
         assert!(cfg.recent_languages.is_empty());
+    }
+
+    #[test]
+    fn overlay_config_from_settings_maps_controls_delivery_and_recents() {
+        let s = Settings {
+            overlay_controls_enabled: false,
+            overlay_controls_pinned: true,
+            delivery_mode: "  LiVe  ".to_owned(),
+            language: " BG ".to_owned(),
+            recent_languages: vec![
+                " BG ".to_owned(),
+                "en".to_owned(),
+                "bg".to_owned(),
+                "   ".to_owned(),
+                "DE".to_owned(),
+            ],
+            ..Settings::default()
+        };
+
+        let cfg = OverlayConfig::from_settings(&s, true);
+        assert!(!cfg.controls_enabled);
+        assert!(cfg.controls_pinned);
+        assert_eq!(cfg.delivery_mode, "live");
+        assert_eq!(cfg.language, "bg");
+        assert_eq!(cfg.recent_languages, vec!["bg", "en", "de"]);
+
+        let fallback = Settings {
+            delivery_mode: "unknown-mode".to_owned(),
+            ..Settings::default()
+        };
+        assert_eq!(OverlayConfig::from_settings(&fallback, true).delivery_mode, "batch");
     }
 
     #[test]

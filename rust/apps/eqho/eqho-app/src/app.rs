@@ -7,7 +7,7 @@ use std::rc::Rc;
 #[cfg(feature = "store")]
 use std::rc::Weak as RcWeak;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -23,15 +23,18 @@ use eqho_core::vad::level_meter;
 use eqho_engine::{DictationCoordinator, UiEventSink};
 use eqho_host::downloader::download_ggml_model;
 use eqho_host::{ModelHost, ModelHostConfig};
-use eqho_overlay::{OverlayConfig, OverlayHandle};
+use eqho_overlay::{
+    FlagBitmapProvider, OverlayAction, OverlayActionCallback, OverlayConfig, OverlayHandle,
+};
 use eqho_platform::{AudioBackend, AudioDeviceInfo, AudioStreamHandle, ClipboardService, GpuProbe, MicPrivacyProbe};
 use eqho_ui::{
     DashboardWindow, EqhoTray, Theme, apply_settings_to_window, build_history_rows,
-    build_model_cards, build_onboarding_model_options, dashboard_window_title, engine_backend_key,
-    filter_history_entries, language_code_for_index, language_warning_text, model_short_name,
+    build_model_cards, build_onboarding_model_options, dashboard_window_title, delivery_mode_index,
+    delivery_mode_key, engine_backend_key, filter_history_entries, language_code_for_index,
+    language_index_for_code, language_warning_text, model_short_name,
     onboarding_model_copy_for_key, overlay_monitor_key, overlay_position_key,
-    parse_paste_rules_text, parse_replacements_text, split_model_cards, status_summary_title,
-    theme_mode_key, ui_scale_value, volume_duck_key,
+    parse_paste_rules_text, parse_replacements_text, render_flag_rgba, split_model_cards,
+    status_summary_title, theme_mode_key, ui_scale_value, volume_duck_key,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
@@ -317,11 +320,15 @@ impl AppUiSink {
 
 impl UiEventSink for AppUiSink {
     fn show_overlay(&self, text: &str) {
+        self.overlay.set_finishing(false);
         self.overlay.show(text);
         self.set_step6_hint(text);
     }
 
     fn update_overlay_text(&self, text: &str) {
+        if text == "Writing it down…" {
+            self.overlay.set_finishing(true);
+        }
         self.overlay.update_text(text);
         self.set_step6_hint(text);
     }
@@ -335,6 +342,7 @@ impl UiEventSink for AppUiSink {
     }
 
     fn hide_overlay(&self) {
+        self.overlay.set_finishing(false);
         self.overlay.hide();
         let dash_weak_opt = self
             .dash_weak
@@ -509,6 +517,41 @@ impl UiEventSink for AppUiSink {
                 dash.set_history_rows(ModelRc::new(VecModel::from(rows)));
             }
         });
+    }
+
+    fn on_settings_changed(&self, updated: &Settings) {
+        {
+            *self.settings.lock().unwrap_or_else(|e| e.into_inner()) = updated.clone();
+        }
+        self.overlay.update_session_meta(
+            &updated.language,
+            &updated.delivery_mode,
+            updated.overlay_controls_pinned,
+            updated.recent_languages.clone(),
+        );
+        let dash_weak_opt = self
+            .dash_weak
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(dash_weak) = dash_weak_opt {
+            let lang = updated.language.clone();
+            let model_size = updated.model_size.clone();
+            let delivery = updated.delivery_mode.clone();
+            let controls_enabled = updated.overlay_controls_enabled;
+            let controls_pinned = updated.overlay_controls_pinned;
+            let hw = self.hw_class;
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(dash) = dash_weak.upgrade() {
+                    dash.set_language_index(language_index_for_code(&lang));
+                    dash.set_language_warning(language_warning_text(&lang, &model_size, hw).into());
+                    dash.set_delivery_mode_index(delivery_mode_index(&delivery));
+                    dash.set_overlay_controls_enabled(controls_enabled);
+                    dash.set_overlay_controls_pinned(controls_pinned);
+                }
+            });
+        }
+        self.refresh_models_in_dash();
     }
 }
 
@@ -1238,9 +1281,11 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
             let model_size = {
                 let mut s = c.settings.lock().unwrap_or_else(|e| e.into_inner());
                 s.language = code.to_owned();
+                s.record_recent_language(code);
                 s.model_size.clone()
             };
             c.save_settings(false);
+            c.apply_theme_and_overlay();
             if let Some(d) = dash_w.upgrade() {
                 d.set_language_warning(language_warning_text(code, &model_size, c.hw_class).into());
             }
@@ -1290,6 +1335,18 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
                 .unwrap_or_else(|e| e.into_inner())
                 .history_enabled = v;
             c.save_settings(false);
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        dash.on_delivery_mode_changed(move |idx| {
+            let c = ctrl_w.borrow();
+            c.settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .delivery_mode = delivery_mode_key(idx).to_owned();
+            c.save_settings(false);
+            c.apply_theme_and_overlay();
         });
     }
     {
@@ -1579,6 +1636,30 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .overlay_show_level = v;
+            c.save_settings(false);
+            c.apply_theme_and_overlay();
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        dash.on_overlay_controls_enabled_toggled(move |v| {
+            let c = ctrl_w.borrow();
+            c.settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .overlay_controls_enabled = v;
+            c.save_settings(false);
+            c.apply_theme_and_overlay();
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        dash.on_overlay_controls_pinned_toggled(move |v| {
+            let c = ctrl_w.borrow();
+            c.settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .overlay_controls_pinned = v;
             c.save_settings(false);
             c.apply_theme_and_overlay();
         });
@@ -2161,9 +2242,80 @@ pub fn run_desktop_app(
         .is_light_taskbar()
         .unwrap_or(false);
 
-    let overlay = Arc::new(OverlayHandle::start(OverlayConfig::from_settings(
-        &settings, is_dark,
-    )));
+    let dash_weak: Arc<Mutex<Option<slint::Weak<DashboardWindow>>>> = Arc::new(Mutex::new(None));
+    let settings_arc = Arc::new(Mutex::new(settings.clone()));
+    let coord_slot: Arc<OnceLock<DictationCoordinator>> = Arc::new(OnceLock::new());
+    let overlay_slot: Arc<OnceLock<Arc<OverlayHandle>>> = Arc::new(OnceLock::new());
+
+    let on_action: OverlayActionCallback = {
+        let coord_slot = Arc::clone(&coord_slot);
+        let overlay_slot = Arc::clone(&overlay_slot);
+        let settings_arc = Arc::clone(&settings_arc);
+        let settings_path = paths.settings_path.clone();
+        let dash_weak = Arc::clone(&dash_weak);
+        let error_log = error_log.clone();
+        Arc::new(move |action| {
+            let coord_slot = Arc::clone(&coord_slot);
+            let overlay_slot = Arc::clone(&overlay_slot);
+            let settings_arc = Arc::clone(&settings_arc);
+            let settings_path = settings_path.clone();
+            let dash_weak = Arc::clone(&dash_weak);
+            let error_log = error_log.clone();
+            let _ = thread::Builder::new()
+                .name("eqho-overlay-action".into())
+                .spawn(move || {
+                    let Some(coord) = coord_slot.get().cloned() else {
+                        return;
+                    };
+                    match action {
+                        OverlayAction::Cancel => coord.cancel(),
+                        OverlayAction::Done => coord.deactivate(),
+                        OverlayAction::ToggleDeliveryMode(mode) => coord.set_delivery_mode(&mode),
+                        OverlayAction::SelectLanguage(code) => {
+                            let _ = coord.set_language_live(&code);
+                        }
+                        OverlayAction::TogglePin(pinned) => {
+                            let updated = {
+                                let mut s = settings_arc.lock().unwrap_or_else(|e| e.into_inner());
+                                s.overlay_controls_pinned = pinned;
+                                s.clone()
+                            };
+                            if let Err(err) = updated.save_to_path(&settings_path) {
+                                error_log.log_error("overlay_toggle_pin", &err);
+                            }
+                            coord.apply_settings(updated.clone(), false);
+                            if let Some(ov) = overlay_slot.get() {
+                                ov.update_session_meta(
+                                    &updated.language,
+                                    &updated.delivery_mode,
+                                    updated.overlay_controls_pinned,
+                                    updated.recent_languages.clone(),
+                                );
+                            }
+                            let dash_weak_opt = dash_weak
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .clone();
+                            if let Some(weak) = dash_weak_opt {
+                                let _ = slint::invoke_from_event_loop(move || {
+                                    if let Some(dash) = weak.upgrade() {
+                                        dash.set_overlay_controls_pinned(pinned);
+                                    }
+                                });
+                            }
+                        }
+                    }
+                });
+        })
+    };
+    let flag_provider: FlagBitmapProvider = Arc::new(render_flag_rgba);
+
+    let overlay = Arc::new(OverlayHandle::start_with_callbacks(
+        OverlayConfig::from_settings(&settings, is_dark),
+        Some(on_action),
+        Some(flag_provider),
+    ));
+    let _ = overlay_slot.set(Arc::clone(&overlay));
 
     let exe_path = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("Eqho"));
     let dll_dir = resolve_dll_dir(dll_dir_override.as_deref(), &exe_path);
@@ -2199,8 +2351,6 @@ pub fn run_desktop_app(
         hotkey: settings.hotkey.clone(),
         light_taskbar,
     }));
-    let dash_weak = Arc::new(Mutex::new(None));
-    let settings_arc = Arc::new(Mutex::new(settings.clone()));
 
     let ui_sink = Arc::new(AppUiSink {
         overlay: Arc::clone(&overlay),
@@ -2222,6 +2372,7 @@ pub fn run_desktop_app(
         Box::new(model_host),
         ui_sink.clone(),
     );
+    let _ = coord_slot.set(coordinator.clone());
 
     let hotkey_ok = if is_isolated {
         true

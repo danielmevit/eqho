@@ -63,6 +63,7 @@ export component DashboardWindow inherits Window {
     in-out property <bool> format-cleanup: true;
     in-out property <bool> sound-feedback: true;
     in-out property <bool> history-enabled: true;
+    in-out property <int> delivery-mode-index: 0;
     in-out property <int> paste-mode-index: 0;
 
     callback mic-selected(int);
@@ -76,6 +77,7 @@ export component DashboardWindow inherits Window {
     callback format-cleanup-toggled(bool);
     callback sound-feedback-toggled(bool);
     callback history-enabled-toggled(bool);
+    callback delivery-mode-changed(int);
     callback paste-mode-changed(int);
 
     // Models tab properties & callbacks
@@ -117,6 +119,8 @@ export component DashboardWindow inherits Window {
     in-out property <bool> overlay-enabled: true;
     in-out property <bool> overlay-show-text: true;
     in-out property <bool> overlay-show-level: true;
+    in-out property <bool> overlay-controls-enabled: true;
+    in-out property <bool> overlay-controls-pinned: false;
     in-out property <int> overlay-monitor-index: 0;
     in-out property <int> overlay-position-index: 0;
     in-out property <int> overlay-pill-scale-pct: 80;
@@ -136,6 +140,8 @@ export component DashboardWindow inherits Window {
     callback overlay-enabled-toggled(bool);
     callback overlay-show-text-toggled(bool);
     callback overlay-show-level-toggled(bool);
+    callback overlay-controls-enabled-toggled(bool);
+    callback overlay-controls-pinned-toggled(bool);
     callback overlay-monitor-selected(int);
     callback overlay-position-selected(int);
     callback overlay-pill-scale-changed(int);
@@ -296,6 +302,7 @@ export component DashboardWindow inherits Window {
                 format-cleanup <=> root.format-cleanup;
                 sound-feedback <=> root.sound-feedback;
                 history-enabled <=> root.history-enabled;
+                delivery-mode-index <=> root.delivery-mode-index;
                 paste-mode-index <=> root.paste-mode-index;
 
                 mic-selected(i) => { root.mic-selected(i); }
@@ -309,6 +316,7 @@ export component DashboardWindow inherits Window {
                 format-cleanup-toggled(b) => { root.format-cleanup-toggled(b); }
                 sound-feedback-toggled(b) => { root.sound-feedback-toggled(b); }
                 history-enabled-toggled(b) => { root.history-enabled-toggled(b); }
+                delivery-mode-changed(i) => { root.delivery-mode-changed(i); }
                 paste-mode-changed(i) => { root.paste-mode-changed(i); }
             }
 
@@ -361,6 +369,8 @@ export component DashboardWindow inherits Window {
                 overlay-enabled <=> root.overlay-enabled;
                 overlay-show-text <=> root.overlay-show-text;
                 overlay-show-level <=> root.overlay-show-level;
+                overlay-controls-enabled <=> root.overlay-controls-enabled;
+                overlay-controls-pinned <=> root.overlay-controls-pinned;
                 overlay-monitor-index <=> root.overlay-monitor-index;
                 overlay-position-index <=> root.overlay-position-index;
                 overlay-pill-scale-pct <=> root.overlay-pill-scale-pct;
@@ -382,6 +392,8 @@ export component DashboardWindow inherits Window {
                 overlay-enabled-toggled(b) => { root.overlay-enabled-toggled(b); }
                 overlay-show-text-toggled(b) => { root.overlay-show-text-toggled(b); }
                 overlay-show-level-toggled(b) => { root.overlay-show-level-toggled(b); }
+                overlay-controls-enabled-toggled(b) => { root.overlay-controls-enabled-toggled(b); }
+                overlay-controls-pinned-toggled(b) => { root.overlay-controls-pinned-toggled(b); }
                 overlay-monitor-selected(i) => { root.overlay-monitor-selected(i); }
                 overlay-position-selected(i) => { root.overlay-position-selected(i); }
                 overlay-pill-scale-changed(v) => { root.overlay-pill-scale-changed(v); }
