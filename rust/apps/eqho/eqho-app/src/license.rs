@@ -26,10 +26,14 @@ use serde::{Deserialize, Serialize};
 /// Compile-time flag indicating whether the `store` Cargo feature is enabled.
 pub const STORE_FEATURE_ENABLED: bool = cfg!(feature = "store");
 
-/// Placeholder Microsoft Store product ID for `StoreContext::RequestPurchaseAsync`.
+/// Microsoft Store product ID for `StoreContext::RequestPurchaseAsync`.
 ///
-/// Replace this with Eqho's reserved Partner Center Store ID before building the Store `.msix` release.
-pub const STORE_ID: &str = "9NBLGGH4XXXX";
+/// Override at compile time via `EQHO_STORE_ID` when building a Microsoft Store `.msix` release;
+/// defaults to the safe placeholder `"9NBLGGH4XXXX"` when unset or empty.
+pub const STORE_ID: &str = match option_env!("EQHO_STORE_ID") {
+    Some(id) if !id.is_empty() => id,
+    _ => "9NBLGGH4XXXX",
+};
 
 /// Periodic Store license re-check cadence (4 hours).
 pub const LICENSE_RECHECK_INTERVAL: Duration = Duration::from_secs(4 * 60 * 60);

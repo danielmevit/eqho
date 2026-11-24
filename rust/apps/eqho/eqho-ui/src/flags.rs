@@ -455,18 +455,34 @@ fn flag_cache() -> &'static Mutex<HashMap<String, Vec<u8>>> {
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+fn cached_flag_rgba(key: &str) -> Vec<u8> {
+    let mut map = flag_cache().lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(cached) = map.get(key) {
+        cached.clone()
+    } else {
+        let rendered = rasterize_svg_rgba(&flag_svg(key));
+        map.insert(key.to_owned(), rendered.clone());
+        rendered
+    }
+}
+
+/// Render a crisp 4× HiDPI (`84×56`) straight RGBA8 vector-SVG country flag for a supported
+/// Whisper language code (or `"pt-br"`), returning `None` for empty or unknown codes.
+#[must_use]
+pub fn render_flag_rgba(code: &str) -> Option<(u32, u32, Vec<u8>)> {
+    let key = code.trim().to_ascii_lowercase();
+    if key.is_empty()
+        || (key != "pt-br" && eqho_core::settings::supported_language_name(&key).is_none())
+    {
+        return None;
+    }
+    Some((FLAG_W, FLAG_H, cached_flag_rgba(&key)))
+}
+
 /// Render a crisp 4× HiDPI (`84×56`) vector-SVG country flag `slint::Image` for a Whisper language code.
 pub fn flag_image_for_language(code: &str) -> Image {
-    let rgba = {
-        let mut map = flag_cache().lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(cached) = map.get(code) {
-            cached.clone()
-        } else {
-            let rendered = rasterize_svg_rgba(&flag_svg(code));
-            map.insert(code.to_owned(), rendered.clone());
-            rendered
-        }
-    };
+    let key = code.trim().to_ascii_lowercase();
+    let rgba = cached_flag_rgba(&key);
     let buf = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&rgba, FLAG_W, FLAG_H);
     Image::from_rgba8(buf)
 }
@@ -489,5 +505,20 @@ mod tests {
             let mid = ((FLAG_H / 2) * FLAG_W + (FLAG_W / 2)) as usize * 4;
             assert_eq!(rgba[mid + 3], 255, "opaque center for {}", entry.code);
         }
+    }
+
+    #[test]
+    fn render_flag_rgba_validates_normalizes_and_caches() {
+        let expected_len = (FLAG_W * FLAG_H * 4) as usize;
+        for code in ["en", "BG", "de", "pt-br"] {
+            let (w, h, bytes) = render_flag_rgba(code)
+                .unwrap_or_else(|| panic!("expected flag bitmap for {code}"));
+            assert_eq!(w, FLAG_W);
+            assert_eq!(h, FLAG_H);
+            assert_eq!(bytes.len(), expected_len);
+        }
+        assert!(render_flag_rgba("not-a-lang").is_none());
+        assert!(render_flag_rgba("").is_none());
+        assert!(render_flag_rgba("   ").is_none());
     }
 }
