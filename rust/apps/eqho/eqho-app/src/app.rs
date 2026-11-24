@@ -50,7 +50,7 @@ use crate::license::{
 };
 use crate::paths::{RuntimePaths, resolve_dll_dir, resolve_runtime_paths, resolve_theme_is_dark};
 
-const SINGLE_INSTANCE_ID: &str = "xyz.damt.eqho.rust09";
+const SINGLE_INSTANCE_ID: &str = "xyz.damt.eqho";
 
 #[cfg(all(windows, feature = "store"))]
 const STARTUP_TASK_ID: &str = "EqhoStartup";
@@ -68,7 +68,7 @@ type DamtPlatformImpl = damt_platform::Unsupported;
 fn build_damt_platform(is_isolated: bool, error_log: &ErrorLog) -> DamtPlatformImpl {
     #[cfg(windows)]
     {
-        let mut win_platform = damt_platform_win::WinPlatform::new("Eqho-Rust-0.9");
+        let mut win_platform = damt_platform_win::WinPlatform::new("Eqho");
         #[cfg(feature = "store")]
         {
             win_platform = win_platform.with_startup_task_id(STARTUP_TASK_ID);
@@ -76,8 +76,8 @@ fn build_damt_platform(is_isolated: bool, error_log: &ErrorLog) -> DamtPlatformI
         if !is_isolated {
             let notifier = damt_platform_win::WinNotifier::new(
                 SINGLE_INSTANCE_ID,
-                "Eqho (0.9 Dev)",
-                "Eqho-Rust-0.9",
+                "Eqho",
+                "Eqho",
                 crate::assets::LOGO_32_WHITE,
             );
             win_platform = win_platform.with_notifier(notifier);

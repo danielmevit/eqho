@@ -2,15 +2,15 @@ name: Rust Windows Build & Clean-PC DLLs
 
 on:
   push:
-    branches: ["rust-0.9"]
+    branches: ["dev", "main", "rust-0.9"]
   pull_request:
-    branches: ["rust-0.9"]
+    branches: ["dev", "main", "rust-0.9"]
   workflow_dispatch:
     inputs:
       dev_isolated:
         description: "Build with isolated dev installer AppId (Eqho-Rust-0.9)"
         required: false
-        default: true
+        default: false
         type: boolean
 
 jobs:
@@ -79,7 +79,7 @@ jobs:
         shell: pwsh
         run: |
           $argsList = @("-DllDir", "$env:RUNNER_TEMP\whisper-dlls")
-          if ("${{ inputs.dev_isolated }}" -ne "false") {
+          if ("${{ inputs.dev_isolated }}" -eq "true") {
             $argsList += "-DevIsolated"
           }
           powershell -ExecutionPolicy Bypass -File packaging\windows\build-rust.ps1 @argsList

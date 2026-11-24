@@ -7,7 +7,7 @@
 ; downloaded GGML speech models are never deleted on uninstall.
 
 #ifndef AppVersion
-  #define AppVersion "0.9.0-dev"
+  #define AppVersion "0.9.0"
 #endif
 #ifndef DistDir
   #define DistDir "..\..\dist\Eqho"

@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-/// Isolated dev config folder name during `0.9.x` development.
-pub const DEV_CONFIG_DIR_NAME: &str = "Eqho-Rust-0.9";
+/// Default per-user config folder name (`%APPDATA%\Eqho` on Windows).
+pub const DEFAULT_CONFIG_DIR_NAME: &str = "Eqho";
 
 pub const HOTKEY_MODES: [&str; 2] = ["toggle", "hold"];
 
@@ -697,8 +697,7 @@ fn coerce_recent_languages(val: &Value) -> Vec<String> {
     out
 }
 
-/// Resolve the isolated dev config directory (`Eqho-Rust-0.9`), respecting
-/// `EQHO_CONFIG_DIR`.
+/// Resolve the per-user config directory (`Eqho`), respecting `EQHO_CONFIG_DIR`.
 pub fn resolve_config_dir() -> PathBuf {
     if let Ok(env_dir) = std::env::var("EQHO_CONFIG_DIR")
         && !env_dir.is_empty()
@@ -711,7 +710,7 @@ pub fn resolve_config_dir() -> PathBuf {
         if let Ok(appdata) = std::env::var("APPDATA")
             && !appdata.is_empty()
         {
-            return PathBuf::from(appdata).join(DEV_CONFIG_DIR_NAME);
+            return PathBuf::from(appdata).join(DEFAULT_CONFIG_DIR_NAME);
         }
         if let Ok(profile) = std::env::var("USERPROFILE")
             && !profile.is_empty()
@@ -719,9 +718,9 @@ pub fn resolve_config_dir() -> PathBuf {
             return PathBuf::from(profile)
                 .join("AppData")
                 .join("Roaming")
-                .join(DEV_CONFIG_DIR_NAME);
+                .join(DEFAULT_CONFIG_DIR_NAME);
         }
-        PathBuf::from(".").join(DEV_CONFIG_DIR_NAME)
+        PathBuf::from(".").join(DEFAULT_CONFIG_DIR_NAME)
     }
 
     #[cfg(target_os = "macos")]
@@ -732,9 +731,9 @@ pub fn resolve_config_dir() -> PathBuf {
             return PathBuf::from(home)
                 .join("Library")
                 .join("Application Support")
-                .join(DEV_CONFIG_DIR_NAME);
+                .join(DEFAULT_CONFIG_DIR_NAME);
         }
-        PathBuf::from(".").join(DEV_CONFIG_DIR_NAME)
+        PathBuf::from(".").join(DEFAULT_CONFIG_DIR_NAME)
     }
 
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -742,14 +741,16 @@ pub fn resolve_config_dir() -> PathBuf {
         if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME")
             && !xdg.is_empty()
         {
-            return PathBuf::from(xdg).join(DEV_CONFIG_DIR_NAME);
+            return PathBuf::from(xdg).join(DEFAULT_CONFIG_DIR_NAME);
         }
         if let Ok(home) = std::env::var("HOME")
             && !home.is_empty()
         {
-            return PathBuf::from(home).join(".config").join(DEV_CONFIG_DIR_NAME);
+            return PathBuf::from(home)
+                .join(".config")
+                .join(DEFAULT_CONFIG_DIR_NAME);
         }
-        PathBuf::from(".").join(DEV_CONFIG_DIR_NAME)
+        PathBuf::from(".").join(DEFAULT_CONFIG_DIR_NAME)
     }
 }
 

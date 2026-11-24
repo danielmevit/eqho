@@ -57,8 +57,8 @@ foreach ($required in @("whisper.dll", "ggml.dll", "ggml-base.dll", "ggml-vulkan
 }
 
 Write-Host "Running Eqho.exe --smoke gate..." -ForegroundColor Cyan
-& (Join-Path $BundleDir "Eqho.exe") --smoke
-if ($LASTEXITCODE -ne 0) { throw "Eqho.exe --smoke failed with exit code $LASTEXITCODE" }
+$SmokeProc = Start-Process -FilePath (Join-Path $BundleDir "Eqho.exe") -ArgumentList "--smoke" -NoNewWindow -Wait -PassThru
+if ($SmokeProc.ExitCode -ne 0) { throw "Eqho.exe --smoke failed with exit code $($SmokeProc.ExitCode)" }
 
 $ZipPath = Join-Path $DistRoot "Eqho-portable-$Version-win-x64.zip"
 if (Test-Path $ZipPath) { Remove-Item -Force $ZipPath }
