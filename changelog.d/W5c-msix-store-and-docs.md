@@ -1,0 +1,2 @@
+- Added Eqho's Microsoft Store MSIX packaging pipeline (`packaging/windows/AppxManifest.xml`, pure-ASCII `build_msix.ps1`, `generate_assets.py` + 48 deterministic PNG logo assets).
+- Updated `README.md`, `docs/ai/START_HERE.md`, `docs/rust/RELEASE.md`, `CHANGELOG.md`, `site/` (`index.astro`, `changelog.astro`, `llms.txt`), and `packaging/winget/*.yaml` for Eqho `0.9.0`.

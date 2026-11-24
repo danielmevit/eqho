@@ -1,0 +1,19 @@
+[package]
+name = "eqho-platform-win"
+description = "Windows implementations of Eqho OS-service contracts (DXGI, AVX2, memory, mic privacy, COM volume ducking, private Win32 clipboard, SendInput, WH_KEYBOARD_LL hotkeys, WASAPI audio)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+damt-platform.workspace = true
+eqho-platform.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
+
+[lints]
+workspace = true

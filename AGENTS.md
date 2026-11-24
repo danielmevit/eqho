@@ -16,6 +16,7 @@
 |------|------|
 | START_HERE.md | Orientation, current priority, how to run |
 | DESIGN_SYSTEM.md | Design tokens, layout laws, theming |
+| BRAND_STYLE_GUIDE.md | Brand rules, accent-only semantic colors (no full-fill warning/status boxes), icon/SVG & Store UI laws |
 | DECISIONS.md | Durable "why" choices |
 | GOTCHAS.md | Build/run/env traps, known bugs |
 

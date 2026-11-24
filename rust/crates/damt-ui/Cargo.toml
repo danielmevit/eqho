@@ -1,0 +1,17 @@
+[package]
+name = "damt-ui"
+description = "App-neutral Slint component kit (buttons, card, toggle, number field, setting rows) for damt.xyz apps."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+slint-interpreter.workspace = true
+spin_on.workspace = true
+
+[lints]
+workspace = true

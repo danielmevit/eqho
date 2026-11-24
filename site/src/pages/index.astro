@@ -1,10 +1,13 @@
 ---
 const title = "Eqho — Free Offline Dictation. Speak, It Types.";
-const description = "Free, open-source dictation for Windows, Linux and macOS. Press a hotkey, speak, and your words appear in any app. 100% offline — your voice never leaves your computer. Fast on NVIDIA, AMD and Intel graphics cards on Windows, runs on the CPU on any PC.";
+const description = "Free, open-source dictation for Windows, Linux and macOS. Press a hotkey, speak, and your words appear in any app. 100% offline — your voice never leaves your computer. Rebuilt in Rust (~13 MB installer, ~3.4 MB idle RAM) with fast local Vulkan GPU and multi-core CPU transcription.";
+const version = "0.9.0";
 const author = "Daniel Mevit";
 const year = 2026;
 const releasesUrl = "https://github.com/danielmevit/eqho/releases";
 const latestUrl = "https://github.com/danielmevit/eqho/releases/latest";
+const winExeUrl = `https://github.com/danielmevit/eqho/releases/download/v${version}/Eqho-Setup-${version}-win-x64.exe`;
+const winZipUrl = `https://github.com/danielmevit/eqho/releases/download/v${version}/Eqho-portable-${version}-win-x64.zip`;
 ---
 <!DOCTYPE html>
 <html lang="en">
@@ -32,7 +35,7 @@ const latestUrl = "https://github.com/danielmevit/eqho/releases/latest";
     />
 
     <meta name="description" content={description} />
-    <meta name="keywords" content="speech to text, voice to text, dictation software, offline speech recognition, free dictation app, voice typing for Windows, OpenAI Whisper app, whisper.cpp GUI, faster-whisper GUI, Vulkan speech to text, AMD GPU dictation, AMD Radeon voice to text, Intel Arc dictation, cross-vendor GPU transcription, private speech to text, local voice recognition, no-cloud transcription" />
+    <meta name="keywords" content="speech to text, voice to text, dictation software, offline speech recognition, free dictation app, voice typing for Windows, OpenAI Whisper app, whisper.cpp GUI, Rust dictation app, Vulkan speech to text, AMD GPU dictation, AMD Radeon voice to text, Intel Arc dictation, cross-vendor GPU transcription, private speech to text, local voice recognition, no-cloud transcription" />
     <meta name="author" content={author} />
 
     <!-- Inter Font -->
@@ -56,15 +59,15 @@ const latestUrl = "https://github.com/danielmevit/eqho/releases/latest";
         "name": "Eqho",
         "applicationCategory": "UtilitiesApplication",
         "operatingSystem": "Windows 10 (64-bit), Windows 11 (64-bit), macOS, Linux",
-        "description": "Free, offline voice-to-text dictation powered by OpenAI's Whisper. Press a hotkey, speak, and your words appear in any app — 100% local, fast on NVIDIA, AMD and Intel graphics cards on Windows, and running on the processor on any PC.",
+        "description": "Free, offline voice-to-text dictation powered by Whisper (whisper.cpp). Press a hotkey, speak, and your words appear in any app — 100% local, rebuilt in Rust (~13 MB Windows installer, ~3.4 MB idle RAM), fast on NVIDIA, AMD and Intel graphics cards via Vulkan and on multi-core CPUs with compact Q5 models.",
         "url": "https://danielmevit.github.io/eqho/",
-        "downloadUrl": "https://github.com/danielmevit/eqho/releases",
-        "softwareVersion": "0.8.11",
+        "downloadUrl": "https://github.com/danielmevit/eqho/releases/download/v0.9.0/Eqho-Setup-0.9.0-win-x64.exe",
+        "softwareVersion": "0.9.0",
         "author": { "@type": "Person", "name": "Daniel Mevit", "url": "https://github.com/danielmevit" },
         "license": "https://www.gnu.org/licenses/agpl-3.0.html",
         "isAccessibleForFree": true,
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-        "keywords": "speech to text, voice typing, offline dictation, OpenAI Whisper, whisper.cpp, faster-whisper, Vulkan speech to text, AMD GPU dictation, cross-vendor GPU transcription, private speech to text, local voice recognition"
+        "keywords": "speech to text, voice typing, offline dictation, OpenAI Whisper, whisper.cpp, Rust dictation app, Vulkan speech to text, AMD GPU dictation, cross-vendor GPU transcription, private speech to text, local voice recognition"
       }
     </script>
 
@@ -307,18 +310,18 @@ const latestUrl = "https://github.com/danielmevit/eqho/releases/latest";
 
     <header class="hero">
       <div class="wrap">
-        <span class="eyebrow">Free · Open source · 100% offline</span>
+        <span class="eyebrow">Free · Open source · 100% offline · Native Rust</span>
         <h1>Speak.<br /><span class="accent">It types.</span></h1>
         <p class="sub">
           Eqho turns your voice into text in any app on your computer —
-          email, documents, chat, code. No subscription, no account,
-          and your voice never leaves your machine.
+          email, documents, chat, code. Rebuilt in Rust for instant startup,
+          tiny memory use, and complete privacy on your own machine.
         </p>
         <div class="cta-row">
-          <a class="btn big" id="dl-hero" href={latestUrl}>⬇&nbsp; Download for Windows</a>
+          <a class="btn big" id="dl-hero" href={winExeUrl}>⬇&nbsp; Download for Windows</a>
           <a class="btn big ghost" href="#downloads">All downloads</a>
         </div>
-        <p class="cta-note">Also available for Linux and macOS · <span class="rel-version">latest release</span></p>
+        <p class="cta-note"><span class="rel-version">Eqho {version}</span> · ~13 MB Windows installer · ~3.4 MB idle RAM · Also for Linux and macOS</p>
 
         <!-- The actual overlay, recreated: your words fill the panel while the pill listens -->
         <div class="overlay-demo" aria-hidden="true">
@@ -342,12 +345,12 @@ const latestUrl = "https://github.com/danielmevit/eqho/releases/latest";
             <div class="step">
               <div class="num">2</div>
               <h3>Press <kbd>Alt</kbd> + <kbd>Q</kbd> and talk</h3>
-              <p>A small pill appears and listens. Watch your words show up live as you speak. The hotkey is yours to change.</p>
+              <p>A small pill appears and listens — hover or pin its micro-bar for quick controls, and choose Batch or Live delivery. The hotkey is yours to change.</p>
             </div>
             <div class="step">
               <div class="num">3</div>
               <h3>Press it again — done</h3>
-              <p>Your words are typed into the app, cleaned up and capitalized. Say "period" or "new line" if you like dictating punctuation.</p>
+              <p>Your words land cleanly in the focused app, formatted and capitalized. Say "period" or "new line" if you like dictating punctuation.</p>
             </div>
           </div>
         </div>
@@ -366,17 +369,17 @@ const latestUrl = "https://github.com/danielmevit/eqho/releases/latest";
             <div class="card">
               <div class="icon">💸</div>
               <h3>Free, with no catch</h3>
-              <p>No trial, no word limits, no premium tier. Eqho is open source — anyone can read the code and verify every promise on this page.</p>
+              <p>Direct downloads and source builds are 100% free and open source under AGPL-3.0 — no word limits, no subscription. An optional Microsoft Store edition with a 15-day trial is also available.</p>
             </div>
             <div class="card">
               <div class="icon">⚡</div>
-              <h3>Fast on any machine</h3>
-              <p>On Windows, NVIDIA, AMD and Intel graphics cards make transcription fast. Without one — or on Linux and macOS — it runs on the processor: slower, but no graphics card required, and a smaller model is quicker.</p>
+              <h3>Native speed on any PC</h3>
+              <p>Starts in ~38 ms and idles at ~3.4 MB RAM. Runs fast on NVIDIA, AMD and Intel graphics cards via Vulkan — or across all CPU cores with compact Q5 models on PCs without a GPU.</p>
             </div>
             <div class="card">
               <div class="icon">🌍</div>
               <h3>99 languages, honestly tiered</h3>
-              <p>13 hand-tuned for dictation, 20 more with strong accuracy — and the rest of Whisper's 99 available too, clearly marked experimental. No overselling.</p>
+              <p>13 hand-tuned for dictation, 20 more with strong accuracy — and the rest of Whisper's 99 available too with crisp vector flags, clearly marked experimental.</p>
             </div>
           </div>
         </div>
@@ -387,12 +390,12 @@ const latestUrl = "https://github.com/danielmevit/eqho/releases/latest";
           <h2>The listening pill</h2>
           <p class="lede">
             When Eqho hears you, you'll know — the pill breathes and ripples with your voice,
-            and settles when you pause. It follows your theme, light or dark.
+            reveals compact controls on hover (or pinned), and follows your theme, light or dark.
           </p>
           <div class="duo">
             <div class="world dark">
               <img src="assets/pill_dark.webp" alt="Eqho's listening pill in dark theme — flowing blue waves" loading="lazy" />
-              <p>Dark theme — deep blues that ride every word.</p>
+              <p>Dark theme — Deep Navy Blend with deep blues that ride every word.</p>
             </div>
             <div class="world light">
               <img src="assets/pill_light.webp" alt="Eqho's listening pill in light theme — soft blue waves on pearl" loading="lazy" />
@@ -419,16 +422,16 @@ const latestUrl = "https://github.com/danielmevit/eqho/releases/latest";
       <section id="downloads">
         <div class="wrap">
           <h2>Download Eqho</h2>
-          <p class="lede">Version <span class="rel-version">latest</span> · free under the AGPL-3.0 open-source license.</p>
+          <p class="lede"><span class="rel-version">Eqho {version}</span> · free under the AGPL-3.0 open-source license.</p>
           <div class="dl-grid">
             <div class="dl-card">
               <div class="os">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.1 10.6 4v7.5H3V5.1zm0 13.8 7.6 1.1v-7.4H3v6.3zM11.4 3.9 21 2.5v9H11.4V3.9zm0 16.2 9.6 1.4v-9H11.4v7.6z"/></svg>
-                <h3>Windows <small>Windows 10 / 11, 64-bit</small></h3>
+                <h3>Windows <small>Windows 10 / 11, 64-bit · Rust {version}</small></h3>
               </div>
               <div class="dl-links">
-                <a class="primary" id="dl-win-exe" href={latestUrl}><span>Installer (.exe)</span><span class="tag">recommended</span></a>
-                <a id="dl-win-zip" href={latestUrl}><span>Portable (.zip)</span><span class="tag">no install</span></a>
+                <a class="primary" id="dl-win-exe" href={winExeUrl}><span>Installer (.exe)</span><span class="tag">~13 MB · recommended</span></a>
+                <a id="dl-win-zip" href={winZipUrl}><span>Portable (.zip)</span><span class="tag">no install</span></a>
               </div>
             </div>
             <div class="dl-card">
@@ -456,6 +459,7 @@ const latestUrl = "https://github.com/danielmevit/eqho/releases/latest";
             Unsigned builds show a security prompt on first run — that's normal for
             independent open-source apps (<a href="https://github.com/danielmevit/eqho#platform-notes">how to get past it</a>).
             Prefer a package manager? <code>winget install eqho</code> ·
+            Optional Store-signed edition with a 15-day free trial via Microsoft Store ·
             All versions on the <a href={releasesUrl}>releases page</a>.
           </p>
         </div>
@@ -468,19 +472,19 @@ const latestUrl = "https://github.com/danielmevit/eqho/releases/latest";
           <div class="faq">
             <details>
               <summary>Is my voice really never uploaded?</summary>
-              <p>Really. Transcription runs on your own processor or graphics card, using state-of-the-art open speech models (OpenAI's Whisper family). Eqho touches the network exactly once: to download the voice model you pick. The code is open — you can check.</p>
+              <p>Really. Transcription runs on your own processor or graphics card, using state-of-the-art open speech models (OpenAI's Whisper family via whisper.cpp). Eqho touches the network only when you download a voice model. The code is open — you can check.</p>
             </details>
             <details>
               <summary>What's the catch? Why is it free?</summary>
-              <p>No catch. Eqho is an open-source project licensed under AGPL-3.0. There is no premium tier, no trial clock, and no word counter.</p>
+              <p>No catch. Direct downloads from GitHub Releases, winget, and source builds are 100% free and open source under AGPL-3.0, with no trial clock, no word counter, and zero licensing code. If you prefer Microsoft Store delivery with automatic updates or want to support development, an optional Store edition includes a 15-day free trial.</p>
             </details>
             <details>
               <summary>How accurate is it?</summary>
-              <p>Whisper-class accuracy — the same model family used by professional transcription services. You choose the trade-off: smaller models are faster, bigger ones are more accurate. The default is a sweet spot for everyday English.</p>
+              <p>Whisper-class accuracy — the same model family used by professional transcription services. You choose the trade-off: compact Q5 models (from 60&nbsp;MB) are fast even on a laptop CPU, while larger models handle tougher audio and accents.</p>
             </details>
             <details>
               <summary>What do I need to run it?</summary>
-              <p>A 64-bit computer running Windows 10/11, Linux (X11) or macOS, and about 2&nbsp;GB of disk for the app plus your chosen voice model. A graphics card makes it faster (NVIDIA, AMD or Intel on Windows) but isn't required.</p>
+              <p>A 64-bit computer running Windows 10/11 (the native Rust build is ~13&nbsp;MB with no VC++ Redistributable required), Linux (X11), or macOS, plus disk space for your chosen voice model (60&nbsp;MB to 1.5&nbsp;GB). A graphics card makes it faster (NVIDIA, AMD or Intel on Windows via Vulkan) but isn't required.</p>
             </details>
           </div>
         </div>
@@ -491,7 +495,7 @@ const latestUrl = "https://github.com/danielmevit/eqho/releases/latest";
       <div class="wrap">
         <div>
           © {year} <a href="https://damt.xyz">Daniel Mevit · damt.xyz</a> ·
-          <span class="rel-version">Eqho</span> · AGPL-3.0
+          <span class="rel-version">Eqho {version}</span> · AGPL-3.0
         </div>
         <div class="foot-links">
           <a href="https://github.com/danielmevit/eqho">GitHub</a>
@@ -503,7 +507,7 @@ const latestUrl = "https://github.com/danielmevit/eqho/releases/latest";
     </footer>
 
     <!-- Progressive enhancement: point download buttons at the newest release
-         assets. Static fallbacks (the releases page) work without JS. -->
+         assets. Static fallbacks work without JS. -->
     <script is:inline>
       (function () {
         var pick = {
@@ -530,7 +534,7 @@ const latestUrl = "https://github.com/danielmevit/eqho/releases/latest";
               });
             }
           })
-          .catch(function () { /* fallbacks already point at the releases page */ });
+          .catch(function () { /* fallbacks already point at release assets */ });
       })();
     </script>
   </body>

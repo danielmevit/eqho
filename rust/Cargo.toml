@@ -1,0 +1,114 @@
+# Eqho 0.9.x Rust workspace (see docs/rust/PLAN.md).
+[workspace]
+resolver = "3"
+members = [
+    "crates/damt-app",
+    "crates/damt-build",
+    "crates/damt-platform",
+    "crates/damt-platform-win",
+    "crates/damt-theme",
+    "crates/damt-ui",
+    "apps/eqho/eqho-core",
+    "apps/eqho/eqho-platform",
+    "apps/eqho/eqho-platform-win",
+    "apps/eqho/eqho-host",
+    "apps/eqho/eqho-engine",
+    "apps/eqho/eqho-overlay",
+    "apps/eqho/eqho-ui",
+    "apps/eqho/eqho-app",
+    "apps/eqho/eqho-spike",
+]
+
+[workspace.package]
+version = "0.9.0"
+edition = "2024"
+rust-version = "1.95"
+license = "AGPL-3.0-only"
+authors = ["Daniel Mitev (Daniel Mevit)"]
+repository = "https://github.com/danielmevit/eqho"
+
+[workspace.dependencies]
+damt-app = { path = "crates/damt-app" }
+damt-build = { path = "crates/damt-build" }
+damt-platform = { path = "crates/damt-platform" }
+damt-platform-win = { path = "crates/damt-platform-win" }
+damt-theme = { path = "crates/damt-theme" }
+damt-ui = { path = "crates/damt-ui" }
+eqho-core = { path = "apps/eqho/eqho-core" }
+eqho-platform = { path = "apps/eqho/eqho-platform" }
+eqho-platform-win = { path = "apps/eqho/eqho-platform-win" }
+eqho-host = { path = "apps/eqho/eqho-host" }
+eqho-engine = { path = "apps/eqho/eqho-engine" }
+eqho-overlay = { path = "apps/eqho/eqho-overlay" }
+eqho-ui = { path = "apps/eqho/eqho-ui" }
+embed-manifest = "=1.5.1"
+i-slint-backend-testing = "=1.19.0"
+jiff = { version = "=1.0.1", features = ["serde"] }
+libloading = "=0.8.9"
+png = "=0.18.1"
+proptest = "=1.12.0"
+raw-window-handle = "=0.6.2"
+regex = "=1.13.2"
+resvg = "=0.49.0"
+roxmltree = "=0.21.2"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+slint = { version = "=1.19.0", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-software", "raw-window-handle-06", "system-tray", "unstable-winit-030", "accessibility"] }
+slint-build = "=1.19.0"
+slint-interpreter = { version = "=1.19.0", default-features = false, features = ["std", "compat-1-18"] }
+spin_on = "=0.1.1"
+thiserror = "=2.0.21"
+toml = "=1.2.1"
+windows = { version = "=0.62.2", features = [
+    "Data_Xml_Dom",
+    "UI_Notifications",
+    "Win32_Devices_FunctionDiscovery",
+    "Win32_Foundation",
+    "Win32_Graphics_DirectWrite",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Gdi",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+    "Win32_Media_KernelStreaming",
+    "Win32_Networking_WinHttp",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Console",
+    "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Power",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Registry",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_PropertiesSystem",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+# Slim debug info so per-worker target dirs stay ~2-3 GB instead of 20+ GB.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+strip = true
+panic = "abort"

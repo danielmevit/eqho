@@ -1,0 +1,15 @@
+[package]
+name = "eqho-platform"
+description = "FROZEN Eqho OS-service contracts: audio capture, volume ducking, global hotkeys, private clipboard, input injection, GPU/memory/mic-privacy probes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+damt-platform.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

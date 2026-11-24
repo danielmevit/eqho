@@ -1,0 +1,39 @@
+// Shared Slint data structs for Eqho Dashboard & Models / History views.
+
+export struct ModelCardItem {
+    key: string,
+    name: string,
+    detail: string,
+    recommendation: string,
+    is_english_only: bool,
+    is_selected: bool,
+    is_cached: bool,
+    is_downloading: bool,
+    has_error: bool,
+    progress: float,
+    status_text: string,
+    download_detail: string,
+}
+
+export struct HistoryRowItem {
+    ts_key: string,
+    timestamp_text: string,
+    meta_text: string,
+    text: string,
+}
+
+export struct LanguageOption {
+    label: string,
+    flag: image,
+}
+
+export struct OnboardingModelOption {
+    key: string,
+    name: string,
+    size_label: string,
+    tagline: string,
+    browse_url: string,
+    is_recommended: bool,
+    is_selected: bool,
+    is_cached: bool,
+}

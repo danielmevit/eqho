@@ -1,0 +1,11 @@
+[package]
+name = "damt-build"
+description = "Build-script helpers: a pure-Rust Windows resource (COFF .rsrc) writer for manifests, icons, and version info."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true

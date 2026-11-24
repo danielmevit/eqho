@@ -1,0 +1,42 @@
+Eqho — Third-Party Software Notices
+====================================
+
+Eqho itself is licensed under the GNU Affero General Public License v3.0
+(see LICENSE). The Rust 0.9.x Windows distribution bundles or links the
+following third-party components:
+
+1. whisper.cpp (v1.8.4) & ggml
+   - License: MIT License
+   - Copyright (c) 2023-2026 The ggml authors / Georgi Gerganov
+   - Source: https://github.com/ggml-org/whisper.cpp
+   - Bundled runtime libraries: whisper.dll, ggml.dll, ggml-base.dll,
+     ggml-cpu.dll, ggml-vulkan.dll
+   - Vendored C header: rust/vendor/whisper-1.8.4/whisper.h
+
+2. Slint (v1.19.0)
+   - License: GNU General Public License v3.0 (compatible with Eqho's AGPL-3.0)
+     or Slint Royalty-Free Desktop / Commercial License
+   - Copyright (c) SixtyFPS GmbH
+   - Source: https://github.com/slint-ui/slint
+
+3. Whisper speech recognition models (downloaded on demand by the user)
+   - OpenAI Whisper / Distil-Whisper weights converted to GGML format by the
+     whisper.cpp community (https://huggingface.co/ggerganov/whisper.cpp)
+   - License: MIT License
+
+4. Direct Rust crate dependencies (compiled statically into Eqho.exe)
+   - windows / windows-core (Microsoft): MIT OR Apache-2.0
+   - cpal (RustAudio): Apache-2.0
+   - libloading: ISC
+   - rustfft: MIT OR Apache-2.0
+   - serde / serde_json: MIT OR Apache-2.0
+   - regex / aho-corasick: MIT OR Apache-2.0
+   - png: MIT OR Apache-2.0
+   - thiserror: MIT OR Apache-2.0
+   - jiff: Unlicense OR MIT
+   - toml: MIT OR Apache-2.0
+   - raw-window-handle: MIT OR Apache-2.0 OR Zlib
+   - resvg / roxmltree: MPL-2.0 / MIT OR Apache-2.0
+   - spin_on: MIT OR Apache-2.0
+
+Full transitive dependency versions are locked in rust/Cargo.lock.

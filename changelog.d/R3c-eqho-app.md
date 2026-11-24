@@ -1,0 +1,1 @@
+- Implement `eqho-app` (`Eqho.exe`) wiring tray, lazy dashboard, 6-step onboarding, overlay, hotkey capture, `--model-host`, `--smoke`, `--e2e-wav`, and `--soak`.
