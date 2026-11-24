@@ -3,23 +3,24 @@
 export global Theme {
     // Set by the app: true switches every colour to its dark value.
     in-out property <bool> dark: false;
-    out property <color> accent: dark ? #58A6FFFF : #0969DAFF;
+    out property <color> accent: dark ? #1A489BFF : #0969DAFF;
+    out property <color> accent-line: dark ? #58A6FFFF : #0969DAFF;
     out property <color> accent-muted: dark ? #16283FFF : #DBEAFEFF;
-    out property <color> accent-selected: dark ? #1F6FEBFF : #B3D1F5FF;
+    out property <color> accent-selected: dark ? #2258B8FF : #B3D1F5FF;
     out property <color> accent-text: dark ? #58A6FFFF : #0969DAFF;
     out property <color> accent-text-pressed: dark ? #79B8FFFF : #0550AEFF;
     out property <color> attention: dark ? #D29922FF : #9A6700FF;
     out property <color> bg: dark ? #0A0A0BFF : #F5F6F8FF;
     out property <color> border: dark ? #2A2A30FF : #D4D6DCFF;
     out property <color> border-subtle: dark ? #232327FF : #E4E6EAFF;
-    out property <color> button-accent-hover: dark ? #79B8FFFF : #0550AEFF;
-    out property <color> button-accent-pressed: dark ? #4096FFFF : #033D8BFF;
+    out property <color> button-accent-hover: dark ? #2258B8FF : #0550AEFF;
+    out property <color> button-accent-pressed: dark ? #13377AFF : #033D8BFF;
     out property <color> button-outline-hover: dark ? #F5F6F812 : #1A1C1F12;
     out property <color> button-outline-pressed: dark ? #F5F6F81F : #1A1C1F1F;
     out property <color> divider: dark ? #F5F6F814 : #1A1C1F14;
     out property <color> error: dark ? #F85149FF : #CF222EFF;
     out property <color> input-border: dark ? #A1A1AA99 : #4B4F58B3;
-    out property <color> on-accent: dark ? #0A0A0BFF : #FFFFFFFF;
+    out property <color> on-accent: dark ? #FFFFFFFF : #FFFFFFFF;
     out property <color> overlay-bg: dark ? #151517FF : #FFFFFFFF;
     out property <color> overlay-fg: dark ? #F5F6F8FF : #1A1C1FFF;
     out property <color> progress-track: dark ? #F5F6F814 : #1A1C1F1A;
@@ -28,10 +29,10 @@ export global Theme {
     out property <color> surface: dark ? #151517FF : #FFFFFFFF;
     out property <color> surface-hover: dark ? #29292EFF : #E2E4E8FF;
     out property <color> surface-tertiary: dark ? #1F1F23FF : #ECEDF0FF;
-    out property <color> system-accent: dark ? #58A6FFFF : #0969DAFF;
-    out property <color> system-accent-dark-1: dark ? #4096FFFF : #0550AEFF;
-    out property <color> system-accent-dark-2: dark ? #2B85F5FF : #033D8BFF;
-    out property <color> system-accent-light-1: dark ? #79B8FFFF : #218BFFFF;
+    out property <color> system-accent: dark ? #1A489BFF : #0969DAFF;
+    out property <color> system-accent-dark-1: dark ? #13377AFF : #0550AEFF;
+    out property <color> system-accent-dark-2: dark ? #0E2A5EFF : #033D8BFF;
+    out property <color> system-accent-light-1: dark ? #2258B8FF : #218BFFFF;
     out property <color> text: dark ? #F5F6F8FF : #1A1C1FFF;
     out property <color> text-muted: dark ? #A1A1AAFF : #4B4F58FF;
     out property <color> text-subtle: dark ? #85858FFF : #74747EFF;

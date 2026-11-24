@@ -48,7 +48,7 @@ component SoundOptionCard inherits Rectangle {
 
     border-radius: Theme.radius-card;
     border-width: root.checked ? 2px : 1px;
-    border-color: root.checked ? Theme.accent
+    border-color: root.checked ? Theme.accent-line
         : touch.has-hover ? Theme.border
         : Theme.border-subtle;
     background: root.checked ? Theme.accent-muted
@@ -103,7 +103,7 @@ component OnboardingModelCard inherits Rectangle {
 
     border-radius: Theme.radius-card;
     border-width: root.item.is_selected ? 2px : 1px;
-    border-color: root.item.is_selected ? Theme.accent
+    border-color: root.item.is_selected ? Theme.accent-line
         : touch.has-hover ? Theme.border
         : Theme.border-subtle;
     background: root.item.is_selected ? Theme.accent-muted
@@ -437,7 +437,7 @@ export component OnboardingView inherits Rectangle {
                             border-radius: Theme.radius-sm;
                             background: link-touch.has-hover ? Theme.surface-hover : Theme.surface;
                             border-width: 1px;
-                            border-color: link-touch.has-hover ? Theme.accent : Theme.border-subtle;
+                            border-color: link-touch.has-hover ? Theme.accent-line : Theme.border-subtle;
 
                             accessible-role: button;
                             accessible-label: "Open model source page on Hugging Face";
@@ -740,7 +740,7 @@ export component OnboardingView inherits Rectangle {
                                 border-radius: 4px;
                                 background: root.bg-download-error ? Theme.error
                                     : root.bg-download-done ? Theme.success
-                                    : Theme.accent;
+                                    : Theme.accent-line;
                             }
                         }
 
@@ -794,19 +794,28 @@ export component OnboardingView inherits Rectangle {
             }
         }
 
-        // 6-part segmented blue step progress strip directly above the bottom navigation bar.
+        // 6-part segmented blue step progress strip directly above the bottom navigation bar
+        // (smooth Deep Navy Blend -> bright accent-line gradient across the active segments).
         Rectangle {
             vertical-stretch: 0;
             height: 4px;
-            background: Theme.bg;
+            background: Theme.border-subtle;
 
-            HorizontalLayout {
-                spacing: 2px;
-                for seg in [0, 1, 2, 3, 4, 5] : Rectangle {
-                    horizontal-stretch: 1;
-                    height: 4px;
-                    background: seg <= root.step ? Theme.accent : Theme.border-subtle;
-                }
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                width: parent.width * Math.clamp((root.step + 1) / 6, 0, 1);
+                height: parent.height;
+                background: @linear-gradient(90deg, Theme.accent 0%, Theme.accent-line 100%);
+            }
+
+            // 5 crisp 2 px dividers carving the strip into 6 equal step segments.
+            for sep in [1, 2, 3, 4, 5] : Rectangle {
+                x: parent.width * sep / 6 - 1px;
+                y: 0px;
+                width: 2px;
+                height: parent.height;
+                background: Theme.bg;
             }
         }
 

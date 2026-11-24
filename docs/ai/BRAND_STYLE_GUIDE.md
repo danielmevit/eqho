@@ -6,7 +6,9 @@
 
 ## 1. Visual Identity & Tone
 
-- **Aesthetic:** Calm, monochrome precision instrument (dark near-black `#0A0A0B` / `#151517` or crisp light `#F5F6F8` / `#FFFFFF`), hairline `1px` borders, generous whitespace, and a single signature **Eqho Blue** brand accent (`#58A6FF` dark / `#0969DA` light).
+- **Aesthetic:** Calm, monochrome precision instrument (dark near-black `#0A0A0B` / `#151517` or crisp light `#F5F6F8` / `#FFFFFF`), subtle neutral hairline `1px` borders (`#2A2A30` dark / `#D4D6DC` light), generous whitespace, and a cohesive two-tier **Eqho Blue** system:
+  - **Dark mode:** **Deep Navy Blend (`#1A489B`)** with crisp white (`#FFFFFF`) text for borderless filled buttons, active nav pills, active tab segments, and ON toggles; **Bright Accent (`#58A6FF`)** (`accent-line` / `accent-text`) for `1px–2px` thin accent strokes, inset focus rings, focused inputs, selected card borders, off-toggle rings, links, and the right leading edge of download/progress gradients (`#1A489B → #58A6FF`). Hover changes color only — never font weight.
+  - **Light mode:** **Eqho Brand Blue (`#0969DA`)** with white (`#FFFFFF`) text.
 - **Copy tone:** Quiet, direct, never alarmist or nagging. State what happened and give one clear action.
 
 ---

@@ -102,7 +102,7 @@ export component GeneralTab inherits Rectangle {
                                 border-radius: Theme.radius-sm;
                                 background: root.hotkey-capturing ? Theme.accent-muted : Theme.surface-tertiary;
                                 border-width: 1px;
-                                border-color: root.hotkey-capturing ? Theme.accent : Theme.border;
+                                border-color: root.hotkey-capturing ? Theme.accent-line : Theme.border;
 
                                 accessible-role: button;
                                 accessible-label: "Global Hotkey";
@@ -283,7 +283,7 @@ export component GeneralTab inherits Rectangle {
                             border-radius: Theme.radius-sm;
                             background: root.hotkey-capturing ? Theme.accent-muted : Theme.surface-tertiary;
                             border-width: 1px;
-                            border-color: root.hotkey-capturing ? Theme.accent : Theme.border;
+                            border-color: root.hotkey-capturing ? Theme.accent-line : Theme.border;
                             Text {
                                 text: root.hotkey-capturing ? "Press your new keys…" : root.hotkey-display;
                                 font-size: Theme.font-size-lg;

@@ -13,7 +13,7 @@ component ModelCard inherits Rectangle {
     background: Theme.bg;
     border-radius: Theme.radius-card;
     border-width: root.item.is_selected ? 2px : 1px;
-    border-color: root.item.is_selected ? Theme.accent : Theme.border-subtle;
+    border-color: root.item.is_selected ? Theme.accent-line : Theme.border-subtle;
     min-height: lay.preferred-height;
     horizontal-stretch: 1;
 
@@ -44,7 +44,7 @@ component ModelCard inherits Rectangle {
                 background: Theme.surface-tertiary;
                 border-width: 1px;
                 border-color: root.item.has_error ? Theme.error
-                    : root.item.is_downloading ? Theme.accent
+                    : root.item.is_downloading ? Theme.accent-line
                     : Theme.border-subtle;
 
                 status-row := HorizontalLayout {
@@ -60,7 +60,7 @@ component ModelCard inherits Rectangle {
                             height: 6px;
                             border-radius: 3px;
                             background: root.item.has_error ? Theme.error
-                                : root.item.is_downloading ? Theme.accent
+                                : root.item.is_downloading ? Theme.accent-line
                                 : Theme.success;
                         }
                     }

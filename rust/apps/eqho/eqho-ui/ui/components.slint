@@ -370,7 +370,7 @@ export component CircleIconButton inherits Rectangle {
     height: 34px;
     border-radius: 17px;
     border-width: 1px;
-    border-color: root.active ? Theme.accent : Theme.border-subtle;
+    border-color: root.active ? Theme.accent-line : Theme.border-subtle;
     background: root.active ? Theme.accent-muted
         : touch.pressed ? Theme.button-outline-pressed
         : touch.has-hover ? Theme.surface-hover
@@ -399,7 +399,7 @@ export component ThemedLineEdit inherits Rectangle {
     border-radius: Theme.radius-sm;
     background: Theme.surface-tertiary;
     border-width: 1px;
-    border-color: input.has-focus ? Theme.accent : Theme.input-border;
+    border-color: input.has-focus ? Theme.accent-line : Theme.input-border;
     clip: true;
 
     if root.text == "" && root.placeholder-text != "" : Text {
@@ -437,7 +437,7 @@ export component ThemedTextEdit inherits Rectangle {
     border-radius: Theme.radius-sm;
     background: Theme.surface-tertiary;
     border-width: 1px;
-    border-color: input.has-focus ? Theme.accent : Theme.input-border;
+    border-color: input.has-focus ? Theme.accent-line : Theme.input-border;
     clip: true;
 
     if root.text == "" && root.placeholder-text != "" : Text {
@@ -620,7 +620,7 @@ export component TopBar inherits Rectangle {
                         viewbox-width: 24;
                         viewbox-height: 24;
                         commands: "M12 15 A3 3 0 1 0 12 9 A3 3 0 1 0 12 15 M19.4 15 A1.65 1.65 0 0 0 19.73 16.82 L19.79 16.88 A2 2 0 1 1 16.96 19.71 L16.9 19.65 A1.65 1.65 0 0 0 15.08 19.32 A1.65 1.65 0 0 0 14.08 20.83 L14.08 21 A2 2 0 1 1 10.08 21 L10.08 20.91 A1.65 1.65 0 0 0 9 19.4 A1.65 1.65 0 0 0 7.18 19.73 L7.12 19.79 A2 2 0 1 1 4.29 16.96 L4.35 16.9 A1.65 1.65 0 0 0 4.68 15.08 A1.65 1.65 0 0 0 3.17 14.08 L3 14.08 A2 2 0 1 1 3 10.08 L3.09 10.08 A1.65 1.65 0 0 0 4.6 9 A1.65 1.65 0 0 0 4.27 7.18 L4.21 7.12 A2 2 0 1 1 7.04 4.29 L7.1 4.35 A1.65 1.65 0 0 0 8.92 4.68 L9 4.68 A1.65 1.65 0 0 0 10 3.17 L10 3 A2 2 0 1 1 14 3 L14 3.09 A1.65 1.65 0 0 0 15 4.6 A1.65 1.65 0 0 0 16.82 4.27 L16.88 4.21 A2 2 0 1 1 19.71 7.04 L19.65 7.1 A1.65 1.65 0 0 0 19.32 8.92 L19.32 9 A1.65 1.65 0 0 0 20.83 10 L21 10 A2 2 0 1 1 21 14 L20.91 14 A1.65 1.65 0 0 0 19.4 15 Z";
-                        stroke: root.active-tab == "settings" ? Theme.accent : Theme.text;
+                        stroke: root.active-tab == "settings" ? Theme.accent-line : Theme.text;
                         stroke-width: 1.7px;
                         fill: transparent;
                     }
@@ -702,7 +702,7 @@ export component FlagDropdown inherits Rectangle {
     height: 32px;
     border-radius: Theme.radius-button;
     border-width: 1px;
-    border-color: focus.has-focus ? Theme.accent : Theme.input-border;
+    border-color: focus.has-focus ? Theme.accent-line : Theme.input-border;
     background: !root.enabled ? Theme.surface-tertiary
         : touch.pressed ? Theme.button-outline-pressed
         : touch.has-hover ? Theme.surface-hover

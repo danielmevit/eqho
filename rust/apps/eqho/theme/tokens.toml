@@ -34,8 +34,12 @@ light = "#74747E"          # hints, disabled text
 dark = "#85858F"
 
 [color.accent]
-light = "#0969DA"          # Eqho light blue (5.17:1 with white on-accent, >3:1 on bg/surface)
-dark = "#58A6FF"           # Eqho dark blue (7.4:1 with #0A0A0B on-accent, >6:1 on bg/surface)
+light = "#0969DA"          # Eqho light blue (5.19:1 with white on-accent, >3:1 on bg/surface)
+dark = "#1A489B"           # Eqho dark Deep Navy Blend (8.59:1 AAA with white on-accent; borderless fills)
+
+[color.accent-line]
+light = "#0969DA"          # thin accent strokes, focus rings, selected outlines, progress bar tip
+dark = "#58A6FF"           # bright Eqho accent for 1-2px lines, focus rings & progress leading edge (7.22:1 on surface)
 
 [color.accent-text]
 light = "#0969DA"          # links and small accent text
@@ -51,11 +55,11 @@ dark = "#16283F"
 
 [color.accent-selected]
 light = "#B3D1F5"
-dark = "#1F6FEB"
+dark = "#2258B8"
 
 [color.on-accent]
 light = "#FFFFFF"          # white on deep light-mode blue
-dark = "#0A0A0B"           # near-black on bright Eqho blue
+dark = "#FFFFFF"           # crisp white on Deep Navy Blend (8.59:1 AAA)
 
 [color.success]
 light = "#1A7F37"
@@ -123,19 +127,19 @@ dark = "#F5F6F8"
 
 [color.system-accent]
 light = "#0969DA"
-dark = "#58A6FF"
+dark = "#1A489B"
 
 [color.system-accent-light-1]
 light = "#218BFF"
-dark = "#79B8FF"
+dark = "#2258B8"
 
 [color.system-accent-dark-1]
 light = "#0550AE"
-dark = "#4096FF"
+dark = "#13377A"
 
 [color.system-accent-dark-2]
 light = "#033D8B"
-dark = "#2B85F5"
+dark = "#0E2A5E"
 
 [color.button-accent-hover]
 light = { ref = "system-accent-dark-1" }

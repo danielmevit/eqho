@@ -5,9 +5,8 @@ import { Theme } from "@app-theme/theme.slint";
 
 export enum ButtonKind { accent, outline, text }
 
-// Button with three classes: accent (filled), outline (1 px muted border), text (muted label only).
-// Accent labels are regular at rest and semibold on hover; the width is reserved for the semibold
-// label (a hidden measuring copy), so the button never changes size.
+// Button with three classes: accent (borderless filled), outline (1 px muted border), text (muted label only).
+// Hover changes only fill/text color (never font weight). Focus ring sits cleanly inside the button.
 export component Button inherits Rectangle {
     in property <string> text;
     in property <ButtonKind> kind: ButtonKind.outline;
@@ -23,9 +22,9 @@ export component Button inherits Rectangle {
     out property <bool> pressed: touch.pressed;
     callback clicked();
 
-    min-width: root.fixed-width > 0 ? root.fixed-width : Math.max(label.preferred-width, bold-measure.preferred-width) + 2 * root.padding-x;
+    min-width: root.fixed-width > 0 ? root.fixed-width : label.preferred-width + 2 * root.padding-x;
     max-width: root.fixed-width > 0 ? root.fixed-width : 100000px;
-    min-height: root.fixed-height > 0 ? root.fixed-height : Math.max(label.preferred-height, bold-measure.preferred-height) + 2 * root.padding-y;
+    min-height: root.fixed-height > 0 ? root.fixed-height : label.preferred-height + 2 * root.padding-y;
     max-height: root.fixed-height > 0 ? root.fixed-height : 100000px;
     horizontal-stretch: 0;
     vertical-stretch: 0;
@@ -45,19 +44,10 @@ export component Button inherits Rectangle {
     accessible-enabled: root.enabled;
     accessible-action-default => { if (root.enabled) { root.clicked(); } }
 
-    // Measures the semibold label so the hover weight never shifts the layout.
-    bold-measure := Text {
-        text: root.text;
-        font-size: root.font-size;
-        font-weight: 600;
-        visible: false;
-        accessible-role: none;
-    }
-
     label := Text {
         text: root.text;
         font-size: root.font-size;
-        font-weight: root.kind == ButtonKind.accent && root.enabled && touch.has-hover ? 600 : root.font-weight;
+        font-weight: root.font-weight;
         font-italic: false;
         horizontal-alignment: center;
         vertical-alignment: center;
@@ -84,15 +74,15 @@ export component Button inherits Rectangle {
         }
     }
 
-    // Focus ring: 2 px Accent, 3 px outside the button.
+    // Focus ring: 2 px bright accent-line inset inside the button (no outside halo).
     if focus.has-focus : Rectangle {
-        x: -3px;
-        y: -3px;
-        width: parent.width + 6px;
-        height: parent.height + 6px;
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
         border-width: 2px;
-        border-color: Theme.accent;
-        border-radius: Theme.radius-button + 3px;
+        border-color: Theme.accent-line;
+        border-radius: Theme.radius-button;
     }
 }
 
@@ -138,7 +128,7 @@ export component CloseButton inherits Rectangle {
         width: parent.width + 6px;
         height: parent.height + 6px;
         border-width: 2px;
-        border-color: Theme.accent;
+        border-color: Theme.accent-line;
         border-radius: Theme.radius-button + 3px;
     }
 }
@@ -214,14 +204,14 @@ export component LinkButton inherits Rectangle {
         }
     }
 
-    // Focus ring: 2 px Accent, 3 px outside the link.
+    // Focus ring: 2 px bright accent-line, 3 px outside the link.
     if focus.has-focus : Rectangle {
         x: -3px;
         y: -3px;
         width: parent.width + 6px;
         height: parent.height + 6px;
         border-width: 2px;
-        border-color: Theme.accent;
+        border-color: Theme.accent-line;
         border-radius: Theme.radius-button + 3px;
     }
 }
@@ -241,8 +231,8 @@ export component Card inherits Rectangle {
     drop-shadow-color: root.shadow ? #0000002A : transparent;
 }
 
-// Toggle switch, 40 x 20. Both states stay in the accent family: off = accent outline + accent knob,
-// on = accent fill + surface knob. Hover = accent light-1, pressed = accent dark-1.
+// Toggle switch, 40 x 20. Off = bright accent-line outline + knob; on = solid borderless accent fill
+// + on-accent knob. Hover = accent light-1, pressed = accent dark-1.
 export component Toggle inherits Rectangle {
     in-out property <bool> checked;
     in property <bool> enabled: true;
@@ -256,9 +246,14 @@ export component Toggle inherits Rectangle {
     opacity: root.enabled ? 1.0 : 0.4;
 
     property <color> tone: !root.enabled ? Theme.accent
-        : touch.pressed ? Theme.system-accent-dark-1
-        : touch.has-hover ? Theme.system-accent-light-1
+        : touch.pressed ? Theme.button-accent-pressed
+        : touch.has-hover ? Theme.button-accent-hover
         : Theme.accent;
+
+    property <color> off-tone: !root.enabled ? Theme.accent-line
+        : touch.pressed ? Theme.accent-text-pressed
+        : touch.has-hover ? Theme.accent-text-pressed
+        : Theme.accent-line;
 
     accessible-role: switch;
     accessible-checkable: true;
@@ -274,8 +269,8 @@ export component Toggle inherits Rectangle {
 
     track := Rectangle {
         border-radius: Theme.radius-toggle;
-        border-width: 1px;
-        border-color: root.tone;
+        border-width: root.checked ? 0px : 1px;
+        border-color: root.off-tone;
         background: root.checked ? root.tone : transparent;
     }
 
@@ -285,7 +280,7 @@ export component Toggle inherits Rectangle {
         y: 5px;
         x: root.checked ? root.width - 15px : 5px;
         border-radius: 5px;
-        background: root.checked ? Theme.surface : root.tone;
+        background: root.checked ? Theme.on-accent : root.off-tone;
         animate x { duration: 120ms; easing: ease-out; }
     }
 
@@ -313,12 +308,13 @@ export component Toggle inherits Rectangle {
         width: parent.width + 6px;
         height: parent.height + 6px;
         border-width: 2px;
-        border-color: Theme.accent;
+        border-color: Theme.accent-line;
         border-radius: Theme.radius-toggle + 3px;
     }
 }
 
-// Thin progress line: 3 px, rounded, Accent fill on the progress track. `progress` is 0..1.
+// Thin progress line: 3 px, rounded, left-to-right gradient from accent fill to bright accent-line
+// on the progress track. `progress` is 0..1.
 // For screen readers it is a progress indicator 0..100; `accessible-text` (e.g. "4:12") replaces the
 // percentage as the announced value when set.
 export component ProgressLine inherits Rectangle {
@@ -338,7 +334,7 @@ export component ProgressLine inherits Rectangle {
         width: parent.width * Math.clamp(root.progress, 0, 1);
         height: parent.height;
         border-radius: 1.5px;
-        background: Theme.accent;
+        background: @linear-gradient(90deg, Theme.accent 0%, Theme.accent-line 100%);
     }
 }
 
@@ -459,7 +455,7 @@ export component Slider inherits Rectangle {
                 width: (parent.width - 14px) * parent.t + 7px;
                 height: 4px;
                 border-radius: 2px;
-                background: Theme.accent;
+                background: @linear-gradient(90deg, Theme.accent 0%, Theme.accent-line 100%);
             }
             Rectangle {
                 x: (parent.width - 14px) * parent.t;
@@ -467,7 +463,7 @@ export component Slider inherits Rectangle {
                 width: 14px;
                 height: 14px;
                 border-radius: 7px;
-                background: touch.pressed ? Theme.system-accent-dark-1 : touch.has-hover ? Theme.system-accent-light-1 : Theme.accent;
+                background: touch.pressed ? Theme.accent : touch.has-hover ? Theme.accent-text-pressed : Theme.accent-line;
                 border-width: 2px;
                 border-color: Theme.surface;
             }
@@ -478,7 +474,7 @@ export component Slider inherits Rectangle {
                 height: 20px;
                 border-radius: 10px;
                 border-width: 2px;
-                border-color: Theme.accent;
+                border-color: Theme.accent-line;
             }
             touch := TouchArea {
                 enabled: root.enabled;
@@ -553,8 +549,7 @@ export component TabList inherits Rectangle {
                 Text {
                     text: item;
                     font-size: Theme.font-size-label;
-                    // White on the green: regular, semibold only while hovered (equal-width segments, no shift).
-                    font-weight: i == root.selected && seg.has-hover ? 600 : 400;
+                    font-weight: 400;
                     color: i == root.selected ? Theme.on-accent : Theme.text;
                     horizontal-alignment: center;
                     vertical-alignment: center;
@@ -587,7 +582,7 @@ export component TabList inherits Rectangle {
         width: parent.width + 6px;
         height: parent.height + 6px;
         border-width: 2px;
-        border-color: Theme.accent;
+        border-color: Theme.accent-line;
         border-radius: Theme.radius-button + 3px;
     }
 }
@@ -660,11 +655,11 @@ export component PresetCard inherits Rectangle {
         }
     }
 
-    // Outline drawn last so it stays visible: input-border (3:1 UI contrast) or a 2 px accent when selected.
+    // Outline drawn last so it stays visible: input-border (3:1 UI contrast) or a 2 px bright accent-line when selected.
     Rectangle {
         border-radius: Theme.radius-card;
         border-width: root.selected ? 2px : 1px;
-        border-color: root.selected ? Theme.accent : Theme.input-border;
+        border-color: root.selected ? Theme.accent-line : Theme.input-border;
     }
 
     touch := TouchArea {
@@ -686,7 +681,7 @@ export component PresetCard inherits Rectangle {
         width: parent.width + 6px;
         height: parent.height + 6px;
         border-width: 2px;
-        border-color: Theme.accent;
+        border-color: Theme.accent-line;
         border-radius: Theme.radius-card + 3px;
     }
 }
@@ -743,7 +738,7 @@ export component AccordionHeader inherits Rectangle {
         width: parent.width + 6px;
         height: parent.height;
         border-width: 2px;
-        border-color: Theme.accent;
+        border-color: Theme.accent-line;
         border-radius: Theme.radius-button;
     }
 }
@@ -932,7 +927,7 @@ export component Dropdown inherits Rectangle {
         width: parent.width + 6px;
         height: parent.height + 6px;
         border-width: 2px;
-        border-color: Theme.accent;
+        border-color: Theme.accent-line;
         border-radius: Theme.radius-button + 3px;
     }
 
@@ -1070,7 +1065,7 @@ export component Timeline inherits Rectangle {
         border-radius: self.long ? 4px : 4px;
         background: self.long ? Theme.accent : Theme.surface;
         border-width: self.long ? 0px : 2px;
-        border-color: Theme.accent;
+        border-color: Theme.accent-line;
     }
     // Now marker.
     Rectangle { x: 0; y: root.track-y - 4px; width: 2px; height: 20px; border-radius: 1px; background: Theme.text; }
@@ -1102,7 +1097,7 @@ export component Swatch inherits Rectangle {
     border-radius: 4px;
     background: root.block ? Theme.accent : Theme.surface;
     border-width: root.block ? 0px : 2px;
-    border-color: Theme.accent;
+    border-color: Theme.accent-line;
     accessible-role: none;
 }
 

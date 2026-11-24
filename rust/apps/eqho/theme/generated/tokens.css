@@ -2,6 +2,7 @@
    Regenerate: cargo run -p damt-theme --example gen -- <tokens.toml> <out_dir> */
 :root {
   --color-accent: #0969DAFF;
+  --color-accent-line: #0969DAFF;
   --color-accent-muted: #DBEAFEFF;
   --color-accent-selected: #B3D1F5FF;
   --color-accent-text: #0969DAFF;
@@ -64,23 +65,24 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-accent: #58A6FFFF;
+    --color-accent: #1A489BFF;
+    --color-accent-line: #58A6FFFF;
     --color-accent-muted: #16283FFF;
-    --color-accent-selected: #1F6FEBFF;
+    --color-accent-selected: #2258B8FF;
     --color-accent-text: #58A6FFFF;
     --color-accent-text-pressed: #79B8FFFF;
     --color-attention: #D29922FF;
     --color-bg: #0A0A0BFF;
     --color-border: #2A2A30FF;
     --color-border-subtle: #232327FF;
-    --color-button-accent-hover: #79B8FFFF;
-    --color-button-accent-pressed: #4096FFFF;
+    --color-button-accent-hover: #2258B8FF;
+    --color-button-accent-pressed: #13377AFF;
     --color-button-outline-hover: #F5F6F812;
     --color-button-outline-pressed: #F5F6F81F;
     --color-divider: #F5F6F814;
     --color-error: #F85149FF;
     --color-input-border: #A1A1AA99;
-    --color-on-accent: #0A0A0BFF;
+    --color-on-accent: #FFFFFFFF;
     --color-overlay-bg: #151517FF;
     --color-overlay-fg: #F5F6F8FF;
     --color-progress-track: #F5F6F814;
@@ -89,10 +91,10 @@
     --color-surface: #151517FF;
     --color-surface-hover: #29292EFF;
     --color-surface-tertiary: #1F1F23FF;
-    --color-system-accent: #58A6FFFF;
-    --color-system-accent-dark-1: #4096FFFF;
-    --color-system-accent-dark-2: #2B85F5FF;
-    --color-system-accent-light-1: #79B8FFFF;
+    --color-system-accent: #1A489BFF;
+    --color-system-accent-dark-1: #13377AFF;
+    --color-system-accent-dark-2: #0E2A5EFF;
+    --color-system-accent-light-1: #2258B8FF;
     --color-text: #F5F6F8FF;
     --color-text-muted: #A1A1AAFF;
     --color-text-subtle: #85858FFF;
@@ -101,23 +103,24 @@
   }
 }
 :root[data-theme="dark"] {
-  --color-accent: #58A6FFFF;
+  --color-accent: #1A489BFF;
+  --color-accent-line: #58A6FFFF;
   --color-accent-muted: #16283FFF;
-  --color-accent-selected: #1F6FEBFF;
+  --color-accent-selected: #2258B8FF;
   --color-accent-text: #58A6FFFF;
   --color-accent-text-pressed: #79B8FFFF;
   --color-attention: #D29922FF;
   --color-bg: #0A0A0BFF;
   --color-border: #2A2A30FF;
   --color-border-subtle: #232327FF;
-  --color-button-accent-hover: #79B8FFFF;
-  --color-button-accent-pressed: #4096FFFF;
+  --color-button-accent-hover: #2258B8FF;
+  --color-button-accent-pressed: #13377AFF;
   --color-button-outline-hover: #F5F6F812;
   --color-button-outline-pressed: #F5F6F81F;
   --color-divider: #F5F6F814;
   --color-error: #F85149FF;
   --color-input-border: #A1A1AA99;
-  --color-on-accent: #0A0A0BFF;
+  --color-on-accent: #FFFFFFFF;
   --color-overlay-bg: #151517FF;
   --color-overlay-fg: #F5F6F8FF;
   --color-progress-track: #F5F6F814;
@@ -126,10 +129,10 @@
   --color-surface: #151517FF;
   --color-surface-hover: #29292EFF;
   --color-surface-tertiary: #1F1F23FF;
-  --color-system-accent: #58A6FFFF;
-  --color-system-accent-dark-1: #4096FFFF;
-  --color-system-accent-dark-2: #2B85F5FF;
-  --color-system-accent-light-1: #79B8FFFF;
+  --color-system-accent: #1A489BFF;
+  --color-system-accent-dark-1: #13377AFF;
+  --color-system-accent-dark-2: #0E2A5EFF;
+  --color-system-accent-light-1: #2258B8FF;
   --color-text: #F5F6F8FF;
   --color-text-muted: #A1A1AAFF;
   --color-text-subtle: #85858FFF;

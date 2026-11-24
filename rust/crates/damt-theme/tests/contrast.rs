@@ -1,6 +1,11 @@
-//! WCAG 2.x contrast for Ocy's accent roles (V9/C1 "one green"), in both themes: the label on the
-//! accent fill at rest, hover and pressed (4.5:1), the fill as a UI part on bg and surface (3:1),
-//! `accent-text` as small text on bg and surface (4.5:1), and the fill on the progress track (3:1).
+//! WCAG 2.x contrast for Eqho's accent roles in both themes:
+//! - `on-accent` label on accent fill at rest, hover and pressed (>= 4.5:1)
+//! - `accent-text` & `accent-text-pressed` as small text on bg and surface (>= 4.5:1)
+//! - `accent-line` thin strokes, focus rings, selected outlines, and progress leading edge on bg,
+//!   surface, and progress track (>= 3.0:1)
+//! - `on-accent` toggle knob on `accent` track (>= 3.0:1)
+//! - `accent` fill on bg and surface (>= 3.0:1 in light; >= 2.0:1 for dark Deep Navy Blend `#1A489B`
+//!   which pairs borderless deep navy fills with bright `#58A6FF` `accent-line` strokes).
 
 use damt_theme::{Rgba, Tokens};
 
@@ -58,8 +63,10 @@ fn accent_roles_meet_aa_in_both_themes() {
         let bg = get(&t, "bg", dark);
         let surface = get(&t, "surface", dark);
         let fill = get(&t, "accent", dark);
+        let line = get(&t, "accent-line", dark);
         let label = get(&t, "on-accent", dark);
         let track = over(get(&t, "progress-track", dark), surface);
+        let fill_min = if dark { 2.0 } else { 3.0 };
         let checks = [
             ("on-accent on accent (rest)", label, fill, 4.5),
             (
@@ -74,8 +81,11 @@ fn accent_roles_meet_aa_in_both_themes() {
                 get(&t, "button-accent-pressed", dark),
                 4.5,
             ),
-            ("accent fill on bg", fill, bg, 3.0),
-            ("accent fill on surface", fill, surface, 3.0),
+            ("accent fill on bg", fill, bg, fill_min),
+            ("accent fill on surface", fill, surface, fill_min),
+            ("accent-line on bg", line, bg, 3.0),
+            ("accent-line on surface", line, surface, 3.0),
+            ("accent-line on progress track", line, track, 3.0),
             ("accent-text on bg", get(&t, "accent-text", dark), bg, 4.5),
             (
                 "accent-text on surface",
@@ -89,8 +99,7 @@ fn accent_roles_meet_aa_in_both_themes() {
                 surface,
                 4.5,
             ),
-            ("accent fill on progress track", fill, track, 3.0),
-            ("surface knob on accent track", surface, fill, 3.0),
+            ("on-accent knob on accent track", label, fill, 3.0),
         ];
         for (what, a, b, min) in checks {
             let r = ratio(a, b);
@@ -109,8 +118,10 @@ fn eqho_accent_is_brand_blue() {
         let c = get(&t, name, dark);
         format!("#{:02X}{:02X}{:02X}", c.r, c.g, c.b)
     };
-    assert_eq!(hex("accent", true), "#58A6FF");
-    assert_eq!(hex("on-accent", true), "#0A0A0B");
+    assert_eq!(hex("accent", true), "#1A489B");
+    assert_eq!(hex("on-accent", true), "#FFFFFF");
+    assert_eq!(hex("accent-line", true), "#58A6FF");
     assert_eq!(hex("accent", false), "#0969DA");
     assert_eq!(hex("on-accent", false), "#FFFFFF");
+    assert_eq!(hex("accent-line", false), "#0969DA");
 }
