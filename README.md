@@ -12,10 +12,10 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64%20(Rust)%20%7C%20Linux%20%7C%20macOS-informational)](#install)
 
 - 🔒 **Private by design** — no cloud, no account, no API key. Your voice never leaves your computer.
-- ⚡ **Native Rust speed & tiny footprint (v0.9.0)** — **~13 MB** Windows installer (down from ~250 MB in the 0.8.x Python bundle), **~3.4 MB** idle RAM in the system tray, **~38 ms** tray startup, and **~0.25–0.38 s** Vulkan transcription on an RTX 3060 (no CUDA Toolkit required).
-- 💻 **Works on any PC** — cross-vendor Vulkan GPU acceleration (NVIDIA, AMD, Intel) plus multi-threaded clean-PC CPU inference and 4 compact **Q5 quantized GGML models** for laptops and PCs without a dedicated GPU.
-- 🎛️ **Calm, focused UI** — Deep Navy Blend dark mode and crisp light mode, hover-reveal or pinnable under-pill controls, and **Batch / Live** delivery modes.
-- 🌍 **99 languages with vector SVG flags** — honestly tiered (13 hand-tuned, 20 strong, 66 experimental) with sharp HiDPI vector flags.
+- ⚡ **Native Rust speed & tiny footprint (v0.9.0)** — **~14 MB** Windows installer (down from ~250 MB in the 0.8.x Python bundle), **~3.4 MB** idle RAM in the system tray, **~38 ms** tray startup, and **~0.25 s** Vulkan transcription on an RTX 3060 (42× real-time on a 10 s clip, no CUDA Toolkit required).
+- 💻 **Works on any PC** — cross-vendor Vulkan GPU acceleration (NVIDIA, AMD, Intel) plus multi-threaded clean-PC CPU inference (**~0.7–1.5 s** on a 10 s clip with `tiny` / `base-q5`, zero VC++ Redistributable required) and 4 compact **Q5 quantized GGML models**.
+- 🎛️ **Calm, focused UI & under-pill controls** — Deep Navy Blend dark mode and crisp light mode, hover-reveal or pinnable under-pill micro-bar (silent cancel `✕`, live timer, searchable 99-language menu with recent-language quick chips, **Batch / Live** toggle, pin, and Done `✓`) with zero focus stealing.
+- 🌍 **99 languages with vector SVG flags** — honestly tiered (13 hand-tuned, 20 strong, 66 experimental) with sharp HiDPI vector flags and instant mid-dictation switching.
 - 🆓 **Free & open source** — direct downloads from GitHub and source builds are 100% free under AGPL-3.0 with zero licensing code; an optional Microsoft Store edition with a 15-day free trial is also available for Store auto-updates and supporting development.
 
 ![screenshot: dashboard dark theme](assets/eqho_app_screenshot.webp)
@@ -23,9 +23,9 @@
 ## Install
 
 **Windows 10/11 (64-bit, recommended):**
-- **GitHub Releases (free, open source):** grab `Eqho-Setup-0.9.0-win-x64.exe` (~13 MB, per-user, no admin prompt, no VC++ Redistributable required) from [Releases](https://github.com/danielmevit/eqho/releases) → double-click → done. Prefer no installer? Use `Eqho-portable-0.9.0-win-x64.zip`.
+- **GitHub Releases (free, open source):** grab `Eqho-Setup-0.9.0-win-x64.exe` (~14 MB, per-user, no admin prompt, zero VC++ Redistributable required) from [Releases](https://github.com/danielmevit/eqho/releases) → double-click → done. Prefer no installer? Use `Eqho-portable-0.9.0-win-x64.zip` (~29 MB).
 - **winget:** `winget install eqho`
-- **Microsoft Store (optional):** signed Store package with automatic updates and a **15-day free trial** (same local dictation engine, built with `--features store`).
+- **Microsoft Store (optional):** signed MSIX Store package with automatic updates and a **15-day free trial** (same local dictation engine, built with `--features store`).
 
 **Linux / macOS:** legacy Python 0.8.x builds (`.AppImage`, `.tar.gz`, `.dmg`) remain available on [Releases](https://github.com/danielmevit/eqho/releases) (see [platform notes](#platform-notes)); the Rust port targets Windows x64 first.
 
@@ -37,23 +37,23 @@ cd eqho
 cargo build --manifest-path rust/Cargo.toml -p eqho-app --release
 ```
 
-Place the `whisper.cpp 1.8.4` runtime DLLs (`whisper.dll`, `ggml.dll`, `ggml-base.dll`, `ggml-cpu*.dll`, `ggml-vulkan.dll`) alongside `Eqho.exe`, or run `packaging\windows\build-rust.ps1 -DllDir <path>` (see [docs/rust/RELEASE.md](docs/rust/RELEASE.md) for clean-PC DLL build flags and MSIX packaging). First run opens a 6-step onboarding wizard and downloads your chosen GGML speech model — after that, everything works completely offline.
+Place the 13 `whisper.cpp 1.8.4` runtime DLLs (`whisper.dll`, `ggml.dll`, `ggml-base.dll`, `ggml-cpu-*.dll`, `ggml-vulkan.dll`) alongside `Eqho.exe`, or run `packaging\windows\build-rust.ps1 -DllDir <path>` (see [docs/rust/RELEASE.md](docs/rust/RELEASE.md) for clean-PC DLL build flags and Store MSIX packaging). First run opens a 6-step onboarding wizard and downloads your chosen GGML speech model — after that, everything works completely offline.
 
 ## How it works
 
 1. Click into any app where you want text.
-2. Press **Alt+Q** — the floating iridescent pill appears and listens.
-3. Speak naturally. Hover over the pill (or pin the under-pill micro-bar) for quick controls, and choose **Batch** (paste all at once when you stop) or **Live** (deliver text as you speak).
-4. Press **Alt+Q** again — your words land in the focused app, cleaned up and capitalized.
+2. Press **Alt+Q** — the floating iridescent pill appears and listens without stealing focus.
+3. Speak naturally. Hover the pill (or pin the under-pill bar open) to **cancel silently (`✕`)**, **switch between 99 languages live** via search or recent-language chips, or flip between **Batch** (paste all at once when you stop) and **Live** (deliver phrase by phrase as you speak).
+4. Press **Alt+Q** again (or click **`✓`** on the under-pill bar) — your words land in the focused app, cleaned up and capitalized.
 
 Toggle or hold-to-talk, your choice. The hotkey is customizable.
 
 ## Features
 
 - **Dictation into any application** via private clipboard paste (excluded from Windows Win+V history) or simulated Unicode typing, with per-app paste rules and focus verification
-- **Floating listening pill + under-pill micro-bar** — native Win32 per-pixel alpha glass pill that reacts to your voice, with hover-reveal or pinnable under-pill controls, multi-monitor following, adjustable size/opacity, and optional Live Text Preview
-- **Batch & Live delivery modes** — commit cleanly at the end of a phrase (Batch) or deliver incrementally as you dictate (Live)
-- **Settings dashboard** — **Deep Navy Blend** dark theme (`#1A489B` surfaces with `#58A6FF` hairline accents), light theme, and system theme
+- **Floating listening pill + under-pill micro-bar** — native Win32 per-pixel alpha glass pill that reacts to your voice, with a hover-reveal or pinnable action strip (`✕` silent cancel · live timer · searchable 99-language menu with dynamic recent chips · `Batch`/`Live` toggle · pin · `✓` Done), multi-monitor following, adjustable size/opacity, and optional Live Text Preview
+- **Batch & Live delivery modes** — commit cleanly at the end of a session (**Batch**) or deliver phrase by phrase while speaking (**Live**), configurable in General → Behavior or directly from the under-pill bar
+- **Settings dashboard** — **Deep Navy Blend** dark theme (`#1A489B` borderless primary fills, `#58A6FF` bright hairline accents, inset focus rings, and `#1A489B → #58A6FF` progress gradients), crisp light theme, and system theme
 - **6-step first-run onboarding** — language picker with HiDPI vector SVG flags, live mic meter with device refresh, hardware-matched model picker with byte-level speed & ETA, audio ducking choice, and a live dictation readiness checklist
 - **Model picker & Q5 CPU-fast models** — full-precision models (`tiny` through `large-v3`) plus 4 compact **Q5 quantized GGML models** (`Base Q5` 60 MB, `Small EN Q5` 190 MB, `Small Q5` 190 MB, `Large v3 Turbo Q5` 574 MB), alongside an **Inference Engine picker** (`Auto / GPU (Vulkan) / CPU`)
 - **Transcript history** — searchable, date-filtered in your local timezone, exportable, stored locally, one-click clear
@@ -92,7 +92,7 @@ Anything beyond English needs a **multilingual** model (`large-v3-turbo`, `large
 
 **Does it work on AMD or Intel GPUs, or without a GPU?** Yes. On Windows, `whisper.cpp` with Vulkan accelerates NVIDIA, AMD Radeon, and Intel Arc/discrete GPUs out of the box. On PCs with integrated graphics or CPU only, Eqho runs multi-threaded CPU inference and recommends compact Q5 quantized models (`Base Q5` / `Small Q5`) for responsive local dictation.
 
-**How accurate is it?** Whisper-class accuracy — measured at 1.39% WER on LibriSpeech reference clips with `large-v3-turbo` in ~0.25–0.38 s on an RTX 3060. Pick smaller Q5 models for speed or larger models for tougher audio.
+**How accurate is it?** Whisper-class accuracy — measured at 1.39% WER on LibriSpeech reference clips with `large-v3-turbo` in **~0.25 s** (248 ms for a 10.4 s clip) on an RTX 3060, and **~0.7–1.5 s** on multi-core CPU with `tiny` / `base-q5`. Pick smaller Q5 models for speed or larger models for tougher audio.
 
 **Where are my settings and history?** In your user config folder (`%APPDATA%\Eqho` on Windows) — never in the cloud.
 
@@ -104,13 +104,13 @@ Settings persist to `settings.json` and history to `history.jsonl` in your confi
 
 For the technically curious (the [website](https://danielmevit.github.io/eqho/) stays non-technical on purpose):
 
-- **Native Rust workspace (`rust/`):** Rust 1.95 (edition 2024) + **Slint 1.19** (`renderer-software` — zero idle GPU context, ~3.4 MB private RAM in tray, ~38 ms launch to tray ready) with `+crt-static` (`Eqho.exe` has zero `VCRUNTIME140.dll` dependency)
+- **Native Rust workspace (`rust/`):** Rust 1.95 (edition 2024) + **Slint 1.19** (`renderer-software` — zero idle GPU context, ~3.4 MB private RAM in tray, ~38 ms launch to tray ready) with `+crt-static` (PE-verified zero `VCRUNTIME140` / `MSVCP140` / `vcomp140` / `ucrtbase` runtime imports across `Eqho.exe` and all 13 bundled DLLs)
 - **Out-of-process model host (`Eqho.exe --model-host`):** runs **[whisper.cpp 1.8.4](https://github.com/ggml-org/whisper.cpp)** in an isolated child process over IPC, so engine/model switches cleanly release VRAM and native driver faults never take down the tray or UI
-- **Cross-vendor Vulkan + multi-threaded CPU:** clean-PC CI builds `whisper.cpp v1.8.4` with `-DGGML_VULKAN=ON -DGGML_OPENMP=OFF -DGGML_CPU_ALL_VARIANTS=ON -DGGML_BACKEND_DL=ON` and static CRT (`/MT`); real confidence gating via `whisper_full_get_segment_no_speech_prob` and token log-probs
+- **Cross-vendor Vulkan + multi-threaded CPU:** clean-PC builds compile `whisper.cpp v1.8.4` with `-DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DGGML_VULKAN=ON -DGGML_OPENMP=OFF -DGGML_CPU_ALL_VARIANTS=ON -DGGML_BACKEND_DL=ON` and load host-matched CPU ISA + Vulkan backends via `ggml_backend_load_all_from_path`; real confidence gating via `whisper_full_get_segment_no_speech_prob` and token log-probs
 - **Audio & VAD (`eqho-platform-win` / `eqho-core`):** WASAPI capture supporting 16/24/32-bit integer PCM and 32-bit float at 16 kHz mono, self-calibrating adaptive VAD with bounded pre-roll ring buffer
 - **Deterministic text pipeline (`eqho-core/src/textproc.rs`):** language-aware casing/spacing cleanup, opt-in voice commands, literal user replacements — never rephrases your words (no LLM touches your transcript)
-- **Overlay (`eqho-overlay`):** native Win32 per-pixel alpha layered window (`UpdateLayeredWindow`) rendering the breathing iridescent pill + hover-reveal/pinnable under-pill control bar and upward-growing live preview panel without stealing focus
-- **Packaging:** Inno Setup 6 LZMA2 installer (~13 MB), portable `.zip`, `winget`, and Microsoft Store `.msix` pipeline (`packaging/windows/AppxManifest.xml`, `build_msix.ps1`, `generate_assets.py`)
+- **Overlay (`eqho-overlay`):** native Win32 per-pixel alpha layered windows (`UpdateLayeredWindow` + `WS_EX_NOACTIVATE` / `MA_NOACTIVATE`) rendering the breathing iridescent pill, hover-reveal/pinnable under-pill action strip, searchable 99-language menu with dynamic recent chips, and upward-growing live preview panel without stealing focus
+- **Packaging:** Inno Setup 6 LZMA2 installer (~14 MB), portable `.zip` (~29 MB), `winget`, and Microsoft Store `.msix` pipeline (`packaging/windows/AppxManifest.xml`, pure-ASCII `build_msix.ps1`, `generate_assets.py` + 48 PNG assets, compile-time `EQHO_STORE_ID` override)
 - **Zero telemetry:** the app never phones home; the only network requests are user-initiated GGML model downloads from Hugging Face (and Store license checks in `--features store` MSIX builds)
 
 ## License
