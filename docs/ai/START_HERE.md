@@ -1,44 +1,66 @@
 # START HERE — Eqho
 
-Always-on voice-to-text dictation app. System tray, **Alt+Q**, speak, text lands in the focused app. 100% local: faster-whisper (CTranslate2) + CUDA. Windows primary; Linux X11 + macOS core dictation since v0.6.0.
+Always-on offline voice-to-text dictation app. System tray, **Alt+Q**, speak, text lands in the focused app. 100% local via **`whisper.cpp 1.8.4`** (Vulkan GPU on NVIDIA/AMD/Intel + multi-threaded CPU & Q5 quantized models).
 
-- **Version:** `src/version.py` only. Current **public** release: **0.8.11** (tag `v0.8.11`, 2026-10-17). `dev` continues with 0.8.12 (cleaner text).
-- **Repo:** `origin` = github.com/danielmevit/eqho (PUBLIC; `dev` = all work, `main` = releases). One repo since 2026-10-16; danielmevit/Eqho-private is archived. Merge dev→main ONLY on Daniel's explicit release request. ⚠ Daniel sometimes edits `main` via the GitHub web UI — if a push bounces, `git pull origin main`, merge, NEVER force-push, then merge main back into dev.
-- **Landing page:** `site/` (Astro) → GitHub Pages at danielmevit.github.io/eqho via `.github/workflows/deploy.yml` (builds `./site` on every main push). Exists for SEO + AI-scraper reach (`site/public/llms.txt`).
+## Architecture (Eqho 0.9.0 — Rust Rewrite)
 
-**2026-10-12 review → `docs/ai/reviews/2026-10-12-review.md`** (findings, owner decisions,
-fix plan; queued after Laydown). It supersedes the "Next work" list below.
+Eqho 0.9.0 is a **Rust 1.95 + Slint 1.19 (`renderer-software`) + `whisper.cpp 1.8.4`** Cargo workspace under **`rust/`** (Windows x64 primary). The legacy Python implementation under `src/` is preserved for reference and Linux/macOS 0.8.x continuity.
 
-## State (2026-07-12)
+- **Key docs to read for 0.9.x work:**
+  - [`docs/rust/PLAN.md`](../rust/PLAN.md) — Rust workspace architecture, measured budgets (~3.4 MB idle RAM, ~38 ms tray startup, ~13 MB installer, ~0.25–0.38 s RTX 3060 Vulkan), and parity checklist
+  - [`docs/rust/RELEASE.md`](../rust/RELEASE.md) — building `Eqho.exe`, clean-PC `whisper.cpp` DLLs, Inno Setup installer, and **Microsoft Store MSIX packaging & Partner Center submission**
+  - [`docs/ai/BRAND_STYLE_GUIDE.md`](BRAND_STYLE_GUIDE.md) — mandatory UI visual rules (Deep Navy Blend `#1A489B` + `#58A6FF` accents, strict accent-only semantic rails/dots, 4× HiDPI SVG flags, Store compliance)
+- **Workspace crates (`rust/`):**
+  - `rust/crates/damt-*` — shared `damt.xyz` kit (`damt-app`, `damt-build`, `damt-platform`, `damt-platform-win`, `damt-theme`, `damt-ui`)
+  - `rust/apps/eqho/` — `eqho-core` (pure logic: settings, history, textproc, adaptive VAD, pillfx, modelpick/modelstore), `eqho-platform` + `eqho-platform-win` (WASAPI, COM volume, `WH_KEYBOARD_LL`, clipboard/injector, DXGI), `eqho-host` (`--model-host` child + WinHTTP GGML downloader), `eqho-engine` (coordinator), `eqho-overlay` (native Win32 layered pill, under-pill micro-bar, live text panel), `eqho-ui` (Slint 1.19 Dashboard & 6-step Onboarding), `eqho-app` (`Eqho.exe` binary + optional `--features store` 15-day trial licensing)
+- **Version:** `rust/Cargo.toml` (`[workspace.package] version`) for Rust 0.9.x (`src/version.py` for legacy Python reference). Stay in `0.x` (`0.9.x`); never release `1.0` without Daniel's explicit go.
+- **Repo:** `origin` = `github.com/danielmevit/eqho` (PUBLIC; `dev` = all work, `main` = releases). Merge `dev` → `main` ONLY on Daniel's explicit release request. If a push bounces after a GitHub web UI edit on `main`, `git pull origin main`, merge, NEVER force-push, then merge `main` back into `dev`.
+- **Landing page:** `site/` (Astro) → GitHub Pages at `danielmevit.github.io/eqho` via `.github/workflows/deploy.yml` (builds `./site` on every `main` push), plus `site/public/llms.txt`.
 
-Everything through ROADMAP **Phase 7 (public launch)** is DONE — AGPL, public README, landing page, CONTRIBUTING, repo public. **Released 0.8.2 on 2026-07-12** (first public release since 0.6.9), shipping the **v0.7.x–0.8.x engine arc**:
-- **Auto-format** Tier-1 text cleanup (v0.7.0) · **mic-sensitivity slider** + **per-app paste rules** (v0.7.4).
-- **Seamless model switching** — a subprocess **model host** (v0.8.0); inference runs in a CHILD process, the main app never loads a model (GOTCHAS "CUDA / models").
-- **Dual engine + cross-vendor GPU** (v0.8.1–0.8.2) — a **whisper.cpp** backend (`pywhispercpp`/Vulkan) beside faster-whisper; `engine_backend="auto"` = faster-whisper on NVIDIA+CUDA, whisper.cpp (AMD/Intel/CPU) otherwise; UI **Inference Engine picker** (General → Model) switches at runtime. ✅ **Runtime-verified on hardware 2026-07-12:** Vulkan enumerated NVIDIA RTX 3060 **+ AMD Radeon** and transcribed — the AMD-support goal is proven. Since **0.8.9 the Windows downloads bundle whisper.cpp** (self-contained Vulkan wheel in `packaging/windows/wheels/`, SHA-verified and installed by `release.yml`): on Windows the downloads use AMD and Intel graphics cards. macOS/Linux downloads are unchanged — faster-whisper, so AMD/Intel PCs there run on the processor.
+## Non-Negotiable Invariants
 
-Deep fixes a next agent must NOT regress:
-- **Subprocess model host** (v0.8.0) — never load a Whisper model in the main process.
-- **tkinter cross-interpreter deadlock** (v0.6.7) — GOTCHAS "tkinter", the most important trap here.
-- **Adaptive VAD** (v0.6.8) — gate = clamp(noise_floor×3.5, 0.0009, 0.003); never a fixed threshold.
-- **Single-instance lock** (v0.6.6) — localhost port 48317.
+- **Out-of-process model host (`Eqho.exe --model-host`):** never load a Whisper model in the main UI/tray process. Model/engine switches kill and respawn the child so VRAM releases cleanly and native faults never crash the app.
+- **Idle means idle:** Slint 1.19 `renderer-software` ONLY (never compile in `femtovg`). No dashboard window created until opened.
+- **Adaptive VAD & bounded buffers:** self-calibrating noise floor + bounded pre-roll ring buffer and audio queues.
+- **Brand & Store compliance:** accent-only semantic colors (`docs/ai/BRAND_STYLE_GUIDE.md`); direct-download builds compile zero licensing code; Store builds (`--features store`) contain zero GitHub links and show `"Made with Slint"` attribution.
+- **Windows MSIX packaging:** `packaging/windows/AppxManifest.xml`, `build_msix.ps1` (pure ASCII), `generate_assets.py` + `packaging/windows/assets/`.
 
-If the UI ever stalls >5 s, `%APPDATA%\Eqho\eqho.log` gets a `=== THREAD DUMP` — read it before theorizing.
+## Run / Verify
 
-**Next work:** 0.8.2 is shipped — installers + landing page are live. Follow-ups: 1) **winget** — `damt.Eqho` manifests are bumped to 0.8.2 (`packaging/winget/`, real exe SHA256); submit/update the microsoft/winget-pkgs PR (note #400796 was the 0.6.9 submission, still pending a moderator); 2) demo GIF (TODO.md, Daniel); 3) backlog: silero-VAD, streaming partials, more overlay customization, Eqho Mobile shared engine. Minor known issue: the start chime can be swallowed over a Bluetooth Hands-Free (HFP) mic.
-
-## Run / verify
-
+### Rust 0.9.x (primary)
 ```bash
-# from WSL (the usual agent environment); the cd path stays UNQUOTED
-cmd.exe /c 'cd /d D:\Vibe Coding\Eqho && venv\Scripts\python.exe run.py'                             # run the app
-cmd.exe /c 'cd /d D:\Vibe Coding\Eqho && venv\Scripts\python.exe run.py --smoke'                      # headless gate — MUST pass before every commit
-cmd.exe /c 'cd /d D:\Vibe Coding\Eqho && venv\Scripts\python.exe run.py --diagnose distil-large-v3'   # timed model-switch replay
+# Workspace unit & integration tests (Linux/WSL or Windows):
+CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=4 cargo test --manifest-path rust/Cargo.toml --workspace
+
+# Cross-compile Windows x64 binary from WSL:
+CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=4 \
+  cargo xwin build --manifest-path rust/Cargo.toml -p eqho-app --target x86_64-pc-windows-msvc --release
+
+# Verify MSIX logo assets & manifest:
+python3 packaging/windows/generate_assets.py --check
 ```
 
-Per change: implement → `--smoke` → `CHANGELOG.md` entry → conventional commit on dev → push (`cmd.exe /c 'cd /d D:\Vibe Coding\Eqho && git push'`) → `codegraph sync`.
+```powershell
+# Native Windows build + headless smoke gate:
+cargo build --manifest-path rust/Cargo.toml -p eqho-app --release
+.\dist\Eqho\Eqho.exe --smoke
+
+# Build portable zip + Inno Setup installer:
+powershell -ExecutionPolicy Bypass -File packaging\windows\build-rust.ps1 -DllDir <whisper-dlls>
+
+# Build Microsoft Store MSIX package:
+powershell -ExecutionPolicy Bypass -File packaging\windows\build_msix.ps1 -Store -DllDir <whisper-dlls>
+```
+
+### Legacy Python `src/` (reference only)
+```bash
+cmd.exe /c 'cd /d D:\Vibe Coding\Eqho && venv\Scripts\python.exe run.py --smoke'
+```
 
 ## Navigate
 
-- Code structure, callers, call paths → CodeGraph (`codegraph explore "..."`); `codegraph sync` after edits (WSL /mnt has no file-watching).
-- UI tokens & layout laws → `DESIGN_SYSTEM.md` · Why-choices → `DECISIONS.md` · **Traps → `GOTCHAS.md` (read it)**
+- Code structure, callers, call paths → CodeGraph (`codegraph explore "..."`); run `codegraph sync` after edits (WSL `/mnt` has no file-watching).
+- Rust architecture & benchmarks → [`docs/rust/PLAN.md`](../rust/PLAN.md) · Packaging & Store → [`docs/rust/RELEASE.md`](../rust/RELEASE.md)
+- Visual & Store rules → [`docs/ai/BRAND_STYLE_GUIDE.md`](BRAND_STYLE_GUIDE.md) · Tokens & layout → [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md)
+- Durable choices → [`DECISIONS.md`](DECISIONS.md) · Traps → [`GOTCHAS.md`](GOTCHAS.md)
 - Plans → `ROADMAP.md` · Shipped → `CHANGELOG.md` · Daniel's manual steps → `TODO.md`

@@ -98,8 +98,53 @@ In Store builds (`--features store`), combine `--demo-dashboard` (which creates 
 
 In isolated demo runs, the Store API is never called, `license.json` is never written, and clicking **Buy Eqho** logs a no-op (`demo: purchase skipped`). Outside an isolated demo run (or in direct-download builds), `--demo-license` is ignored with one warning line on `stderr`.
 
+### MSIX Packaging & Partner Center Submission
+
+Eqho's Microsoft Store `.msix` pipeline lives under `packaging/windows/`:
+- `packaging/windows/AppxManifest.xml` — template manifest with `runFullTrust` capability, `microphone` DeviceCapability, and `desktop:StartupTask` (`TaskId="EqhoStartup"` matching `STARTUP_TASK_ID` in `eqho-app/src/app.rs`).
+- `packaging/windows/generate_assets.py` — deterministic Pillow generator for all 48 Store/tile/targetsize PNG assets in `packaging/windows/assets/`.
+- `packaging/windows/build_msix.ps1` — pure-ASCII PowerShell 5.1+ packager that compiles `eqho-app --features store --release --locked`, stages `Eqho.exe` + all `whisper.cpp`/`ggml` DLLs + `LICENSE.txt` + `THIRD-PARTY-NOTICES.txt` + `assets/`, stamps `AppxManifest.xml` from `rust/Cargo.toml`, generates `resources.pri` (`makepri.exe`), and packs with `makeappx.exe`.
+
+#### 1. Generate / verify MSIX visual assets
+```bash
+python3 packaging/windows/generate_assets.py          # regenerate packaging/windows/assets/*.png
+python3 packaging/windows/generate_assets.py --check  # verify committed PNGs match byte-for-byte
+```
+
+#### 2. Build a local unsigned test `.msix` (or signed sideload `.msix`)
+```powershell
+# Unsigned local test package (outputs dist\store\Eqho-<version>-unsigned.msix):
+powershell -ExecutionPolicy Bypass -File packaging\windows\build_msix.ps1 `
+  -DllDir C:\path\to\whisper-dlls
+
+# Signed sideload package for local Windows installation testing:
+powershell -ExecutionPolicy Bypass -File packaging\windows\build_msix.ps1 `
+  -SignForSideload C:\path\to\test-cert.pfx `
+  -CertPassword "<pfx-password>" `
+  -DllDir C:\path\to\whisper-dlls
+```
+Optional flags: `-ExePath <path-to-Eqho.exe>`, `-SkipBuild`, `-OutDir <dir>` (default `dist\store`), and `$env:EQHO_CERT_PASSWORD` instead of `-CertPassword`.
+
+#### 3. Build the unsigned Partner Center Store `.msix`
+Set all four required Partner Center environment variables (from **Partner Center → Product management → Product identity**), then run `build_msix.ps1 -Store`:
+
+```powershell
+$env:EQHO_STORE_ID                = "9XXXXXXXXXXX"                 # must NOT be placeholder 9NBLGGH4XXXX
+$env:EQHO_STORE_IDENTITY_NAME     = "<PartnerCenter.IdentityName>" # e.g. 12345damt.Eqho
+$env:EQHO_STORE_PUBLISHER         = "CN=<Publisher-GUID>"
+$env:EQHO_STORE_PUBLISHER_DISPLAY = "damt.xyz"
+# Optional override (defaults to "Eqho"):
+# $env:EQHO_STORE_DISPLAY_NAME    = "Eqho"
+
+powershell -ExecutionPolicy Bypass -File packaging\windows\build_msix.ps1 `
+  -Store `
+  -DllDir C:\path\to\whisper-dlls
+```
+This outputs an **unsigned** `dist\store\Eqho-<version>-store.msix` ready for upload to Partner Center (Microsoft signs Store packages during certification).
+
 ### Partner Center Pre-Submission Checklist
-1. Reserve Eqho's product name in Partner Center and replace placeholder `STORE_ID` (`"9NBLGGH4XXXX"`) in `rust/apps/eqho/eqho-app/src/license.rs` before building the Store `.msix`.
-2. Configure **MSIX** package with `runFullTrust` capability and `desktop:StartupTask` (`TaskId="EqhoStartup"`).
-3. Set a **paid base price** and enable a **15-day free trial** (managed by the Microsoft Store).
-4. In Partner Center privacy/commerce declarations: **Uses the Microsoft commerce platform = Yes**, **Collects personal information = No**.
+1. Reserve Eqho's product name in Partner Center, update `STORE_ID` (replacing placeholder `"9NBLGGH4XXXX"` in `rust/apps/eqho/eqho-app/src/license.rs` or via `EQHO_STORE_ID`), and set `EQHO_STORE_ID`, `EQHO_STORE_IDENTITY_NAME`, `EQHO_STORE_PUBLISHER`, and `EQHO_STORE_PUBLISHER_DISPLAY`.
+2. Run `python3 packaging/windows/generate_assets.py --check` and confirm `packaging/windows/AppxManifest.xml` declares `runFullTrust`, `DeviceCapability Name="microphone"`, and `desktop:StartupTask` (`TaskId="EqhoStartup"`).
+3. Pack `dist\store\Eqho-<version>-store.msix` using `packaging\windows\build_msix.ps1 -Store -DllDir <clean-pc-whisper-dlls>` and run Windows App Certification Kit (WACK) locally if desired.
+4. Set a **paid base price** and enable a **15-day free trial** (managed by the Microsoft Store).
+5. In Partner Center privacy/commerce declarations: **Uses the Microsoft commerce platform = Yes**, **Collects personal information = No**.
