@@ -178,6 +178,7 @@ struct UiSyncSnapshot {
     dictation_allowed: bool,
     recovery_text: Option<String>,
     downloading_key: Option<String>,
+    loading_key: Option<String>,
     download_progress: f32,
     download_detail: String,
     download_done_key: Option<String>,
@@ -262,6 +263,7 @@ impl AppUiSink {
                     &settings.model_size,
                     &cached,
                     snap.downloading_key.as_deref(),
+                    snap.loading_key.as_deref(),
                     snap.download_progress,
                     &snap.download_detail,
                     snap.download_error_key.as_deref(),
@@ -442,34 +444,69 @@ impl UiEventSink for AppUiSink {
 
     fn on_model_progress(&self, model_key: &str, message: &str, fraction: Option<f32>) {
         let lower = message.to_ascii_lowercase();
-        let is_error = lower.contains("failed");
+        let is_load_error = lower.starts_with("load failed");
+        let is_error = !is_load_error && lower.contains("failed");
         let is_ready = message.eq_ignore_ascii_case("ready");
-        let is_active = !is_error && !is_ready && (fraction.is_some() || lower.contains("loading") || lower.contains("downloading"));
+        let is_loading = !is_error
+            && !is_load_error
+            && !is_ready
+            && lower.contains("loading")
+            && !lower.contains("downloading");
+        let is_downloading = !is_error
+            && !is_load_error
+            && !is_ready
+            && !is_loading
+            && (lower.contains("downloading") || fraction.is_some());
         let clamped_frac = fraction.map(|f| f.clamp(0.0, 1.0));
 
         let (progress_val, detail_text) = {
             let mut snap = self.snapshot.lock().unwrap_or_else(|e| e.into_inner());
-            if is_error {
+            if is_load_error {
+                if snap.loading_key.as_deref() == Some(model_key) {
+                    snap.loading_key = None;
+                }
+                if snap.downloading_key.as_deref() == Some(model_key) {
+                    snap.downloading_key = None;
+                }
+                (snap.download_progress, message.to_owned())
+            } else if is_error {
                 snap.downloading_key = None;
+                snap.loading_key = None;
                 snap.download_done_key = None;
                 snap.download_error_key = Some(model_key.to_owned());
                 snap.download_detail = message.to_owned();
                 (0.0_f32, message.to_owned())
             } else if is_ready {
-                snap.downloading_key = None;
+                if snap.downloading_key.as_deref() == Some(model_key) {
+                    snap.downloading_key = None;
+                }
+                if snap.loading_key.as_deref() == Some(model_key) {
+                    snap.loading_key = None;
+                }
                 snap.download_progress = 1.0;
                 snap.download_error_key = None;
                 snap.download_done_key = Some(model_key.to_owned());
                 snap.download_detail = "Ready".to_owned();
                 (1.0_f32, "Ready".to_owned())
-            } else {
+            } else if is_loading {
+                if snap.downloading_key.as_deref() == Some(model_key) {
+                    snap.downloading_key = None;
+                }
+                snap.loading_key = Some(model_key.to_owned());
+                (1.0_f32, message.to_owned())
+            } else if is_downloading {
                 snap.downloading_key = Some(model_key.to_owned());
+                if snap.loading_key.as_deref() == Some(model_key) {
+                    snap.loading_key = None;
+                }
                 if let Some(frac) = clamped_frac {
                     snap.download_progress = frac;
                 }
                 snap.download_error_key = None;
                 snap.download_done_key = None;
                 snap.download_detail = message.to_owned();
+                (snap.download_progress, message.to_owned())
+            } else {
                 (snap.download_progress, message.to_owned())
             }
         };
@@ -483,15 +520,18 @@ impl UiEventSink for AppUiSink {
         if let Some(dash_weak) = dash_weak_opt {
             let model_name = model_short_name(model_key);
             let pct = (progress_val * 100.0).round().clamp(0.0, 100.0) as i32;
+            let bg_active = is_downloading;
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(dash) = dash_weak.upgrade() {
-                    dash.set_bg_download_active(is_active);
-                    dash.set_bg_download_done(is_ready);
-                    dash.set_bg_download_error(is_error);
-                    dash.set_bg_download_model(model_name.into());
-                    dash.set_bg_download_progress(progress_val);
-                    dash.set_bg_download_pct(pct);
-                    dash.set_bg_download_detail(detail_text.into());
+                    if !is_loading {
+                        dash.set_bg_download_active(bg_active);
+                        dash.set_bg_download_done(is_ready);
+                        dash.set_bg_download_error(is_error);
+                        dash.set_bg_download_model(model_name.into());
+                        dash.set_bg_download_progress(progress_val);
+                        dash.set_bg_download_pct(pct);
+                        dash.set_bg_download_detail(detail_text.into());
+                    }
                     if is_ready {
                         dash.set_onboarding_model_cached(true);
                         dash.set_onboarding_model_ready(true);
@@ -767,6 +807,7 @@ impl AppController {
             &s.model_size,
             &cached,
             snap.downloading_key.as_deref(),
+            snap.loading_key.as_deref(),
             snap.download_progress,
             &snap.download_detail,
             snap.download_error_key.as_deref(),
@@ -1192,7 +1233,14 @@ fn ensure_dashboard(ctrl: &Rc<RefCell<AppController>>, tab: Option<&str>) {
     let c = ctrl.borrow();
     if let Some(dash) = &c.dashboard {
         if let Some(t) = tab {
-            dash.set_active_tab(t.into());
+            if t == "settings" {
+                dash.set_active_tab("general".into());
+                dash.set_tour_active(false);
+                dash.set_settings_open(true);
+            } else {
+                dash.set_settings_open(false);
+                dash.set_active_tab(t.into());
+            }
         }
         let _ = dash.show();
     }
@@ -1292,13 +1340,98 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         });
     }
 
-    // TopBar
+    // TopBar, Settings modal & Interactive Guide tour
     {
         let dash_w = dash.as_weak();
         dash.on_tab_selected(move |t| {
             if let Some(d) = dash_w.upgrade() {
                 d.set_active_tab(t);
             }
+        });
+    }
+    {
+        let dash_w = dash.as_weak();
+        dash.on_open_settings(move || {
+            if let Some(d) = dash_w.upgrade() {
+                d.set_tour_active(false);
+                d.set_settings_open(true);
+            }
+        });
+    }
+    {
+        let dash_w = dash.as_weak();
+        dash.on_close_settings(move || {
+            if let Some(d) = dash_w.upgrade() {
+                d.set_settings_open(false);
+            }
+        });
+    }
+    {
+        let dash_w = dash.as_weak();
+        dash.on_start_tour(move || {
+            if let Some(d) = dash_w.upgrade() {
+                d.set_settings_open(false);
+                d.set_tour_step(0);
+                d.set_tour_active(true);
+                d.set_active_tab("general".into());
+            }
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_tour_next(move || {
+            if let Some(d) = dash_w.upgrade() {
+                let next = d.get_tour_step() + 1;
+                if next >= 4 {
+                    d.set_tour_active(false);
+                    d.set_tour_step(0);
+                    let c = ctrl_w.borrow();
+                    c.settings
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .tour_done = true;
+                    c.save_settings(false);
+                } else {
+                    d.set_tour_step(next);
+                    let tab = match next {
+                        1 => "models",
+                        2 => "history",
+                        _ => "general",
+                    };
+                    d.set_active_tab(tab.into());
+                }
+            }
+        });
+    }
+    {
+        let dash_w = dash.as_weak();
+        dash.on_tour_back(move || {
+            if let Some(d) = dash_w.upgrade() {
+                let prev = (d.get_tour_step() - 1).max(0);
+                d.set_tour_step(prev);
+                let tab = match prev {
+                    1 => "models",
+                    2 => "history",
+                    _ => "general",
+                };
+                d.set_active_tab(tab.into());
+            }
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_dismiss_tour(move || {
+            if let Some(d) = dash_w.upgrade() {
+                d.set_tour_active(false);
+            }
+            let c = ctrl_w.borrow();
+            c.settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .tour_done = true;
+            c.save_settings(false);
         });
     }
     {
@@ -1535,6 +1668,13 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
                 s.model_size = key.to_string();
                 s.language.clone()
             };
+            {
+                let mut snap = c.snapshot.lock().unwrap_or_else(|e| e.into_inner());
+                if snap.downloading_key.as_deref() == Some(key.as_str()) {
+                    snap.downloading_key = None;
+                }
+                snap.loading_key = Some(key.to_string());
+            }
             // Never reload model synchronously on the UI thread; the background thread below handles preload.
             c.save_settings(false);
             c.refresh_models();
@@ -1825,6 +1965,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         let dash_w = dash.as_weak();
         dash.on_open_trash(move || {
             if let Some(d) = dash_w.upgrade() {
+                d.set_settings_open(false);
                 d.set_showing_trash(true);
                 d.set_history_status("".into());
                 d.set_active_tab("history".into());
@@ -1996,6 +2137,8 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
             };
             c.refresh_onboarding_models(Some(&initial_key));
             if let Some(d) = dash_w.upgrade() {
+                d.set_settings_open(false);
+                d.set_tour_active(false);
                 d.set_onboarding_hotkey_ok(c.hotkey_ok);
                 d.set_onboarding_is_dictating(false);
                 d.set_onboarding_try_hint("".into());
@@ -2147,14 +2290,19 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         move || {
             let mut c = ctrl_w.borrow_mut();
             c.stop_mic_test();
-            let (model_size, model_dir) = {
+            let (model_size, model_dir, show_tour) = {
                 let mut s = c.settings.lock().unwrap_or_else(|e| e.into_inner());
                 s.onboarding_done = true;
-                (s.model_size.clone(), s.resolve_model_dir())
+                (s.model_size.clone(), s.resolve_model_dir(), !s.tour_done)
             };
             c.save_settings(false);
             if let Some(d) = dash_w.upgrade() {
                 d.set_onboarding_active(false);
+                if show_tour {
+                    d.set_active_tab("general".into());
+                    d.set_tour_step(0);
+                    d.set_tour_active(true);
+                }
             }
             if whispercpp_model_path(&model_dir, &model_size).is_file() {
                 let coord = c.coordinator.clone();
@@ -2655,6 +2803,7 @@ pub fn run_desktop_app(
         dictation_allowed: true,
         recovery_text: None,
         downloading_key: None,
+        loading_key: None,
         download_progress: 0.0,
         download_detail: String::new(),
         download_done_key: None,

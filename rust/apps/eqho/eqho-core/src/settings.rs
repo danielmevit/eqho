@@ -244,6 +244,7 @@ pub struct Settings {
     pub vad_sensitivity: f64,
     pub paste_rules: BTreeMap<String, String>,
     pub onboarding_done: bool,
+    pub tour_done: bool,
     pub slow_hint_shown_for: String,
     pub delivery_mode: String,
     pub overlay_controls_enabled: bool,
@@ -287,6 +288,7 @@ impl Default for Settings {
             vad_sensitivity: 1.0,
             paste_rules: BTreeMap::new(),
             onboarding_done: false,
+            tour_done: false,
             slow_hint_shown_for: String::new(),
             delivery_mode: "batch".to_owned(),
             overlay_controls_enabled: true,
@@ -313,6 +315,7 @@ impl Settings {
                 backup_corrupt_file(path);
                 return Self {
                     onboarding_done: true,
+                    tour_done: true,
                     ..Self::default()
                 };
             }
@@ -325,6 +328,7 @@ impl Settings {
                 backup_corrupt_file(path);
                 return Self {
                     onboarding_done: true,
+                    tour_done: true,
                     ..Self::default()
                 };
             }
@@ -334,6 +338,7 @@ impl Settings {
             backup_corrupt_file(path);
             return Self {
                 onboarding_done: true,
+                tour_done: true,
                 ..Self::default()
             };
         };
@@ -449,6 +454,11 @@ impl Settings {
             s.onboarding_done = coerce_bool(v, s.onboarding_done);
         } else {
             s.onboarding_done = true;
+        }
+        if let Some(v) = obj.get("tour_done") {
+            s.tour_done = coerce_bool(v, s.tour_done);
+        } else {
+            s.tour_done = true;
         }
         if let Some(v) = obj.get("slow_hint_shown_for") {
             s.slow_hint_shown_for = coerce_string(v, &s.slow_hint_shown_for);

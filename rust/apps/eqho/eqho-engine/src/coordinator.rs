@@ -1191,9 +1191,20 @@ impl CoordinatorInner {
         };
 
         match backend.load_model(model_key, &model_dir, use_gpu, threads, &mut on_progress) {
-            Ok(info) => Ok(info),
-            Err(ModelHostError::LowMemory(_)) => Err(LOW_MEMORY_LOAD_TEXT.to_owned()),
-            Err(err) => Err(format!("Model failed to load — {err}")),
+            Ok(info) => {
+                self.ui.on_model_progress(model_key, "Ready", None);
+                Ok(info)
+            }
+            Err(ModelHostError::LowMemory(_)) => {
+                self.ui
+                    .on_model_progress(model_key, "Load failed: low memory", None);
+                Err(LOW_MEMORY_LOAD_TEXT.to_owned())
+            }
+            Err(err) => {
+                self.ui
+                    .on_model_progress(model_key, &format!("Load failed: {err}"), None);
+                Err(format!("Model failed to load — {err}"))
+            }
         }
     }
 
@@ -1208,6 +1219,7 @@ impl CoordinatorInner {
         if backend.is_ready(&model_key, use_gpu)
             && let Some(info) = backend.info().cloned()
         {
+            self.ui.on_model_progress(&model_key, "Ready", None);
             return Ok(info);
         }
 
@@ -1217,7 +1229,14 @@ impl CoordinatorInner {
             ui.on_model_progress(&key_owned, msg, frac);
         };
 
-        backend.load_model(&model_key, &model_dir, use_gpu, threads, &mut on_progress)
+        let result = backend.load_model(&model_key, &model_dir, use_gpu, threads, &mut on_progress);
+        match &result {
+            Ok(_) => self.ui.on_model_progress(&model_key, "Ready", None),
+            Err(err) => self
+                .ui
+                .on_model_progress(&model_key, &format!("Load failed: {err}"), None),
+        }
+        result
     }
 
     fn register_hotkey(self: &Arc<Self>) -> Result<(), String> {

@@ -7,7 +7,7 @@
 ; downloaded GGML speech models are never deleted on uninstall.
 
 #ifndef AppVersion
-  #define AppVersion "0.9.1"
+  #define AppVersion "0.9.2"
 #endif
 #ifndef DistDir
   #define DistDir "..\..\dist\Eqho"
@@ -70,3 +70,16 @@ Root: HKCU; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\Eqho.exe"; Description: "Launch {#AppName} now"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// Eqho runs primarily as a tray app (dashboard window hidden), so Restart Manager cannot
+// always close it automatically during an in-place upgrade. Gracefully terminate any running
+// Eqho.exe (and its --model-host child) right before extracting updated files.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM Eqho.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(250);
+  Result := '';
+end;

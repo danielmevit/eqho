@@ -3,9 +3,11 @@ import { Theme } from "@app-theme/theme.slint";
 import { Button, ButtonKind, ProgressLine, TabList } from "@damt-ui/kit.slint";
 import { ModelCardItem } from "types.slint";
 import { ScrollArea, SectionCard } from "components.slint";
+import { Icons, PhIcon, HoverTooltip } from "icons.slint";
 
 // Clean 28x28 circular icon-led status indicator (no checkmarks, no loud green pills).
 // - Downloaded / Active: blue download icon + blue outline (stronger outline when active)
+// - Loading into memory: blue download icon + calm status text
 // - Downloading: tinted Eqho-blue circle + animated 3-dot indicator
 // - Error: subtle circle with error border + clickable retry icon
 // - Not downloaded: muted neutral circle + clickable grey download arrow with standard gray hover
@@ -13,11 +15,18 @@ component ModelStatusIcon inherits Rectangle {
     in property <bool> is-selected: false;
     in property <bool> is-cached: false;
     in property <bool> is-downloading: false;
+    in property <bool> is-loading: false;
     in property <bool> has-error: false;
     callback download-clicked();
 
     property <bool> clickable: !root.is-cached && !root.is-downloading;
     property <int> dot-phase: Math.mod(Math.floor(animation-tick() / 240ms), 4);
+    property <string> tooltip-text: root.is-loading ? "Loading into memory…"
+        : root.is-selected && root.is-cached ? "Active model"
+        : root.is-downloading ? "Downloading model…"
+        : root.has-error ? "Download failed — click to retry"
+        : root.is-cached ? "Downloaded"
+        : "Download model";
 
     width: 28px;
     height: 28px;
@@ -27,36 +36,22 @@ component ModelStatusIcon inherits Rectangle {
         : root.has-error ? Theme.error
         : root.is-downloading ? Theme.accent-line
         : touch.has-hover && root.clickable ? Theme.border
-        : Theme.border-subtle;
+        : Theme.dark ? #363640 : Theme.border-subtle;
     background: root.is-cached && !root.is-downloading ? Theme.accent-muted
         : root.is-downloading ? Theme.accent-muted
         : touch.pressed && root.clickable ? Theme.button-outline-pressed
         : touch.has-hover && root.clickable ? Theme.surface-hover
-        : Theme.surface-tertiary;
+        : Theme.dark ? #2B2B32 : Theme.surface-tertiary;
 
     accessible-role: button;
     accessible-enabled: root.clickable;
-    accessible-label: root.is-selected && root.is-cached ? "Active model (downloaded)"
-        : root.is-downloading ? "Downloading"
-        : root.has-error ? "Download failed, click to retry"
-        : root.is-cached ? "Downloaded"
-        : "Download model";
+    accessible-label: root.tooltip-text;
 
-    // Downloaded (cached or active): blue download icon inside blue-outlined circle
-    if root.is-cached && !root.is-downloading : Path {
-        width: 14px;
-        height: 14px;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        viewbox-x: 0;
-        viewbox-y: 0;
-        viewbox-width: 24;
-        viewbox-height: 24;
-        stroke: Theme.accent-text;
-        stroke-width: 1.9px;
-        stroke-line-cap: round;
-        stroke-line-join: round;
-        commands: "M 12 4 L 12 15 M 7.5 11 L 12 15.5 L 16.5 11 M 5 19.5 L 19 19.5";
+    // Downloaded (cached, loading, or active): Phosphor download icon in Eqho blue inside blue-outlined circle
+    if root.is-cached && !root.is-downloading : PhIcon {
+        glyph: Icons.download;
+        size: 15px;
+        icon-color: Theme.accent-text;
     }
 
     // Downloading animated 3 dots (Eqho blue)
@@ -95,44 +90,40 @@ component ModelStatusIcon inherits Rectangle {
         }
     }
 
-    // Error retry icon
-    if root.has-error && !root.is-downloading && !root.is-cached : Path {
-        width: 13px;
-        height: 13px;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        viewbox-x: 0;
-        viewbox-y: 0;
-        viewbox-width: 24;
-        viewbox-height: 24;
-        stroke: Theme.error;
-        stroke-width: 2.0px;
-        stroke-line-cap: round;
-        stroke-line-join: round;
-        commands: "M 20 11 A 8 8 0 1 0 18.2 16.5 M 20 5 L 20 11 L 14 11";
+    // Error retry icon (Phosphor)
+    if root.has-error && !root.is-downloading && !root.is-cached : PhIcon {
+        glyph: Icons.retry;
+        size: 15px;
+        icon-color: Theme.error;
     }
 
-    // Not downloaded: muted grey download arrow (same subtle neutral gray hover as other buttons)
-    if !root.is-cached && !root.is-downloading && !root.has-error : Path {
-        width: 14px;
-        height: 14px;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        viewbox-x: 0;
-        viewbox-y: 0;
-        viewbox-width: 24;
-        viewbox-height: 24;
-        stroke: touch.has-hover ? Theme.text : Theme.text-muted;
-        stroke-width: 1.8px;
-        stroke-line-cap: round;
-        stroke-line-join: round;
-        commands: "M 12 4 L 12 15 M 7.5 11 L 12 15.5 L 16.5 11 M 5 19.5 L 19 19.5";
+    // Not downloaded: muted grey Phosphor download icon with neutral gray hover
+    if !root.is-cached && !root.is-downloading && !root.has-error : PhIcon {
+        glyph: Icons.download;
+        size: 15px;
+        icon-color: touch.has-hover ? Theme.text : Theme.text-muted;
     }
 
     touch := TouchArea {
-        enabled: root.clickable;
         mouse-cursor: root.clickable ? pointer : default;
-        clicked => { root.download-clicked(); }
+        changed has-hover => {
+            if (self.has-hover) {
+                HoverTooltip.text = root.tooltip-text;
+                HoverTooltip.anchor-x = root.absolute-position.x;
+                HoverTooltip.anchor-y = root.absolute-position.y;
+                HoverTooltip.anchor-w = root.width;
+                HoverTooltip.anchor-h = root.height;
+                HoverTooltip.visible = true;
+            } else if (HoverTooltip.text == root.tooltip-text) {
+                HoverTooltip.visible = false;
+            }
+        }
+        clicked => {
+            if (root.clickable) {
+                HoverTooltip.visible = false;
+                root.download-clicked();
+            }
+        }
     }
 }
 
@@ -145,12 +136,16 @@ component ModelCard inherits Rectangle {
 
     property <bool> is-active: root.item.is_selected && root.item.is_cached && !root.item.is_downloading;
 
-    background: Theme.bg;
+    // Dark-mode depth ladder: canvas (#0A0A0B) -> SectionCard (#151517) -> ModelCard (#1F1F23 / #242429 active).
+    // Calm grayish-white outline on the active model (never a loud full-blue rectangle).
+    background: Theme.dark
+        ? (root.is-active ? #24242A : Theme.surface-tertiary)
+        : Theme.bg;
     border-radius: Theme.radius-card;
-    border-width: root.is-active ? 2px : 1px;
-    border-color: root.is-active ? Theme.accent-line
-        : root.item.is_downloading ? Theme.accent-line
-        : Theme.border-subtle;
+    border-width: root.is-active ? 1.5px : 1px;
+    border-color: root.is-active
+        ? (Theme.dark ? #D4D4D86E : #1A1C1F52)
+        : (Theme.dark ? #303038 : Theme.border-subtle);
     min-height: lay.preferred-height;
     horizontal-stretch: 1;
 
@@ -179,6 +174,7 @@ component ModelCard inherits Rectangle {
                     is-selected: root.is-active;
                     is-cached: root.item.is_cached;
                     is-downloading: root.item.is_downloading;
+                    is-loading: root.item.is_loading;
                     has-error: root.item.has_error;
                     download-clicked => { root.download-clicked(root.item.key); }
                 }
@@ -256,12 +252,21 @@ component ModelCard inherits Rectangle {
                 vertical-alignment: center;
             }
 
-            if root.is-active : Text {
+            if root.is-active && root.item.is_loading : Text {
+                height: 30px;
+                text: "Loading model…";
+                font-size: Theme.font-size-sm;
+                font-weight: 500;
+                color: Theme.text-muted;
+                vertical-alignment: center;
+            }
+
+            if root.is-active && !root.item.is_loading : Text {
                 height: 30px;
                 text: "Active model";
                 font-size: Theme.font-size-sm;
                 font-weight: 600;
-                color: Theme.accent-text;
+                color: Theme.text;
                 vertical-alignment: center;
             }
         }

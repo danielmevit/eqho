@@ -29,13 +29,13 @@ export component Button inherits Rectangle {
     horizontal-stretch: 0;
     vertical-stretch: 0;
 
-    border-radius: Theme.radius-button;
+    border-radius: 9px;
     border-width: root.kind == ButtonKind.outline ? 1px : 0px;
-    border-color: Theme.text-muted;
+    border-color: Theme.border;
     background: root.kind == ButtonKind.accent
         ? (!root.enabled ? Theme.accent : touch.pressed ? Theme.button-accent-pressed : touch.has-hover ? Theme.button-accent-hover : Theme.accent)
         : root.kind == ButtonKind.outline
-            ? (!root.enabled ? transparent : touch.pressed ? Theme.button-outline-pressed : touch.has-hover ? Theme.surface-hover : transparent)
+            ? (!root.enabled ? transparent : touch.pressed ? Theme.button-outline-pressed : touch.has-hover ? Theme.surface-hover : Theme.dark ? #FFFFFF08 : Theme.surface)
             : transparent;
     opacity: root.enabled ? 1.0 : 0.4;
 
@@ -82,7 +82,7 @@ export component Button inherits Rectangle {
         height: parent.height;
         border-width: 2px;
         border-color: Theme.accent-line;
-        border-radius: Theme.radius-button;
+        border-radius: 9px;
     }
 }
 
@@ -91,10 +91,12 @@ export component Button inherits Rectangle {
 export component CloseButton inherits Rectangle {
     in property <string> accessible-name;
     in property <bool> enabled: true;
+    out property <bool> has-hover: touch.has-hover;
     callback clicked();
+    callback hover-changed(bool);
     width: 28px;
     height: 28px;
-    border-radius: Theme.radius-button;
+    border-radius: 9px;
     background: touch.pressed ? Theme.button-outline-pressed : touch.has-hover ? Theme.surface-hover : transparent;
     accessible-role: button;
     accessible-label: root.accessible-name;
@@ -112,7 +114,11 @@ export component CloseButton inherits Rectangle {
     touch := TouchArea {
         enabled: root.enabled;
         mouse-cursor: pointer;
-        clicked => { root.clicked(); }
+        changed has-hover => { root.hover-changed(self.has-hover); }
+        clicked => {
+            root.hover-changed(false);
+            root.clicked();
+        }
     }
     focus := FocusScope {
         enabled: root.enabled;
@@ -520,8 +526,8 @@ export component TabList inherits Rectangle {
     min-height: Math.max(34px, lay.preferred-height);
     border-radius: 17px;
     border-width: 1px;
-    border-color: Theme.border-subtle;
-    background: Theme.bg;
+    border-color: Theme.dark ? #303038 : Theme.border-subtle;
+    background: Theme.dark ? #232329 : Theme.bg;
     accessible-role: tab-list;
     accessible-label: root.accessible-name;
 
@@ -794,12 +800,12 @@ export component Dropdown inherits Rectangle {
     property <length> scroll-y: 0px;
 
     min-width: Math.max(140px, val.preferred-width + 36px);
-    height: 28px;
+    height: 32px;
     horizontal-stretch: 0;
-    border-radius: Theme.radius-button;
+    border-radius: 9px;
     border-width: 1px;
-    border-color: (touch.has-hover && root.enabled) ? Theme.text-muted : Theme.input-border;
-    background: touch.pressed ? Theme.button-outline-pressed : transparent;
+    border-color: (touch.has-hover && root.enabled) ? Theme.text-muted : Theme.border;
+    background: touch.pressed ? Theme.button-outline-pressed : (touch.has-hover && root.enabled) ? Theme.surface-hover : Theme.dark ? #25252C : Theme.surface;
     opacity: root.enabled ? 1.0 : 0.5;
 
     accessible-role: combobox;
@@ -913,7 +919,11 @@ export component Dropdown inherits Rectangle {
         overflow: elide;
         accessible-role: none;
     }
-    Chevron { x: parent.width - 18px; stroke: Theme.text-muted; }
+    Chevron {
+        x: parent.width - 18px;
+        y: (parent.height - self.height) / 2;
+        stroke: Theme.text-muted;
+    }
 
     touch := TouchArea {
         enabled: root.enabled;
@@ -939,7 +949,7 @@ export component Dropdown inherits Rectangle {
         height: parent.height + 6px;
         border-width: 2px;
         border-color: Theme.accent-line;
-        border-radius: Theme.radius-button + 3px;
+        border-radius: 12px;
     }
 
     popup := PopupWindow {
@@ -949,11 +959,11 @@ export component Dropdown inherits Rectangle {
         height: root.popup-h;
         Rectangle {
             background: Theme.surface;
-            border-radius: Theme.radius-button;
+            border-radius: 10px;
             border-width: 1px;
-            border-color: Theme.input-border;
-            drop-shadow-blur: 8px;
-            drop-shadow-offset-y: 2px;
+            border-color: Theme.border;
+            drop-shadow-blur: 12px;
+            drop-shadow-offset-y: 4px;
             drop-shadow-color: #00000030;
         }
         keys := FocusScope {
@@ -990,8 +1000,8 @@ export component Dropdown inherits Rectangle {
                         min-height: root.row-h;
                         max-height: root.row-h;
                         min-width: entry.preferred-width + 20px;
-                        border-radius: Theme.radius-button - 2px;
-                        background: i == root.hl ? Theme.button-outline-pressed : row.has-hover ? Theme.button-outline-hover : transparent;
+                        border-radius: 6px;
+                        background: i == root.hl ? Theme.button-outline-pressed : row.has-hover ? Theme.surface-hover : transparent;
                         accessible-role: list-item;
                         accessible-label: item;
                         accessible-item-selectable: true;

@@ -1,14 +1,15 @@
 // Eqho Slint 1.19 Root UI: DashboardWindow & EqhoTray.
 import { Theme } from "@app-theme/theme.slint";
 import { ModelCardItem, HistoryRowItem, LanguageOption, OnboardingModelOption } from "types.slint";
-import { TopBar, RecoveryBanner, StoreTrialBanner, StoreTrialFooter } from "components.slint";
+import { TopBar, TourCard, RecoveryBanner, StoreTrialBanner, StoreTrialFooter } from "components.slint";
+import { HoverTooltip, TooltipOverlay } from "icons.slint";
 import { GeneralTab } from "tab_general.slint";
 import { ModelsTab } from "tab_models.slint";
 import { HistoryTab } from "tab_history.slint";
-import { SettingsTab } from "tab_settings.slint";
+import { SettingsModal } from "settings_modal.slint";
 import { OnboardingView } from "onboarding.slint";
 
-export { Theme, ModelCardItem, HistoryRowItem, LanguageOption, OnboardingModelOption }
+export { Theme, HoverTooltip, ModelCardItem, HistoryRowItem, LanguageOption, OnboardingModelOption }
 
 export component DashboardWindow inherits Window {
     min-width: 600px;
@@ -22,6 +23,10 @@ export component DashboardWindow inherits Window {
     in-out property <string> window-title: "Eqho Dashboard";
     in property <image> window-icon;
     in-out property <string> active-tab: "general";
+    in-out property <bool> settings-open: false;
+    in-out property <string> settings-section: "appearance";
+    in-out property <bool> tour-active: false;
+    in-out property <int> tour-step: 0;
     in-out property <bool> onboarding-active: false;
     in-out property <int> onboarding-step: 0;
     in property <image> logo-image;
@@ -46,9 +51,15 @@ export component DashboardWindow inherits Window {
     property <bool> trial-ended: root.store-build && root.license-state == "trial-expired";
     property <bool> trial-running: root.store-build && root.license-state == "trial" && root.trial-days-left > 0;
 
-    // TopBar callbacks
+    // TopBar, Settings modal & Interactive Guide callbacks
     callback tab-selected(string);
     callback theme-toggled();
+    callback open-settings();
+    callback close-settings();
+    callback start-tour();
+    callback tour-next();
+    callback tour-back();
+    callback dismiss-tour();
 
     // General tab properties & callbacks
     in property <[string]> mic-names: ["System Default"];
@@ -138,7 +149,7 @@ export component DashboardWindow inherits Window {
     in-out property <int> overlay-see-through-pct: 5;
     in-out property <int> overlay-panel-see-through-pct: 22;
     in-out property <int> overlay-font-size: 14;
-    in property <string> app-version: "0.9.1";
+    in property <string> app-version: "0.9.2";
     in-out property <string> active-engine-display: "GPU (Vulkan) · whisper.cpp 1.8.4";
 
     callback theme-mode-changed(int);
@@ -266,9 +277,13 @@ export component DashboardWindow inherits Window {
 
         TopBar {
             active-tab <=> root.active-tab;
+            settings-open: root.settings-open;
+            tour-active: root.tour-active;
             logo-image: root.logo-image;
             tab-selected(t) => { root.tab-selected(t); }
             theme-toggled => { root.theme-toggled(); }
+            settings-clicked => { root.open-settings(); }
+            tour-clicked => { root.start-tour(); }
         }
 
         if root.trial-ended : VerticalLayout {
@@ -375,62 +390,6 @@ export component DashboardWindow inherits Window {
                 delete-trash-permanently(ts) => { root.delete-trash-permanently(ts); }
                 empty-trash => { root.empty-trash(); }
             }
-
-            if root.active-tab == "settings" : SettingsTab {
-                width: parent.width;
-                height: parent.height;
-                window-height: root.height;
-                theme-mode-index <=> root.theme-mode-index;
-                ui-scale-index <=> root.ui-scale-index;
-                remove-fillers <=> root.remove-fillers;
-                voice-commands <=> root.voice-commands;
-                replacements-text <=> root.replacements-text;
-                replacements-status <=> root.replacements-status;
-                paste-rules-text <=> root.paste-rules-text;
-                paste-rules-status <=> root.paste-rules-status;
-                volume-duck-index <=> root.volume-duck-index;
-                history-trash-days-index <=> root.history-trash-days-index;
-                start-with-windows <=> root.start-with-windows;
-                overlay-enabled <=> root.overlay-enabled;
-                overlay-show-text <=> root.overlay-show-text;
-                overlay-show-level <=> root.overlay-show-level;
-                overlay-controls-enabled <=> root.overlay-controls-enabled;
-                overlay-controls-pinned <=> root.overlay-controls-pinned;
-                overlay-monitor-index <=> root.overlay-monitor-index;
-                overlay-position-index <=> root.overlay-position-index;
-                overlay-pill-scale-pct <=> root.overlay-pill-scale-pct;
-                overlay-see-through-pct <=> root.overlay-see-through-pct;
-                overlay-panel-see-through-pct <=> root.overlay-panel-see-through-pct;
-                overlay-font-size <=> root.overlay-font-size;
-                app-version: root.app-version;
-                active-engine-display: root.active-engine-display;
-                store-build: root.store-build;
-                made-with-slint-label: root.made-with-slint-label;
-
-                theme-mode-changed(i) => { root.theme-mode-changed(i); }
-                ui-scale-changed(i) => { root.ui-scale-changed(i); }
-                remove-fillers-toggled(b) => { root.remove-fillers-toggled(b); }
-                voice-commands-toggled(b) => { root.voice-commands-toggled(b); }
-                save-replacements(s) => { root.save-replacements(s); }
-                save-paste-rules(s) => { root.save-paste-rules(s); }
-                volume-duck-selected(i) => { root.volume-duck-selected(i); }
-                history-trash-days-selected(i) => { root.history-trash-days-selected(i); }
-                open-trash => { root.open-trash(); }
-                start-with-windows-toggled(b) => { root.start-with-windows-toggled(b); }
-                overlay-enabled-toggled(b) => { root.overlay-enabled-toggled(b); }
-                overlay-show-text-toggled(b) => { root.overlay-show-text-toggled(b); }
-                overlay-show-level-toggled(b) => { root.overlay-show-level-toggled(b); }
-                overlay-controls-enabled-toggled(b) => { root.overlay-controls-enabled-toggled(b); }
-                overlay-controls-pinned-toggled(b) => { root.overlay-controls-pinned-toggled(b); }
-                overlay-monitor-selected(i) => { root.overlay-monitor-selected(i); }
-                overlay-position-selected(i) => { root.overlay-position-selected(i); }
-                overlay-pill-scale-changed(v) => { root.overlay-pill-scale-changed(v); }
-                overlay-see-through-changed(v) => { root.overlay-see-through-changed(v); }
-                overlay-panel-see-through-changed(v) => { root.overlay-panel-see-through-changed(v); }
-                overlay-font-size-changed(v) => { root.overlay-font-size-changed(v); }
-                open-url(u) => { root.open-url(u); }
-                start-onboarding => { root.start-onboarding(); }
-            }
         }
 
         if root.trial-running : StoreTrialFooter {
@@ -439,6 +398,88 @@ export component DashboardWindow inherits Window {
             made-with-slint-label: root.made-with-slint-label;
             buy-clicked => { root.buy-clicked(); }
         }
+    }
+
+    // Floating bottom-left contextual walkthrough cards (separate from initial onboarding wizard)
+    if !root.onboarding-active && !root.settings-open && root.tour-active : TourCard {
+        x: 16px;
+        y: root.height - self.height - (root.trial-running ? 44px : 16px);
+        step: root.tour-step;
+        next-clicked => { root.tour-next(); }
+        back-clicked => { root.tour-back(); }
+        dismiss-clicked => { root.dismiss-tour(); }
+    }
+
+    // Centered tabbed Settings modal popup over dimmed backdrop
+    if !root.onboarding-active && root.settings-open : SettingsModal {
+        width: root.width;
+        height: root.height;
+        window-height: root.height;
+        active-section <=> root.settings-section;
+        theme-mode-index <=> root.theme-mode-index;
+        ui-scale-index <=> root.ui-scale-index;
+        remove-fillers <=> root.remove-fillers;
+        voice-commands <=> root.voice-commands;
+        replacements-text <=> root.replacements-text;
+        replacements-status <=> root.replacements-status;
+        paste-rules-text <=> root.paste-rules-text;
+        paste-rules-status <=> root.paste-rules-status;
+        volume-duck-index <=> root.volume-duck-index;
+        history-trash-days-index <=> root.history-trash-days-index;
+        start-with-windows <=> root.start-with-windows;
+        model-dir-display: root.model-dir-display;
+        overlay-enabled <=> root.overlay-enabled;
+        overlay-show-text <=> root.overlay-show-text;
+        overlay-show-level <=> root.overlay-show-level;
+        overlay-controls-enabled <=> root.overlay-controls-enabled;
+        overlay-controls-pinned <=> root.overlay-controls-pinned;
+        overlay-monitor-index <=> root.overlay-monitor-index;
+        overlay-position-index <=> root.overlay-position-index;
+        overlay-pill-scale-pct <=> root.overlay-pill-scale-pct;
+        overlay-see-through-pct <=> root.overlay-see-through-pct;
+        overlay-panel-see-through-pct <=> root.overlay-panel-see-through-pct;
+        overlay-font-size <=> root.overlay-font-size;
+        app-version: root.app-version;
+        active-engine-display: root.active-engine-display;
+        store-build: root.store-build;
+        license-state: root.license-state;
+        trial-days-left-text: root.trial-days-left-text;
+        buy-label: root.buy-label;
+        made-with-slint-label: root.made-with-slint-label;
+
+        close-requested => { root.close-settings(); }
+        theme-mode-changed(i) => { root.theme-mode-changed(i); }
+        ui-scale-changed(i) => { root.ui-scale-changed(i); }
+        remove-fillers-toggled(b) => { root.remove-fillers-toggled(b); }
+        voice-commands-toggled(b) => { root.voice-commands-toggled(b); }
+        save-replacements(s) => { root.save-replacements(s); }
+        save-paste-rules(s) => { root.save-paste-rules(s); }
+        volume-duck-selected(i) => { root.volume-duck-selected(i); }
+        history-trash-days-selected(i) => { root.history-trash-days-selected(i); }
+        open-trash => { root.open-trash(); }
+        open-model-folder => { root.open-model-folder(); }
+        start-with-windows-toggled(b) => { root.start-with-windows-toggled(b); }
+        overlay-enabled-toggled(b) => { root.overlay-enabled-toggled(b); }
+        overlay-show-text-toggled(b) => { root.overlay-show-text-toggled(b); }
+        overlay-show-level-toggled(b) => { root.overlay-show-level-toggled(b); }
+        overlay-controls-enabled-toggled(b) => { root.overlay-controls-enabled-toggled(b); }
+        overlay-controls-pinned-toggled(b) => { root.overlay-controls-pinned-toggled(b); }
+        overlay-monitor-selected(i) => { root.overlay-monitor-selected(i); }
+        overlay-position-selected(i) => { root.overlay-position-selected(i); }
+        overlay-pill-scale-changed(v) => { root.overlay-pill-scale-changed(v); }
+        overlay-see-through-changed(v) => { root.overlay-see-through-changed(v); }
+        overlay-panel-see-through-changed(v) => { root.overlay-panel-see-through-changed(v); }
+        overlay-font-size-changed(v) => { root.overlay-font-size-changed(v); }
+        open-url(u) => { root.open-url(u); }
+        buy-clicked => { root.buy-clicked(); }
+        start-onboarding => { root.start-onboarding(); }
+        start-tour => { root.start-tour(); }
+    }
+
+    // Topmost hover tooltip pill for all graphical/icon-only controls
+    TooltipOverlay {
+        viewport-width: root.width;
+        viewport-height: root.height;
     }
 }
 

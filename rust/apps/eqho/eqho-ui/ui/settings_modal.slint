@@ -1,0 +1,798 @@
+// Centered Settings Modal Popup with Left Phosphor Icon-Tab Sidebar (modeled on GatherOS 04-settings.png).
+import { Theme } from "@app-theme/theme.slint";
+import { Button, ButtonKind, CloseButton, CompactRow, Dropdown, LinkButton, Slider, TabList, Toggle } from "@damt-ui/kit.slint";
+import { ScrollArea, StackedSettingRow, ThemedTextEdit } from "components.slint";
+import { Icons, PhIcon, HoverTooltip } from "icons.slint";
+
+component ModalSidebarItem inherits Rectangle {
+    in property <string> glyph;
+    in property <string> label;
+    in property <bool> selected: false;
+    callback clicked();
+
+    height: 32px;
+    border-radius: 8px;
+    background: root.selected ? (Theme.dark ? #282830 : Theme.surface-hover)
+        : touch.pressed ? Theme.button-outline-pressed
+        : touch.has-hover ? (Theme.dark ? #1E1E24 : Theme.surface-tertiary)
+        : transparent;
+
+    accessible-role: tab;
+    accessible-label: root.label;
+    accessible-item-selected: root.selected;
+    accessible-action-default => { root.clicked(); }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 9px;
+        alignment: start;
+
+        VerticalLayout {
+            alignment: center;
+            PhIcon {
+                glyph: root.glyph;
+                size: 16px;
+                icon-color: root.selected ? Theme.text : Theme.text-muted;
+            }
+        }
+
+        Text {
+            text: root.label;
+            font-size: Theme.font-size-base;
+            font-weight: root.selected ? 600 : 500;
+            color: root.selected ? Theme.text : Theme.text-muted;
+            vertical-alignment: center;
+            overflow: elide;
+            accessible-role: none;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Clean grouped card inside the Settings modal right pane (steps lighter in dark mode, matching GatherOS dark).
+component SettingsGroup inherits Rectangle {
+    background: Theme.dark ? #202026 : Theme.bg;
+    border-radius: 11px;
+    border-width: 1px;
+    border-color: Theme.dark ? #2F2F38 : Theme.border-subtle;
+    min-height: grp-lay.preferred-height;
+
+    grp-lay := VerticalLayout {
+        padding: Theme.space-14;
+        spacing: Theme.space-12;
+        @children
+    }
+}
+
+export component SettingsModal inherits Rectangle {
+    in property <length> window-height: 560px;
+    in-out property <string> active-section: "appearance";
+
+    in-out property <int> theme-mode-index: 1;
+    in-out property <int> ui-scale-index: 1;
+
+    in-out property <bool> remove-fillers: false;
+    in-out property <bool> voice-commands: false;
+    in-out property <string> replacements-text: "";
+    in-out property <string> replacements-status: "";
+    in-out property <string> paste-rules-text: "";
+    in-out property <string> paste-rules-status: "";
+
+    in-out property <int> volume-duck-index: 0;
+    in-out property <int> history-trash-days-index: 2;
+    in-out property <bool> start-with-windows: false;
+    in property <string> model-dir-display: "";
+
+    in-out property <bool> overlay-enabled: true;
+    in-out property <bool> overlay-show-text: true;
+    in-out property <bool> overlay-show-level: true;
+    in-out property <bool> overlay-controls-enabled: true;
+    in-out property <bool> overlay-controls-pinned: false;
+    in-out property <int> overlay-monitor-index: 0;
+    in-out property <int> overlay-position-index: 0;
+    in-out property <int> overlay-pill-scale-pct: 80;
+    in-out property <int> overlay-see-through-pct: 5;
+    in-out property <int> overlay-panel-see-through-pct: 22;
+    in-out property <int> overlay-font-size: 14;
+
+    in property <string> app-version: "0.9.2";
+    in property <string> active-engine-display: "GPU (Vulkan) · whisper.cpp 1.8.4";
+    in property <bool> store-build: false;
+    in property <string> license-state: "unknown";
+    in property <string> trial-days-left-text: "";
+    in property <string> buy-label: "Buy Eqho";
+    in property <string> made-with-slint-label: "Made with Slint";
+
+    callback close-requested();
+    callback theme-mode-changed(int);
+    callback ui-scale-changed(int);
+    callback remove-fillers-toggled(bool);
+    callback voice-commands-toggled(bool);
+    callback save-replacements(string);
+    callback save-paste-rules(string);
+    callback volume-duck-selected(int);
+    callback history-trash-days-selected(int);
+    callback open-trash();
+    callback open-model-folder();
+    callback start-with-windows-toggled(bool);
+    callback overlay-enabled-toggled(bool);
+    callback overlay-show-text-toggled(bool);
+    callback overlay-show-level-toggled(bool);
+    callback overlay-controls-enabled-toggled(bool);
+    callback overlay-controls-pinned-toggled(bool);
+    callback overlay-monitor-selected(int);
+    callback overlay-position-selected(int);
+    callback overlay-pill-scale-changed(int);
+    callback overlay-see-through-changed(int);
+    callback overlay-panel-see-through-changed(int);
+    callback overlay-font-size-changed(int);
+    callback open-url(string);
+    callback buy-clicked();
+    callback start-onboarding();
+    callback start-tour();
+
+    property <string> section-title: root.active-section == "appearance" ? "Appearance"
+        : root.active-section == "dictation" ? "Dictation"
+        : root.active-section == "overlay" ? "Overlay"
+        : root.active-section == "system" ? "System"
+        : root.active-section == "data" ? "Data & Trash"
+        : root.active-section == "license" ? "License"
+        : "About";
+
+    // Dimmed backdrop covering the full dashboard window
+    background: Theme.dark ? #00000072 : #0000003A;
+
+    // Clicking outside the modal closes it cleanly
+    TouchArea {
+        clicked => { root.close-requested(); }
+    }
+
+    modal-focus := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        init => { self.focus(); }
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.close-requested();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    // Centered rounded Settings modal dialog
+    dialog := Rectangle {
+        width: Math.min(760px, Math.max(540px, root.width - 48px));
+        height: Math.min(488px, Math.max(360px, root.height - 44px));
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: 16px;
+        background: Theme.dark ? #17171B : Theme.surface;
+        border-width: 1px;
+        border-color: Theme.dark ? #2D2D36 : Theme.border;
+        drop-shadow-blur: 32px;
+        drop-shadow-offset-y: 12px;
+        drop-shadow-color: Theme.dark ? #00000090 : #0000002E;
+        clip: true;
+
+        // Absorb pointer clicks inside the dialog so they don't hit the backdrop
+        TouchArea {}
+
+        HorizontalLayout {
+            width: parent.width;
+            height: parent.height;
+            spacing: 0px;
+
+            // Left Icon-Tab Sidebar (GatherOS 05-settings-account.png style)
+            Rectangle {
+                width: 176px;
+                horizontal-stretch: 0;
+                background: Theme.dark ? #121215 : Theme.bg;
+
+                VerticalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    padding-top: 16px;
+                    padding-bottom: 14px;
+                    spacing: 3px;
+                    alignment: start;
+
+                    Text {
+                        text: "Settings";
+                        font-size: Theme.font-size-xs;
+                        font-weight: 600;
+                        color: Theme.text-muted;
+                        height: 24px;
+                        vertical-alignment: center;
+                    }
+
+                    ModalSidebarItem {
+                        glyph: Icons.palette;
+                        label: "Appearance";
+                        selected: root.active-section == "appearance";
+                        clicked => { root.active-section = "appearance"; }
+                    }
+                    ModalSidebarItem {
+                        glyph: Icons.waveform;
+                        label: "Dictation";
+                        selected: root.active-section == "dictation";
+                        clicked => { root.active-section = "dictation"; }
+                    }
+                    ModalSidebarItem {
+                        glyph: Icons.overlay;
+                        label: "Overlay";
+                        selected: root.active-section == "overlay";
+                        clicked => { root.active-section = "overlay"; }
+                    }
+                    ModalSidebarItem {
+                        glyph: Icons.desktop;
+                        label: "System";
+                        selected: root.active-section == "system";
+                        clicked => { root.active-section = "system"; }
+                    }
+                    ModalSidebarItem {
+                        glyph: Icons.database;
+                        label: "Data & Trash";
+                        selected: root.active-section == "data";
+                        clicked => { root.active-section = "data"; }
+                    }
+                    if root.store-build : ModalSidebarItem {
+                        glyph: Icons.license;
+                        label: "License";
+                        selected: root.active-section == "license";
+                        clicked => { root.active-section = "license"; }
+                    }
+                    ModalSidebarItem {
+                        glyph: Icons.info;
+                        label: "About";
+                        selected: root.active-section == "about";
+                        clicked => { root.active-section = "about"; }
+                    }
+                }
+
+                // Right vertical hairline divider
+                Rectangle {
+                    x: parent.width - 1px;
+                    width: 1px;
+                    height: parent.height;
+                    background: Theme.border-subtle;
+                }
+            }
+
+            // Right Focused Content Pane
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 0px;
+
+                // Header with bold section title + top-right close X
+                HorizontalLayout {
+                    padding-left: 24px;
+                    padding-right: 16px;
+                    padding-top: 18px;
+                    padding-bottom: 10px;
+                    alignment: space-between;
+
+                    Text {
+                        text: root.section-title;
+                        font-size: Theme.font-size-title;
+                        font-weight: 700;
+                        color: Theme.text;
+                        vertical-alignment: center;
+                    }
+
+                    close-btn := CloseButton {
+                        accessible-name: "Close Settings";
+                        hover-changed(h) => {
+                            if (h) {
+                                HoverTooltip.text = "Close Settings";
+                                HoverTooltip.anchor-x = self.absolute-position.x;
+                                HoverTooltip.anchor-y = self.absolute-position.y;
+                                HoverTooltip.anchor-w = self.width;
+                                HoverTooltip.anchor-h = self.height;
+                                HoverTooltip.visible = true;
+                            } else if (HoverTooltip.text == "Close Settings") {
+                                HoverTooltip.visible = false;
+                            }
+                        }
+                        clicked => {
+                            HoverTooltip.visible = false;
+                            root.close-requested();
+                        }
+                    }
+                }
+
+                // Scrollable focused pane content
+                ScrollArea {
+                    vertical-stretch: 1;
+
+                    VerticalLayout {
+                        padding-left: 24px;
+                        padding-right: 24px;
+                        padding-top: 6px;
+                        padding-bottom: 22px;
+                        spacing: Theme.space-14;
+                        alignment: start;
+
+                        // --- APPEARANCE ---
+                        if root.active-section == "appearance" : SettingsGroup {
+                            StackedSettingRow {
+                                label: "Theme";
+                                help: "Light, dark, or follow Windows";
+                                TabList {
+                                    items: ["Light", "Dark", "System"];
+                                    selected <=> root.theme-mode-index;
+                                    accessible-name: "Theme";
+                                    picked(i) => { root.theme-mode-changed(i); }
+                                }
+                            }
+                            Rectangle { height: 1px; background: Theme.border-subtle; }
+                            StackedSettingRow {
+                                label: "UI Zoom";
+                                help: "Scale the dashboard interface";
+                                TabList {
+                                    items: ["100%", "125%", "150%", "175%", "200%"];
+                                    selected <=> root.ui-scale-index;
+                                    accessible-name: "UI Zoom";
+                                    picked(i) => { root.ui-scale-changed(i); }
+                                }
+                            }
+                        }
+
+                        // --- DICTATION ---
+                        if root.active-section == "dictation" : VerticalLayout {
+                            spacing: Theme.space-12;
+
+                            SettingsGroup {
+                                CompactRow {
+                                    label: "Remove Filler Words";
+                                    help: "\"um\", \"uh\", \"er\" (needs auto-format)";
+                                    Toggle {
+                                        checked <=> root.remove-fillers;
+                                        accessible-name: "Remove Filler Words";
+                                        toggled(v) => { root.remove-fillers-toggled(v); }
+                                    }
+                                }
+                                Rectangle { height: 1px; background: Theme.border-subtle; }
+                                CompactRow {
+                                    label: "Voice Commands";
+                                    help: "\"new line\", \"period\", \"delete that\"";
+                                    Toggle {
+                                        checked <=> root.voice-commands;
+                                        accessible-name: "Voice Commands";
+                                        toggled(v) => { root.voice-commands-toggled(v); }
+                                    }
+                                }
+                            }
+
+                            SettingsGroup {
+                                StackedSettingRow {
+                                    label: "Text Replacements";
+                                    help: "One rule per line: spoken => written";
+                                    ThemedTextEdit {
+                                        height: 76px;
+                                        text <=> root.replacements-text;
+                                        placeholder-text: "e.g. my email => name@example.com";
+                                        font-size: Theme.font-size-sm;
+                                    }
+                                    HorizontalLayout {
+                                        alignment: end;
+                                        spacing: Theme.space-8;
+                                        if root.replacements-status != "" : Text {
+                                            text: root.replacements-status;
+                                            font-size: Theme.font-size-xs;
+                                            font-weight: 600;
+                                            color: Theme.accent-text;
+                                            vertical-alignment: center;
+                                        }
+                                        Button {
+                                            text: "Save";
+                                            kind: ButtonKind.outline;
+                                            clicked => { root.save-replacements(root.replacements-text); }
+                                        }
+                                    }
+                                }
+                                Rectangle { height: 1px; background: Theme.border-subtle; }
+                                StackedSettingRow {
+                                    label: "Per-App Paste Rules";
+                                    help: "One rule per line: app.exe = typing (or = clipboard)";
+                                    ThemedTextEdit {
+                                        height: 76px;
+                                        text <=> root.paste-rules-text;
+                                        placeholder-text: "e.g. notepad.exe = typing";
+                                        font-size: Theme.font-size-sm;
+                                    }
+                                    HorizontalLayout {
+                                        alignment: end;
+                                        spacing: Theme.space-8;
+                                        if root.paste-rules-status != "" : Text {
+                                            text: root.paste-rules-status;
+                                            font-size: Theme.font-size-xs;
+                                            font-weight: 600;
+                                            color: Theme.accent-text;
+                                            vertical-alignment: center;
+                                        }
+                                        Button {
+                                            text: "Save";
+                                            kind: ButtonKind.outline;
+                                            clicked => { root.save-paste-rules(root.paste-rules-text); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // --- OVERLAY ---
+                        if root.active-section == "overlay" : VerticalLayout {
+                            spacing: Theme.space-12;
+
+                            SettingsGroup {
+                                CompactRow {
+                                    label: "Show Overlay";
+                                    help: "Show floating pill while dictating";
+                                    Toggle {
+                                        checked <=> root.overlay-enabled;
+                                        accessible-name: "Show Overlay";
+                                        toggled(v) => { root.overlay-enabled-toggled(v); }
+                                    }
+                                }
+                                Rectangle { height: 1px; background: Theme.border-subtle; }
+                                CompactRow {
+                                    label: "Live Text Preview";
+                                    help: "Show live words above the pill while speaking";
+                                    Toggle {
+                                        checked <=> root.overlay-show-text;
+                                        accessible-name: "Live Text Preview";
+                                        toggled(v) => { root.overlay-show-text-toggled(v); }
+                                    }
+                                }
+                                Rectangle { height: 1px; background: Theme.border-subtle; }
+                                CompactRow {
+                                    label: "Audio Level Indicator";
+                                    help: "Voice-reactive motion inside the pill";
+                                    Toggle {
+                                        checked <=> root.overlay-show-level;
+                                        accessible-name: "Audio Level Indicator";
+                                        toggled(v) => { root.overlay-show-level-toggled(v); }
+                                    }
+                                }
+                                Rectangle { height: 1px; background: Theme.border-subtle; }
+                                CompactRow {
+                                    label: "Show Pill Controls";
+                                    help: "Hover the pill for cancel, language, and Batch/Live controls";
+                                    Toggle {
+                                        checked <=> root.overlay-controls-enabled;
+                                        accessible-name: "Show Pill Controls";
+                                        toggled(v) => { root.overlay-controls-enabled-toggled(v); }
+                                    }
+                                }
+                                Rectangle { height: 1px; background: Theme.border-subtle; }
+                                CompactRow {
+                                    label: "Pin Pill Controls Open";
+                                    help: "Keep the control bar visible below the pill without hovering";
+                                    Toggle {
+                                        checked <=> root.overlay-controls-pinned;
+                                        accessible-name: "Pin Pill Controls Open";
+                                        toggled(v) => { root.overlay-controls-pinned-toggled(v); }
+                                    }
+                                }
+                            }
+
+                            SettingsGroup {
+                                StackedSettingRow {
+                                    label: "Display Monitor";
+                                    help: "Which screen shows the dictation pill";
+                                    Dropdown {
+                                        model: ["Follow active window", "Follow mouse cursor", "Primary monitor"];
+                                        current-index <=> root.overlay-monitor-index;
+                                        window-height: root.window-height;
+                                        accessible-name: "Display Monitor";
+                                        selected(i) => { root.overlay-monitor-selected(i); }
+                                    }
+                                }
+                                StackedSettingRow {
+                                    label: "Screen Position";
+                                    help: "Where the overlay appears";
+                                    Dropdown {
+                                        model: ["Bottom Center", "Top Center", "Top Left", "Top Right", "Bottom Left", "Bottom Right"];
+                                        current-index <=> root.overlay-position-index;
+                                        window-height: root.window-height;
+                                        accessible-name: "Screen Position";
+                                        selected(i) => { root.overlay-position-selected(i); }
+                                    }
+                                }
+                                Rectangle { height: 1px; background: Theme.border-subtle; }
+                                Slider {
+                                    label: "Pill Size";
+                                    value-text: root.overlay-pill-scale-pct + "%";
+                                    value <=> root.overlay-pill-scale-pct;
+                                    minimum: 60;
+                                    maximum: 140;
+                                    step: 10;
+                                    edited(v) => { root.overlay-pill-scale-changed(v); }
+                                }
+                                Slider {
+                                    label: "Pill See-Through";
+                                    value-text: root.overlay-see-through-pct + "%";
+                                    value <=> root.overlay-see-through-pct;
+                                    minimum: 0;
+                                    maximum: 70;
+                                    step: 5;
+                                    edited(v) => { root.overlay-see-through-changed(v); }
+                                }
+                                Slider {
+                                    label: "Text Box See-Through";
+                                    value-text: root.overlay-panel-see-through-pct + "%";
+                                    value <=> root.overlay-panel-see-through-pct;
+                                    minimum: 0;
+                                    maximum: 70;
+                                    step: 5;
+                                    edited(v) => { root.overlay-panel-see-through-changed(v); }
+                                }
+                                Slider {
+                                    label: "Text Size";
+                                    value-text: root.overlay-font-size + "px";
+                                    value <=> root.overlay-font-size;
+                                    minimum: 10;
+                                    maximum: 28;
+                                    step: 1;
+                                    edited(v) => { root.overlay-font-size-changed(v); }
+                                }
+                            }
+                        }
+
+                        // --- SYSTEM ---
+                        if root.active-section == "system" : SettingsGroup {
+                            StackedSettingRow {
+                                label: "Volume While Speaking";
+                                help: "Lower system audio automatically during dictation";
+                                Dropdown {
+                                    model: ["Off", "50%", "25%", "10%", "Mute"];
+                                    current-index <=> root.volume-duck-index;
+                                    window-height: root.window-height;
+                                    accessible-name: "Volume While Speaking";
+                                    selected(i) => { root.volume-duck-selected(i); }
+                                }
+                            }
+                            Rectangle { height: 1px; background: Theme.border-subtle; }
+                            CompactRow {
+                                label: "Start with Windows";
+                                help: "Launch Eqho automatically when you sign in";
+                                Toggle {
+                                    checked <=> root.start-with-windows;
+                                    accessible-name: "Start with Windows";
+                                    toggled(v) => { root.start-with-windows-toggled(v); }
+                                }
+                            }
+                        }
+
+                        // --- DATA & TRASH ---
+                        if root.active-section == "data" : VerticalLayout {
+                            spacing: Theme.space-12;
+
+                            SettingsGroup {
+                                StackedSettingRow {
+                                    label: "Trashed Data Retention";
+                                    help: "How long deleted transcripts stay in Trash before permanent removal";
+                                    Dropdown {
+                                        model: ["7 days", "14 days", "30 days", "90 days", "Never"];
+                                        current-index <=> root.history-trash-days-index;
+                                        window-height: root.window-height;
+                                        accessible-name: "Trashed Data Retention";
+                                        selected(i) => { root.history-trash-days-selected(i); }
+                                    }
+                                    HorizontalLayout {
+                                        alignment: start;
+                                        LinkButton {
+                                            text: "Open Trash →";
+                                            font-size: Theme.font-size-sm;
+                                            padding-y: 2px;
+                                            clicked => { root.open-trash(); }
+                                        }
+                                    }
+                                }
+                            }
+
+                            SettingsGroup {
+                                HorizontalLayout {
+                                    spacing: Theme.space-12;
+                                    alignment: space-between;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 2px;
+                                        Text {
+                                            text: "Offline Model Storage";
+                                            font-size: Theme.font-size-base;
+                                            font-weight: 500;
+                                            color: Theme.text;
+                                        }
+                                        Text {
+                                            text: root.model-dir-display != "" ? root.model-dir-display : "Default local model cache";
+                                            font-size: Theme.font-size-sm;
+                                            color: Theme.text-muted;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 0;
+                                        alignment: center;
+                                        Button {
+                                            text: "Open Folder";
+                                            kind: ButtonKind.outline;
+                                            clicked => { root.open-model-folder(); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // --- LICENSE (Store builds only, mirrors GatherOS Account view) ---
+                        if root.active-section == "license" && root.store-build : VerticalLayout {
+                            spacing: Theme.space-12;
+
+                            SettingsGroup {
+                                HorizontalLayout {
+                                    alignment: space-between;
+                                    Text {
+                                        text: "Current plan";
+                                        font-size: Theme.font-size-sm;
+                                        color: Theme.text-muted;
+                                    }
+                                    Text {
+                                        text: root.license-state == "full" ? "Full license"
+                                            : root.license-state == "trial-expired" ? "Trial ended"
+                                            : "Free trial";
+                                        font-size: Theme.font-size-sm;
+                                        font-weight: 600;
+                                        color: Theme.text;
+                                    }
+                                }
+                                if root.license-state != "full" : Rectangle { height: 1px; background: Theme.border-subtle; }
+                                if root.license-state != "full" : HorizontalLayout {
+                                    alignment: space-between;
+                                    Text {
+                                        text: "Trial status";
+                                        font-size: Theme.font-size-sm;
+                                        color: Theme.text-muted;
+                                    }
+                                    Text {
+                                        text: root.license-state == "trial-expired" ? "Expired"
+                                            : root.trial-days-left-text != "" ? root.trial-days-left-text
+                                            : "15-day free trial";
+                                        font-size: Theme.font-size-sm;
+                                        font-weight: 600;
+                                        color: Theme.text;
+                                    }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: start;
+                                PhIcon {
+                                    glyph: Icons.info;
+                                    size: 15px;
+                                    icon-color: Theme.text-muted;
+                                }
+                                Text {
+                                    text: "Your license is managed by Microsoft Store and cached locally so Eqho keeps working offline.";
+                                    font-size: Theme.font-size-sm;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                    horizontal-stretch: 1;
+                                }
+                            }
+
+                            if root.license-state != "full" : HorizontalLayout {
+                                alignment: start;
+                                Button {
+                                    text: root.buy-label;
+                                    kind: ButtonKind.accent;
+                                    clicked => { root.buy-clicked(); }
+                                }
+                            }
+                        }
+
+                        // --- ABOUT ---
+                        if root.active-section == "about" : VerticalLayout {
+                            spacing: Theme.space-12;
+
+                            SettingsGroup {
+                                HorizontalLayout {
+                                    alignment: space-between;
+                                    Text {
+                                        text: "Version";
+                                        font-size: Theme.font-size-sm;
+                                        color: Theme.text-muted;
+                                    }
+                                    Text {
+                                        text: root.app-version;
+                                        font-size: Theme.font-size-sm;
+                                        font-weight: 600;
+                                        color: Theme.text;
+                                    }
+                                }
+                                Rectangle { height: 1px; background: Theme.border-subtle; }
+                                HorizontalLayout {
+                                    spacing: Theme.space-12;
+                                    alignment: space-between;
+                                    Text {
+                                        text: "Engine";
+                                        font-size: Theme.font-size-sm;
+                                        color: Theme.text-muted;
+                                    }
+                                    Text {
+                                        text: root.active-engine-display;
+                                        font-size: Theme.font-size-sm;
+                                        color: Theme.text;
+                                        horizontal-alignment: right;
+                                        horizontal-stretch: 1;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                                Rectangle { height: 1px; background: Theme.border-subtle; }
+                                HorizontalLayout {
+                                    alignment: space-between;
+                                    Text {
+                                        text: "Author";
+                                        font-size: Theme.font-size-sm;
+                                        color: Theme.text-muted;
+                                    }
+                                    Text {
+                                        text: "damt.xyz";
+                                        font-size: Theme.font-size-sm;
+                                        color: Theme.text;
+                                    }
+                                }
+                                Rectangle { height: 1px; background: Theme.border-subtle; }
+                                HorizontalLayout {
+                                    alignment: space-between;
+                                    Text {
+                                        text: "Website";
+                                        font-size: Theme.font-size-sm;
+                                        color: Theme.text-muted;
+                                        vertical-alignment: center;
+                                    }
+                                    LinkButton {
+                                        text: "damt.xyz";
+                                        font-size: Theme.font-size-sm;
+                                        padding-y: 2px;
+                                        clicked => { root.open-url("https://damt.xyz"); }
+                                    }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: Theme.space-8;
+                                alignment: start;
+                                Button {
+                                    text: "Run first-time setup again";
+                                    kind: ButtonKind.outline;
+                                    clicked => { root.start-onboarding(); }
+                                }
+                                Button {
+                                    text: "Start interactive guide";
+                                    kind: ButtonKind.outline;
+                                    clicked => { root.start-tour(); }
+                                }
+                            }
+
+                            Text {
+                                text: root.store-build
+                                    ? root.made-with-slint-label + " · Powered by whisper.cpp · Phosphor Icons · Rust"
+                                    : "Powered by whisper.cpp · Slint · Phosphor Icons · Rust";
+                                font-size: Theme.font-size-xs;
+                                color: Theme.text-subtle;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

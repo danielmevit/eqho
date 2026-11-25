@@ -28,10 +28,24 @@ fn tabs_and_theme_switching_work_without_panic() {
     let win = DashboardWindow::new().unwrap();
     apply_settings_to_window(&win, &Settings::default(), HardwareClass::Gpu, true);
 
-    for tab in ["general", "models", "history", "settings", "general"] {
+    for tab in ["general", "models", "history", "general"] {
         win.set_active_tab(tab.into());
         assert_eq!(win.get_active_tab().as_str(), tab);
     }
+
+    // Settings modal & interactive tour properties + callbacks
+    assert!(!win.get_settings_open());
+    win.set_settings_open(true);
+    win.set_settings_section("overlay".into());
+    assert!(win.get_settings_open());
+    assert_eq!(win.get_settings_section().as_str(), "overlay");
+    win.set_settings_open(false);
+
+    win.set_tour_active(true);
+    win.set_tour_step(2);
+    assert!(win.get_tour_active());
+    assert_eq!(win.get_tour_step(), 2);
+    win.set_tour_active(false);
 
     win.global::<Theme>().set_dark(false);
     assert!(!win.global::<Theme>().get_dark());
@@ -89,6 +103,7 @@ fn model_cards_and_history_rows_populate_and_fire_callbacks() {
         "distil-large-v3",
         &["tiny"],
         Some("distil-large-v3"),
+        None,
         0.25,
         "Downloading 25%",
         None,
@@ -102,10 +117,34 @@ fn model_cards_and_history_rows_populate_and_fire_callbacks() {
     assert!(dl_v3.is_downloading);
     assert!(!dl_v3.is_selected);
 
+    // Regression test: an already-downloaded model that is loading into GPU/CPU memory
+    // must NEVER say "Downloading…"; it stays selected with `is_loading = true` and `is_downloading = false`.
+    let loading_cached = build_model_cards(
+        "distil-large-v3",
+        &["distil-large-v3", "tiny"],
+        None,
+        Some("distil-large-v3"),
+        1.0,
+        "loading whisper.cpp model (gpu)",
+        None,
+        HardwareClass::Gpu,
+        "en",
+    );
+    let load_v3 = loading_cached
+        .iter()
+        .find(|c| c.key == "distil-large-v3")
+        .unwrap();
+    assert!(load_v3.is_selected);
+    assert!(load_v3.is_cached);
+    assert!(load_v3.is_loading);
+    assert!(!load_v3.is_downloading);
+    assert_eq!(load_v3.status_text.as_str(), "Loading…");
+
     let cards = build_model_cards(
         "distil-large-v3",
         &["distil-large-v3", "tiny"],
         Some("small"),
+        None,
         0.42,
         "Downloading 42% · 12.4 MB/s",
         Some("base"),

@@ -15,14 +15,13 @@ use windows::Win32::Graphics::Dwm::{
 };
 use windows::Win32::Graphics::Gdi::{
     AC_SRC_ALPHA, AC_SRC_OVER, ANTIALIASED_QUALITY, BI_RGB, BITMAPINFO, BITMAPINFOHEADER,
-    BLENDFUNCTION, BeginPaint, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, CreateCompatibleDC,
-    CreateDIBSection, CreateFontW, CreateRoundRectRgn, CreateSolidBrush, DEFAULT_CHARSET,
-    DEFAULT_PITCH, DIB_RGB_COLORS, DRAW_TEXT_FORMAT, DT_CALCRECT, DT_CENTER, DT_END_ELLIPSIS,
-    DT_LEFT, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER, DT_WORDBREAK, DeleteDC, DeleteObject,
-    DrawTextW, EndPaint, FF_SWISS, FillRect, GdiFlush, GetDC, GetDeviceCaps, GetMonitorInfoW,
-    HBITMAP, HDC, HFONT, HGDIOBJ, HMONITOR, InvalidateRect, LOGPIXELSY, MONITOR_DEFAULTTOPRIMARY,
-    MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint, MonitorFromWindow,
-    OUT_DEFAULT_PRECIS, PAINTSTRUCT, ReleaseDC, SelectObject, SetBkMode, SetTextColor,
+    BLENDFUNCTION, CLIP_DEFAULT_PRECIS, CreateCompatibleDC, CreateDIBSection, CreateFontW,
+    CreateRoundRectRgn, DEFAULT_CHARSET, DEFAULT_PITCH, DIB_RGB_COLORS, DRAW_TEXT_FORMAT,
+    DT_CALCRECT, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER,
+    DT_WORDBREAK, DeleteDC, DeleteObject, DrawTextW, FF_SWISS, GdiFlush, GetDC, GetDeviceCaps,
+    GetMonitorInfoW, HBITMAP, HDC, HFONT, HGDIOBJ, HMONITOR, LOGPIXELSY,
+    MONITOR_DEFAULTTOPRIMARY, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
+    MonitorFromWindow, OUT_DEFAULT_PRECIS, ReleaseDC, SelectObject, SetBkMode, SetTextColor,
     SetWindowRgn, TRANSPARENT,
 };
 use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
@@ -33,17 +32,16 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
-    GetClientRect, GetCursorPos, GetForegroundWindow, GetMessageW, GetSystemMetrics, HHOOK, HMENU,
-    HWND_TOPMOST, IDC_ARROW, IDC_HAND, IDC_IBEAM, KBDLLHOOKSTRUCT, KillTimer, LWA_ALPHA,
-    LoadCursorW, MA_NOACTIVATE, MSG, PostMessageW, PostQuitMessage, RegisterClassExW, SM_CXSCREEN,
-    SM_CYSCREEN, SPI_GETWORKAREA, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_SHOWWINDOW, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SetCursor,
-    SetLayeredWindowAttributes, SetTimer, SetWindowPos, SetWindowsHookExW, ShowWindow,
-    SystemParametersInfoW, TranslateMessage, ULW_ALPHA, UnhookWindowsHookEx, UnregisterClassW,
-    UpdateLayeredWindow, WH_KEYBOARD_LL, WM_APP, WM_DESTROY, WM_ERASEBKGND, WM_KEYDOWN,
-    WM_LBUTTONDOWN, WM_MOUSEACTIVATE, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL,
-    WM_PAINT, WM_SETCURSOR, WM_SYSKEYDOWN, WM_TIMER, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    GetCursorPos, GetForegroundWindow, GetMessageW, GetSystemMetrics, HHOOK, HMENU, HWND_TOPMOST,
+    IDC_ARROW, IDC_HAND, IDC_IBEAM, KBDLLHOOKSTRUCT, KillTimer, LoadCursorW, MA_NOACTIVATE, MSG,
+    PostMessageW, PostQuitMessage, RegisterClassExW, SM_CXSCREEN, SM_CYSCREEN, SPI_GETWORKAREA,
+    SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+    SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SetCursor, SetTimer, SetWindowPos, SetWindowsHookExW,
+    ShowWindow, SystemParametersInfoW, TranslateMessage, ULW_ALPHA, UnhookWindowsHookEx,
+    UnregisterClassW, UpdateLayeredWindow, WH_KEYBOARD_LL, WM_APP, WM_DESTROY, WM_KEYDOWN,
+    WM_LBUTTONDOWN, WM_MOUSEACTIVATE, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_SETCURSOR,
+    WM_SYSKEYDOWN, WM_TIMER, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 use windows::core::{PCSTR, PCWSTR};
 
@@ -76,28 +74,31 @@ struct WindowCompositionAttribData {
 }
 
 const WCA_ACCENT_POLICY: u32 = 19;
-const ACCENT_ENABLE_BLURBEHIND: u32 = 3;
+const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
 
-/// Enable subtle Windows DWM blur-behind (`ACCENT_ENABLE_BLURBEHIND`) dynamically via `user32.dll`.
-/// Gracefully no-ops if unavailable on older or headless environments.
-fn apply_subtle_blur_behind(hwnd: HWND) {
+/// Enable Windows 10/11 Acrylic frosted blur (`ACCENT_ENABLE_ACRYLICBLURBEHIND`) dynamically via
+/// `user32.dll`, giving floating glass panels strong backdrop blur so text pops off any window.
+fn apply_acrylic_blur_behind(hwnd: HWND, dark: bool, tint_alpha: u8) {
     let user32_name: Vec<u16> = "user32.dll\0".encode_utf16().collect();
     // SAFETY: Resolving `SetWindowCompositionAttribute` from already-loaded `user32.dll`.
     let Ok(hmod) = (unsafe { GetModuleHandleW(PCWSTR(user32_name.as_ptr())) }) else {
         return;
     };
     let proc_name = b"SetWindowCompositionAttribute\0";
-    // SAFETY: Looking up documented Win10/11 accent policy entrypoint on `user32.dll`.
+    // SAFETY: Looking up Win10/11 accent policy entrypoint on `user32.dll`.
     let Some(proc_ptr) = (unsafe { GetProcAddress(hmod, PCSTR(proc_name.as_ptr())) }) else {
         return;
     };
     type SetWcaFn = unsafe extern "system" fn(HWND, *mut WindowCompositionAttribData) -> i32;
     // SAFETY: Function pointer signature matches `SetWindowCompositionAttribute`.
     let set_wca: SetWcaFn = unsafe { std::mem::transmute(proc_ptr) };
+    // ABGR tint color (`tint_alpha` must be non-zero for Windows 11 Acrylic to engage).
+    let bgr: u32 = if dark { 0x0017_1515 } else { 0x00F8_F8FA };
+    let gradient_color = (u32::from(tint_alpha.max(1)) << 24) | bgr;
     let mut policy = AccentPolicy {
-        accent_state: ACCENT_ENABLE_BLURBEHIND,
+        accent_state: ACCENT_ENABLE_ACRYLICBLURBEHIND,
         accent_flags: 0,
-        gradient_color: 0,
+        gradient_color,
         animation_id: 0,
     };
     let mut data = WindowCompositionAttribData {
@@ -347,6 +348,43 @@ impl LayeredDib {
         color: Rgba,
         align: DRAW_TEXT_FORMAT,
     ) {
+        self.draw_text_with_flags(
+            canvas,
+            text,
+            rect,
+            font,
+            color,
+            align | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS,
+        );
+    }
+
+    fn draw_wrapped_text_into_canvas(
+        &mut self,
+        canvas: &mut PremulCanvas,
+        text: &str,
+        rect: LocalRect,
+        font: HFONT,
+        color: Rgba,
+    ) {
+        self.draw_text_with_flags(
+            canvas,
+            text,
+            rect,
+            font,
+            color,
+            DT_WORDBREAK | DT_LEFT | DT_NOPREFIX,
+        );
+    }
+
+    fn draw_text_with_flags(
+        &mut self,
+        canvas: &mut PremulCanvas,
+        text: &str,
+        rect: LocalRect,
+        font: HFONT,
+        color: Rgba,
+        flags: DRAW_TEXT_FORMAT,
+    ) {
         if text.is_empty() || rect.width == 0 || rect.height == 0 {
             return;
         }
@@ -380,12 +418,7 @@ impl LayeredDib {
             let old = SelectObject(self.mem_dc, font.into());
             SetBkMode(self.mem_dc, TRANSPARENT);
             SetTextColor(self.mem_dc, COLORREF(0x00FF_FFFF));
-            DrawTextW(
-                self.mem_dc,
-                &mut wide,
-                &mut draw_rect,
-                align | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS,
-            );
+            DrawTextW(self.mem_dc, &mut wide, &mut draw_rect, flags);
             let _ = SelectObject(self.mem_dc, old);
             let _ = GdiFlush();
         }
@@ -397,13 +430,16 @@ impl LayeredDib {
                 // SAFETY: `dx < tw <= self.width` and `dy < th <= self.height`.
                 let cov_u8 = unsafe {
                     let p = (self.bits as *const u8).add(px_off);
-                    let b = *p;
-                    let g = *p.add(1);
-                    let r = *p.add(2);
-                    b.max(g).max(r)
+                    let b = u16::from(*p);
+                    let g = u16::from(*p.add(1));
+                    let r = u16::from(*p.add(2));
+                    ((b + g + r) / 3) as u8
                 };
                 if cov_u8 > 0 {
-                    canvas.blend_pixel(rect.x + dx, rect.y + dy, color, f32::from(cov_u8) / 255.0);
+                    // Undo GDI's sRGB white-on-black gamma expansion so regular 400-weight Segoe UI
+                    // stays crisp and light rather than artificially bloated/bold.
+                    let cov = (f32::from(cov_u8) / 255.0).powf(1.5);
+                    canvas.blend_pixel(rect.x + dx, rect.y + dy, color, cov);
                 }
             }
         }
@@ -439,23 +475,19 @@ impl Drop for LayeredDib {
     }
 }
 
-/// Cached grayscale-antialiased Segoe UI pixel fonts for the underbar and language popup.
+/// Cached grayscale-antialiased Segoe UI regular-weight pixel fonts for the underbar and language popup.
 struct UiFonts {
     bar_regular: HFONT,
-    bar_semibold: HFONT,
-    chip_semibold: HFONT,
+    chip_regular: HFONT,
     row_regular: HFONT,
-    row_semibold: HFONT,
 }
 
 impl UiFonts {
     fn create() -> Self {
         Self {
             bar_regular: create_pixel_font(12, 400),
-            bar_semibold: create_pixel_font(12, 600),
-            chip_semibold: create_pixel_font(11, 600),
+            chip_regular: create_pixel_font(11, 400),
             row_regular: create_pixel_font(13, 400),
-            row_semibold: create_pixel_font(13, 600),
         }
     }
 }
@@ -465,10 +497,8 @@ impl Drop for UiFonts {
         // SAFETY: Deleting owned GDI `HFONT` handles.
         unsafe {
             let _ = DeleteObject(self.bar_regular.into());
-            let _ = DeleteObject(self.bar_semibold.into());
-            let _ = DeleteObject(self.chip_semibold.into());
+            let _ = DeleteObject(self.chip_regular.into());
             let _ = DeleteObject(self.row_regular.into());
-            let _ = DeleteObject(self.row_semibold.into());
         }
     }
 }
@@ -509,10 +539,12 @@ struct OverlayState {
     recovery_hwnd: HWND,
     animator: PillAnimator,
     pill_dib: LayeredDib,
+    panel_dib: LayeredDib,
     bar_dib: LayeredDib,
     popup_dib: LayeredDib,
     recovery_dib: LayeredDib,
     text_mask: LayeredDib,
+    panel_canvas: PremulCanvas,
     bar_canvas: PremulCanvas,
     popup_canvas: PremulCanvas,
     strip_canvas: PremulCanvas,
@@ -521,6 +553,8 @@ struct OverlayState {
     visible: bool,
     timer_running: bool,
     panel_shown: bool,
+    panel_rect: OverlayRect,
+    last_panel_alpha: u8,
     panel_text: String,
     active_work_area: WorkArea,
     pill_rect: OverlayRect,
@@ -620,7 +654,7 @@ impl OverlayState {
                 DEFAULT_CHARSET,
                 OUT_DEFAULT_PRECIS,
                 CLIP_DEFAULT_PRECIS,
-                CLEARTYPE_QUALITY,
+                ANTIALIASED_QUALITY,
                 (DEFAULT_PITCH.0 | FF_SWISS.0) as u32,
                 PCWSTR(face.as_ptr()),
             )
@@ -1028,6 +1062,12 @@ impl OverlayState {
             self.popup_layout.height,
             self.active_work_area,
         );
+        apply_rounded_region(
+            self.popup_hwnd,
+            self.popup_rect.width,
+            self.popup_rect.height,
+            10,
+        );
         self.popup_dirty = true;
     }
 
@@ -1159,7 +1199,14 @@ impl OverlayState {
 
     fn cmd_update_config(&mut self, cfg: OverlayConfig) {
         let was_enabled = self.config.enabled;
+        let theme_changed = self.config.dark_theme != cfg.dark_theme;
         self.config = cfg;
+        if theme_changed {
+            apply_acrylic_blur_behind(self.panel_hwnd, self.config.dark_theme, 0xA8);
+            apply_acrylic_blur_behind(self.bar_hwnd, self.config.dark_theme, 0x8E);
+            apply_acrylic_blur_behind(self.popup_hwnd, self.config.dark_theme, 0xB8);
+            apply_acrylic_blur_behind(self.recovery_hwnd, self.config.dark_theme, 0xA8);
+        }
         self.visibility
             .set_controls_enabled(self.config.controls_enabled);
         self.visibility.set_pinned(self.config.controls_pinned);
@@ -1290,11 +1337,12 @@ impl OverlayState {
             area,
         );
 
-        let alpha = self.animator.effective_panel_alpha(&self.config);
+        self.panel_rect = rect;
         apply_rounded_region(self.panel_hwnd, rect.width, rect.height, 10);
-        // SAFETY: Positioning, showing without activation, and updating layered alpha on `panel_hwnd`.
+        self.render_panel_frame();
+        // SAFETY: Showing and positioning layered frosted panel window without stealing focus.
         unsafe {
-            let _ = SetLayeredWindowAttributes(self.panel_hwnd, COLORREF(0), alpha, LWA_ALPHA);
+            let _ = ShowWindow(self.panel_hwnd, SW_SHOWNOACTIVATE);
             let _ = SetWindowPos(
                 self.panel_hwnd,
                 Some(HWND_TOPMOST),
@@ -1304,9 +1352,70 @@ impl OverlayState {
                 rect.height as i32,
                 SWP_NOACTIVATE | SWP_SHOWWINDOW,
             );
-            let _ = InvalidateRect(Some(self.panel_hwnd), None, true);
         }
         self.panel_shown = true;
+    }
+
+    fn render_panel_frame(&mut self) {
+        let w = self.panel_rect.width.max(1);
+        let h = self.panel_rect.height.max(1);
+        let dark = self.config.dark_theme;
+
+        // Keep background translucent over Windows 11 Acrylic blur so strong frosted blur
+        // pops the floating transcript box cleanly off any background, while keeping text 100% opaque.
+        let opacity = (self.config.panel_opacity as f32).clamp(0.3, 1.0);
+        let bg_alpha = if dark {
+            (opacity * 176.0).round().clamp(72.0, 176.0) as u8
+        } else {
+            (opacity * 190.0).round().clamp(88.0, 190.0) as u8
+        };
+        let panel_bg = if dark {
+            Rgba::new(0x14, 0x14, 0x18, bg_alpha)
+        } else {
+            Rgba::new(0xFF, 0xFF, 0xFF, bg_alpha)
+        };
+        let panel_border = if dark {
+            Rgba::new(0xFF, 0xFF, 0xFF, 44)
+        } else {
+            Rgba::new(0x1A, 0x1C, 0x1F, 36)
+        };
+        let fg_color = if dark {
+            Rgba::rgb(0xF5, 0xF6, 0xF8)
+        } else {
+            Rgba::rgb(0x1A, 0x1C, 0x1F)
+        };
+
+        self.panel_canvas.reset(w, h);
+        self.panel_canvas.fill_rounded_rect(
+            LocalRect::new(0, 0, w, h),
+            10.0,
+            panel_bg,
+            Some(panel_border),
+        );
+
+        if !self.panel_text.is_empty()
+            && let Some(font) = self.ensure_font()
+        {
+            let text_w = w.saturating_sub((2 * PANEL_PADDING_X) as u32).max(1);
+            let text_h = h.saturating_sub((2 * PANEL_PADDING_Y) as u32).max(1);
+            let text_rect = LocalRect::new(PANEL_PADDING_X, PANEL_PADDING_Y, text_w, text_h);
+            self.text_mask.draw_wrapped_text_into_canvas(
+                &mut self.panel_canvas,
+                &self.panel_text,
+                text_rect,
+                font,
+                fg_color,
+            );
+        }
+
+        let fade_alpha = (self.animator.alpha_logical.clamp(0.0, 1.0) * 255.0).round() as u8;
+        self.panel_dib.present(
+            self.panel_hwnd,
+            self.panel_rect,
+            &self.panel_canvas.pixels,
+            fade_alpha,
+        );
+        self.last_panel_alpha = fade_alpha;
     }
 
     fn on_timer(&mut self) {
@@ -1434,15 +1543,15 @@ impl OverlayState {
         );
 
         if self.panel_shown {
-            let panel_alpha = self.animator.effective_panel_alpha(&self.config);
-            // SAFETY: Updating panel window alpha during fade-in/fade-out.
-            unsafe {
-                let _ = SetLayeredWindowAttributes(
+            let fade_alpha = (self.animator.alpha_logical.clamp(0.0, 1.0) * 255.0).round() as u8;
+            if fade_alpha != self.last_panel_alpha {
+                self.panel_dib.present(
                     self.panel_hwnd,
-                    COLORREF(0),
-                    panel_alpha,
-                    LWA_ALPHA,
+                    self.panel_rect,
+                    &self.panel_canvas.pixels,
+                    fade_alpha,
                 );
+                self.last_panel_alpha = fade_alpha;
             }
         }
     }
@@ -1772,7 +1881,7 @@ impl OverlayState {
                             &mut self.popup_canvas,
                             &code_upper,
                             badge_rect,
-                            self.ui_fonts.chip_semibold,
+                            self.ui_fonts.chip_regular,
                             theme.text_muted,
                             DT_CENTER,
                         );
@@ -1786,11 +1895,7 @@ impl OverlayState {
                     &mut self.popup_canvas,
                     entry.name,
                     name_rect,
-                    if is_active {
-                        self.ui_fonts.row_semibold
-                    } else {
-                        self.ui_fonts.row_regular
-                    },
+                    self.ui_fonts.row_regular,
                     if is_active {
                         theme.accent_text
                     } else {
@@ -1887,7 +1992,7 @@ impl OverlayState {
                         &mut self.strip_canvas,
                         &code_upper,
                         label_rect,
-                        self.ui_fonts.chip_semibold,
+                        self.ui_fonts.chip_regular,
                         if is_active {
                             theme.accent_text
                         } else {
@@ -1900,7 +2005,7 @@ impl OverlayState {
                         &mut self.strip_canvas,
                         &code_upper,
                         chip_rect,
-                        self.ui_fonts.chip_semibold,
+                        self.ui_fonts.chip_regular,
                         if is_active {
                             theme.accent_text
                         } else {
@@ -2168,69 +2273,6 @@ impl OverlayState {
             self.keyboard_selected_row = Some(0);
             self.recompute_popup_layout();
             self.render_popup_frame();
-        }
-    }
-
-    fn paint_panel(&mut self, hwnd: HWND) {
-        let mut ps = PAINTSTRUCT::default();
-        // SAFETY: `BeginPaint` / `EndPaint` bracket GDI painting in `WM_PAINT`.
-        let hdc = unsafe { BeginPaint(hwnd, &mut ps) };
-
-        let mut client = RECT::default();
-        // SAFETY: Reading client rect of `hwnd`.
-        unsafe {
-            let _ = GetClientRect(hwnd, &mut client);
-        }
-
-        // Dark: #151517 bg / #F5F6F8 fg; Light: #FFFFFF bg / #1A1C1F fg (BGR COLORREF).
-        let (bg_color, fg_color) = if self.config.dark_theme {
-            (COLORREF(0x0017_1515), COLORREF(0x00F8_F6F5))
-        } else {
-            (COLORREF(0x00FF_FFFF), COLORREF(0x001F_1C1A))
-        };
-
-        // SAFETY: Creating solid brush, filling client area, and deleting brush.
-        unsafe {
-            let brush = CreateSolidBrush(bg_color);
-            let _ = FillRect(hdc, &client, brush);
-            let _ = DeleteObject(brush.into());
-        }
-
-        if !self.panel_text.is_empty() {
-            let font = self.ensure_font();
-            let old_font = font.map(|f| {
-                // SAFETY: Selecting font into `hdc`.
-                unsafe { SelectObject(hdc, f.into()) }
-            });
-            let mut text_rect = RECT {
-                left: client.left + PANEL_PADDING_X,
-                top: client.top + PANEL_PADDING_Y,
-                right: (client.right - PANEL_PADDING_X).max(client.left + PANEL_PADDING_X),
-                bottom: (client.bottom - PANEL_PADDING_Y).max(client.top + PANEL_PADDING_Y),
-            };
-            let mut wide: Vec<u16> = self.panel_text.encode_utf16().collect();
-            // SAFETY: Drawing wrapped text inside padded `text_rect`.
-            unsafe {
-                SetBkMode(hdc, TRANSPARENT);
-                SetTextColor(hdc, fg_color);
-                DrawTextW(
-                    hdc,
-                    &mut wide,
-                    &mut text_rect,
-                    DT_WORDBREAK | DT_LEFT | DT_NOPREFIX,
-                );
-            }
-            if let Some(old) = old_font {
-                // SAFETY: Restoring previous font.
-                unsafe {
-                    let _ = SelectObject(hdc, old);
-                }
-            }
-        }
-
-        // SAFETY: Completing `BeginPaint`.
-        unsafe {
-            let _ = EndPaint(hwnd, &ps);
         }
     }
 }
@@ -2601,7 +2643,8 @@ fn run_overlay_thread(
         return;
     };
 
-    // Best-effort Windows 11 rounded corners + subtle frosted blur behind panel, underbar, and recovery card.
+    // Best-effort Windows 11 rounded corners + strong Acrylic frosted blur behind panel, underbar,
+    // language popup, and recovery card so floating surfaces pop cleanly off any background.
     let corner_pref = DWMWCP_ROUND.0;
     // SAFETY: `corner_pref` is a valid `i32` for `DWMWA_WINDOW_CORNER_PREFERENCE`.
     unsafe {
@@ -2612,15 +2655,17 @@ fn run_overlay_thread(
             std::mem::size_of::<i32>() as u32,
         );
     }
-    apply_subtle_blur_behind(panel_hwnd);
-    apply_subtle_blur_behind(bar_hwnd);
-    apply_subtle_blur_behind(recovery_hwnd);
+    apply_acrylic_blur_behind(panel_hwnd, config.dark_theme, 0xA8);
+    apply_acrylic_blur_behind(bar_hwnd, config.dark_theme, 0x8E);
+    apply_acrylic_blur_behind(popup_hwnd, config.dark_theme, 0xB8);
+    apply_acrylic_blur_behind(recovery_hwnd, config.dark_theme, 0xA8);
     apply_rounded_region(
         bar_hwnd,
         bar_placement.bar_rect.width,
         bar_placement.bar_rect.height,
         UNDERBAR_RADIUS as i32,
     );
+    apply_rounded_region(popup_hwnd, popup_rect.width, popup_rect.height, 10);
     apply_rounded_region(
         recovery_hwnd,
         recovery_rect.width,
@@ -2643,10 +2688,12 @@ fn run_overlay_thread(
         recovery_hwnd,
         animator: PillAnimator::new(),
         pill_dib: LayeredDib::new(),
+        panel_dib: LayeredDib::new(),
         bar_dib: LayeredDib::new(),
         popup_dib: LayeredDib::new(),
         recovery_dib: LayeredDib::new(),
         text_mask: LayeredDib::new(),
+        panel_canvas: PremulCanvas::new(pw, 40),
         bar_canvas: PremulCanvas::new(bar_layout.width, bar_layout.height),
         popup_canvas: PremulCanvas::new(popup_layout.width, popup_layout.height),
         strip_canvas: PremulCanvas::new(popup_layout.width, underbar::RECENT_CHIP_HEIGHT),
@@ -2655,6 +2702,13 @@ fn run_overlay_thread(
         visible: false,
         timer_running: false,
         panel_shown: false,
+        panel_rect: OverlayRect {
+            x: px,
+            y: py,
+            width: pw,
+            height: 40,
+        },
+        last_panel_alpha: 0,
         panel_text: String::new(),
         active_work_area: area,
         pill_rect,
@@ -2894,16 +2948,6 @@ unsafe extern "system" fn panel_wnd_proc(
 ) -> LRESULT {
     match msg {
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
-        WM_ERASEBKGND => LRESULT(1),
-        WM_PAINT => {
-            // SAFETY: `hwnd` belongs to the overlay thread.
-            if let Some(state) = unsafe { get_window_state(hwnd) } {
-                state.paint_panel(hwnd);
-                return LRESULT(0);
-            }
-            // SAFETY: Fallback default processing when state is detached.
-            unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
-        }
         // SAFETY: Forwarding unhandled messages to `DefWindowProcW`.
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
     }

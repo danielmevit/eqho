@@ -2,6 +2,7 @@
 import { Theme } from "@app-theme/theme.slint";
 import { Button, ButtonKind, Card } from "@damt-ui/kit.slint";
 import { LanguageOption } from "types.slint";
+import { Icons, PhIcon, HoverTooltip } from "icons.slint";
 
 // Scrollable container with a thin themed scrollbar when content overflows.
 export component ScrollArea inherits Rectangle {
@@ -385,21 +386,22 @@ export component RecoveryBanner inherits Rectangle {
     }
 }
 
-// Circular icon button for TopBar (Theme toggle & Settings gear).
+// Compact borderless circular icon button for TopBar utility controls (Guide, Theme, Settings).
 export component CircleIconButton inherits Rectangle {
     in property <bool> active: false;
     in property <string> accessible-name;
+    in property <string> tooltip: root.accessible-name;
     callback clicked();
 
-    width: 34px;
-    height: 34px;
-    border-radius: 17px;
-    border-width: 1px;
-    border-color: root.active ? Theme.accent-line : Theme.border-subtle;
+    width: 28px;
+    height: 28px;
+    border-radius: 14px;
+    border-width: root.active ? 1px : 0px;
+    border-color: root.active ? Theme.accent-line : transparent;
     background: root.active ? Theme.accent-muted
         : touch.pressed ? Theme.button-outline-pressed
         : touch.has-hover ? Theme.surface-hover
-        : Theme.surface;
+        : transparent;
 
     accessible-role: button;
     accessible-label: root.accessible-name;
@@ -409,7 +411,22 @@ export component CircleIconButton inherits Rectangle {
 
     touch := TouchArea {
         mouse-cursor: pointer;
-        clicked => { root.clicked(); }
+        changed has-hover => {
+            if (self.has-hover && root.tooltip != "") {
+                HoverTooltip.text = root.tooltip;
+                HoverTooltip.anchor-x = root.absolute-position.x;
+                HoverTooltip.anchor-y = root.absolute-position.y;
+                HoverTooltip.anchor-w = root.width;
+                HoverTooltip.anchor-h = root.height;
+                HoverTooltip.visible = true;
+            } else if (HoverTooltip.text == root.tooltip) {
+                HoverTooltip.visible = false;
+            }
+        }
+        clicked => {
+            HoverTooltip.visible = false;
+            root.clicked();
+        }
     }
 }
 
@@ -421,15 +438,15 @@ export component ThemedLineEdit inherits Rectangle {
     callback edited(string);
 
     height: 32px;
-    border-radius: Theme.radius-sm;
-    background: Theme.surface-tertiary;
+    border-radius: 9px;
+    background: Theme.dark ? Theme.surface-tertiary : Theme.surface;
     border-width: 1px;
-    border-color: input.has-focus ? Theme.accent-line : Theme.input-border;
+    border-color: input.has-focus ? Theme.accent-line : Theme.border;
     clip: true;
 
     if root.text == "" && root.placeholder-text != "" : Text {
-        x: 10px;
-        width: parent.width - 20px;
+        x: 11px;
+        width: parent.width - 22px;
         text: root.placeholder-text;
         font-size: root.font-size;
         color: Theme.text-muted;
@@ -439,8 +456,8 @@ export component ThemedLineEdit inherits Rectangle {
     }
 
     input := TextInput {
-        x: 10px;
-        width: parent.width - 20px;
+        x: 11px;
+        width: parent.width - 22px;
         height: parent.height;
         text <=> root.text;
         font-size: root.font-size;
@@ -459,16 +476,16 @@ export component ThemedTextEdit inherits Rectangle {
     callback edited(string);
 
     min-height: 64px;
-    border-radius: Theme.radius-sm;
+    border-radius: 9px;
     background: Theme.surface-tertiary;
     border-width: 1px;
-    border-color: input.has-focus ? Theme.accent-line : Theme.input-border;
+    border-color: input.has-focus ? Theme.accent-line : Theme.border;
     clip: true;
 
     if root.text == "" && root.placeholder-text != "" : Text {
-        x: 10px;
+        x: 11px;
         y: 8px;
-        width: parent.width - 20px;
+        width: parent.width - 22px;
         text: root.placeholder-text;
         font-size: root.font-size;
         color: Theme.text-muted;
@@ -477,9 +494,9 @@ export component ThemedTextEdit inherits Rectangle {
     }
 
     input := TextInput {
-        x: 10px;
+        x: 11px;
         y: 8px;
-        width: parent.width - 20px;
+        width: parent.width - 22px;
         height: parent.height - 16px;
         text <=> root.text;
         font-size: root.font-size;
@@ -490,14 +507,19 @@ export component ThemedTextEdit inherits Rectangle {
     }
 }
 
-// 64 px top bar with brand wordmark, capsule pill nav, and theme/settings buttons.
+// 68 px GatherOS-inspired top bar: smaller subordinate wordmark (left), prominent floating
+// 3-tab capsule pill (center, no search icon), and smaller borderless utility icons (right).
 export component TopBar inherits Rectangle {
     in-out property <string> active-tab;
+    in property <bool> settings-open: false;
+    in property <bool> tour-active: false;
     in property <image> logo-image;
     callback tab-selected(string);
     callback theme-toggled();
+    callback settings-clicked();
+    callback tour-clicked();
 
-    height: 64px;
+    height: 68px;
     background: Theme.bg;
 
     HorizontalLayout {
@@ -505,7 +527,7 @@ export component TopBar inherits Rectangle {
         padding-right: Theme.space-16;
         alignment: space-between;
 
-        // Left: brand horizontal wordmark (or text fallback when no image is set)
+        // Left: smaller, understated horizontal wordmark
         HorizontalLayout {
             spacing: Theme.space-8;
             alignment: start;
@@ -515,31 +537,34 @@ export component TopBar inherits Rectangle {
                 alignment: center;
                 Image {
                     source: root.logo-image;
-                    width: 72px;
-                    height: 31px;
+                    width: 56px;
+                    height: 24px;
                     image-fit: contain;
                     image-rendering: smooth;
                     accessible-role: none;
                 }
             }
             if root.logo-image.width == 0 : Text {
-                text: "Eqho";
-                font-size: Theme.font-size-xl;
-                font-weight: 700;
-                color: Theme.text;
+                text: "eqho";
+                font-size: Theme.font-size-lg;
+                font-weight: 600;
+                color: Theme.accent-text;
                 vertical-alignment: center;
             }
         }
 
-        // Center: capsule pill nav bar
+        // Center: prominent floating capsule pill nav bar (General · Models · History)
         VerticalLayout {
             alignment: center;
             Rectangle {
-                height: 36px;
-                border-radius: 18px;
+                height: 42px;
+                border-radius: 21px;
                 background: Theme.surface;
                 border-width: 1px;
-                border-color: Theme.border-subtle;
+                border-color: Theme.dark ? Theme.border : Theme.border-subtle;
+                drop-shadow-blur: 14px;
+                drop-shadow-offset-y: 3px;
+                drop-shadow-color: Theme.dark ? #00000050 : #00000014;
 
                 HorizontalLayout {
                     padding: 4px;
@@ -551,9 +576,9 @@ export component TopBar inherits Rectangle {
                         { id: "history", label: "History" },
                     ] : pill := Rectangle {
                         property <bool> is-active: root.active-tab == nav-item.id;
-                        min-width: 84px;
-                        height: 28px;
-                        border-radius: 14px;
+                        min-width: 98px;
+                        height: 34px;
+                        border-radius: 17px;
                         background: pill.is-active ? Theme.accent
                             : nav-touch.pressed ? Theme.button-outline-pressed
                             : nav-touch.has-hover ? Theme.surface-hover
@@ -568,13 +593,29 @@ export component TopBar inherits Rectangle {
                         }
 
                         HorizontalLayout {
-                            padding-left: 14px;
-                            padding-right: 14px;
+                            padding-left: 15px;
+                            padding-right: 15px;
+                            spacing: 6px;
+                            alignment: center;
+
+                            // Unified Phosphor Icons matching GatherOS capsule tabs
+                            VerticalLayout {
+                                alignment: center;
+                                PhIcon {
+                                    glyph: nav-item.id == "general" ? Icons.mic
+                                        : nav-item.id == "models" ? Icons.models
+                                        : Icons.history;
+                                    size: 15px;
+                                    icon-color: pill.is-active ? Theme.on-accent
+                                        : (nav-touch.has-hover ? Theme.text : Theme.text-muted);
+                                }
+                            }
+
                             Text {
                                 text: nav-item.label;
                                 font-size: Theme.font-size-base;
                                 font-weight: pill.is-active ? 600 : 500;
-                                color: pill.is-active ? Theme.on-accent : Theme.text-muted;
+                                color: pill.is-active ? Theme.on-accent : (nav-touch.has-hover ? Theme.text : Theme.text-muted);
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                                 accessible-role: none;
@@ -593,40 +634,23 @@ export component TopBar inherits Rectangle {
             }
         }
 
-        // Right: Theme toggle (Sun/Moon Path) + Settings gear (Path)
+        // Right: smaller, calmer utility icons (Guide/Tour, Theme, Settings popup)
         HorizontalLayout {
             width: 120px;
             alignment: end;
-            spacing: Theme.space-8;
+            spacing: 4px;
 
             VerticalLayout {
                 alignment: center;
                 CircleIconButton {
-                    accessible-name: Theme.dark ? "Switch to light theme" : "Switch to dark theme";
-                    clicked => {
-                        Theme.dark = !Theme.dark;
-                        root.theme-toggled();
-                    }
-                    // Sun in dark mode, crescent Moon in light mode (clean thin hairline Path).
-                    if Theme.dark : Path {
-                        width: 16px;
-                        height: 16px;
-                        viewbox-width: 24;
-                        viewbox-height: 24;
-                        commands: "M12 7 A5 5 0 1 0 12 17 A5 5 0 1 0 12 7 M12 1 L12 4 M12 20 L12 23 M4.22 4.22 L6.34 6.34 M17.66 17.66 L19.78 19.78 M1 12 L4 12 M20 12 L23 12 M4.22 19.78 L6.34 17.66 M17.66 6.34 L19.78 4.22";
-                        stroke: Theme.text;
-                        stroke-width: 0.95px;
-                        fill: transparent;
-                    }
-                    if !Theme.dark : Path {
-                        width: 16px;
-                        height: 16px;
-                        viewbox-width: 24;
-                        viewbox-height: 24;
-                        commands: "M21 12.79 A9 9 0 1 1 11.21 3 A7 7 0 0 0 21 12.79 Z";
-                        stroke: Theme.text;
-                        stroke-width: 0.95px;
-                        fill: transparent;
+                    active: root.tour-active;
+                    accessible-name: "Interactive guide";
+                    tooltip: "Interactive guide";
+                    clicked => { root.tour-clicked(); }
+                    PhIcon {
+                        glyph: Icons.compass;
+                        size: 16px;
+                        icon-color: root.tour-active ? Theme.accent-line : Theme.text-muted;
                     }
                 }
             }
@@ -634,21 +658,31 @@ export component TopBar inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 CircleIconButton {
-                    active: root.active-tab == "settings";
-                    accessible-name: "Settings";
+                    accessible-name: Theme.dark ? "Switch to light theme" : "Switch to dark theme";
+                    tooltip: Theme.dark ? "Light mode" : "Dark mode";
                     clicked => {
-                        root.active-tab = "settings";
-                        root.tab-selected("settings");
+                        Theme.dark = !Theme.dark;
+                        root.theme-toggled();
                     }
-                    Path {
-                        width: 16px;
-                        height: 16px;
-                        viewbox-width: 24;
-                        viewbox-height: 24;
-                        commands: "M12 15 A3 3 0 1 0 12 9 A3 3 0 1 0 12 15 M19.4 15 A1.65 1.65 0 0 0 19.73 16.82 L19.79 16.88 A2 2 0 1 1 16.96 19.71 L16.9 19.65 A1.65 1.65 0 0 0 15.08 19.32 A1.65 1.65 0 0 0 14.08 20.83 L14.08 21 A2 2 0 1 1 10.08 21 L10.08 20.91 A1.65 1.65 0 0 0 9 19.4 A1.65 1.65 0 0 0 7.18 19.73 L7.12 19.79 A2 2 0 1 1 4.29 16.96 L4.35 16.9 A1.65 1.65 0 0 0 4.68 15.08 A1.65 1.65 0 0 0 3.17 14.08 L3 14.08 A2 2 0 1 1 3 10.08 L3.09 10.08 A1.65 1.65 0 0 0 4.6 9 A1.65 1.65 0 0 0 4.27 7.18 L4.21 7.12 A2 2 0 1 1 7.04 4.29 L7.1 4.35 A1.65 1.65 0 0 0 8.92 4.68 L9 4.68 A1.65 1.65 0 0 0 10 3.17 L10 3 A2 2 0 1 1 14 3 L14 3.09 A1.65 1.65 0 0 0 15 4.6 A1.65 1.65 0 0 0 16.82 4.27 L16.88 4.21 A2 2 0 1 1 19.71 7.04 L19.65 7.1 A1.65 1.65 0 0 0 19.32 8.92 L19.32 9 A1.65 1.65 0 0 0 20.83 10 L21 10 A2 2 0 1 1 21 14 L20.91 14 A1.65 1.65 0 0 0 19.4 15 Z";
-                        stroke: root.active-tab == "settings" ? Theme.accent-line : Theme.text;
-                        stroke-width: 0.95px;
-                        fill: transparent;
+                    PhIcon {
+                        glyph: Theme.dark ? Icons.sun : Icons.moon;
+                        size: 16px;
+                        icon-color: Theme.text-muted;
+                    }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                CircleIconButton {
+                    active: root.settings-open;
+                    accessible-name: "Settings";
+                    tooltip: "Settings";
+                    clicked => { root.settings-clicked(); }
+                    PhIcon {
+                        glyph: Icons.settings;
+                        size: 16px;
+                        icon-color: root.settings-open ? Theme.accent-line : Theme.text-muted;
                     }
                 }
             }
@@ -661,6 +695,178 @@ export component TopBar inherits Rectangle {
         width: parent.width;
         height: 1px;
         background: Theme.border-subtle;
+    }
+}
+
+// Floating bottom-left contextual walkthrough card (modeled on GatherOS 1/7 coach-mark card).
+// Separate from the initial 6-step setup wizard; explains each section live on top of the app.
+export component TourCard inherits Rectangle {
+    in property <int> step: 0;
+    in property <int> total-steps: 4;
+    callback next-clicked();
+    callback back-clicked();
+    callback dismiss-clicked();
+
+    property <string> card-title: root.step == 0 ? "General controls"
+        : root.step == 1 ? "Offline speech models"
+        : root.step == 2 ? "History & Trash"
+        : "Focused Settings";
+    property <string> card-body: root.step == 0
+        ? "Pick your mic, tune sensitivity, set your global hotkey, and switch between Batch or Live dictation."
+        : root.step == 1
+            ? "Download local Whisper models and switch between Vulkan GPU acceleration or multi-core CPU anytime."
+            : root.step == 2
+                ? "Search local transcripts, recover failed pastes with one click, or restore deleted items from Trash."
+                : "Click the gear icon anytime to tune the floating pill, replacements, startup, and trashed data retention.";
+
+    width: 304px;
+    height: lay.preferred-height;
+    border-radius: 14px;
+    background: #1C1A19;
+    border-width: 1px;
+    border-color: #FFFFFF22;
+    drop-shadow-blur: 24px;
+    drop-shadow-offset-y: 8px;
+    drop-shadow-color: #00000066;
+
+    lay := VerticalLayout {
+        padding: 16px;
+        spacing: 10px;
+
+        // Top row: step counter + close X
+        HorizontalLayout {
+            alignment: space-between;
+            Text {
+                text: (root.step + 1) + "/" + root.total-steps;
+                font-size: Theme.font-size-xs;
+                font-weight: 500;
+                color: #A1A1AA;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                width: 22px;
+                height: 22px;
+                border-radius: 11px;
+                background: x-touch.has-hover ? #FFFFFF1A : transparent;
+                accessible-role: button;
+                accessible-label: "Dismiss guide";
+                accessible-action-default => { root.dismiss-clicked(); }
+                Path {
+                    width: 8px;
+                    height: 8px;
+                    x: 7px;
+                    y: 7px;
+                    viewbox-width: 10;
+                    viewbox-height: 10;
+                    commands: "M1 1 L9 9 M9 1 L1 9";
+                    stroke: #A1A1AA;
+                    stroke-width: 1.4px;
+                    fill: transparent;
+                }
+                x-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    changed has-hover => {
+                        if (self.has-hover) {
+                            HoverTooltip.text = "Dismiss guide";
+                            HoverTooltip.anchor-x = parent.absolute-position.x;
+                            HoverTooltip.anchor-y = parent.absolute-position.y;
+                            HoverTooltip.anchor-w = parent.width;
+                            HoverTooltip.anchor-h = parent.height;
+                            HoverTooltip.visible = true;
+                        } else if (HoverTooltip.text == "Dismiss guide") {
+                            HoverTooltip.visible = false;
+                        }
+                    }
+                    clicked => {
+                        HoverTooltip.visible = false;
+                        root.dismiss-clicked();
+                    }
+                }
+            }
+        }
+
+        // Title row with matching Phosphor section icon
+        HorizontalLayout {
+            spacing: 7px;
+            alignment: start;
+            VerticalLayout {
+                alignment: center;
+                PhIcon {
+                    glyph: root.step == 0 ? Icons.mic
+                        : root.step == 1 ? Icons.models
+                        : root.step == 2 ? Icons.history
+                        : Icons.settings;
+                    size: 16px;
+                    icon-color: #F5F6F8;
+                }
+            }
+            Text {
+                text: root.card-title;
+                font-size: Theme.font-size-base;
+                font-weight: 600;
+                color: #F5F6F8;
+                vertical-alignment: center;
+            }
+        }
+
+        // Concise explanation
+        Text {
+            text: root.card-body;
+            font-size: Theme.font-size-sm;
+            color: #C7C7CE;
+            wrap: word-wrap;
+        }
+
+        // Bottom actions: quiet Back link + white capsule Next/Done button
+        HorizontalLayout {
+            padding-top: 2px;
+            alignment: space-between;
+
+            Rectangle {
+                horizontal-stretch: 0;
+                min-width: root.step > 0 ? 48px : 1px;
+                height: 28px;
+                if root.step > 0 : Text {
+                    text: "Back";
+                    font-size: Theme.font-size-sm;
+                    font-weight: 500;
+                    color: back-touch.has-hover ? #FFFFFF : #A1A1AA;
+                    vertical-alignment: center;
+                }
+                back-touch := TouchArea {
+                    enabled: root.step > 0;
+                    mouse-cursor: pointer;
+                    clicked => { root.back-clicked(); }
+                }
+            }
+
+            Rectangle {
+                height: 30px;
+                min-width: 72px;
+                border-radius: 15px;
+                background: next-touch.pressed ? #D4D4D8 : next-touch.has-hover ? #F4F4F5 : #FFFFFF;
+                accessible-role: button;
+                accessible-label: root.step + 1 >= root.total-steps ? "Done" : "Next";
+                accessible-action-default => { root.next-clicked(); }
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    Text {
+                        text: root.step + 1 >= root.total-steps ? "Done" : "Next";
+                        font-size: Theme.font-size-sm;
+                        font-weight: 600;
+                        color: #141416;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        accessible-role: none;
+                    }
+                }
+                next-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.next-clicked(); }
+                }
+            }
+        }
     }
 }
 
@@ -737,13 +943,13 @@ export component FlagDropdown inherits Rectangle {
     }
 
     height: 32px;
-    border-radius: Theme.radius-button;
+    border-radius: 9px;
     border-width: 1px;
-    border-color: focus.has-focus ? Theme.accent-line : Theme.input-border;
+    border-color: focus.has-focus ? Theme.accent-line : (touch.has-hover && root.enabled) ? Theme.text-muted : Theme.border;
     background: !root.enabled ? Theme.surface-tertiary
         : touch.pressed ? Theme.button-outline-pressed
         : touch.has-hover ? Theme.surface-hover
-        : Theme.surface;
+        : Theme.dark ? #25252C : Theme.surface;
     opacity: root.enabled ? 1.0 : 0.45;
 
     accessible-role: combobox;
@@ -835,10 +1041,13 @@ export component FlagDropdown inherits Rectangle {
         Rectangle {
             width: parent.width;
             height: parent.height;
-            border-radius: Theme.radius-button;
+            border-radius: 10px;
             border-width: 1px;
             border-color: Theme.border;
             background: Theme.surface;
+            drop-shadow-blur: 14px;
+            drop-shadow-offset-y: 4px;
+            drop-shadow-color: #00000038;
             clip: true;
 
             popup-focus := FocusScope {
@@ -876,22 +1085,14 @@ export component FlagDropdown inherits Rectangle {
                             spacing: 7px;
                             alignment: start;
 
-                            // Subtle magnifying glass icon
+                            // Phosphor magnifying glass icon
                             VerticalLayout {
                                 alignment: center;
                                 horizontal-stretch: 0;
-                                Path {
-                                    width: 13px;
-                                    height: 13px;
-                                    viewbox-x: 0;
-                                    viewbox-y: 0;
-                                    viewbox-width: 24;
-                                    viewbox-height: 24;
-                                    stroke: Theme.text-muted;
-                                    stroke-width: 1.8px;
-                                    stroke-line-cap: round;
-                                    fill: transparent;
-                                    commands: "M 11 4 A 7 7 0 1 0 11 18 A 7 7 0 1 0 11 4 M 16.2 16.2 L 20.5 20.5";
+                                PhIcon {
+                                    glyph: Icons.search;
+                                    size: 14px;
+                                    icon-color: Theme.text-muted;
                                 }
                             }
 

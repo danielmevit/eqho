@@ -52,6 +52,7 @@ pub fn build_model_cards(
     selected_key: &str,
     cached_keys: &[&str],
     downloading_key: Option<&str>,
+    loading_key: Option<&str>,
     progress: f32,
     download_detail: &str,
     error_key: Option<&str>,
@@ -63,15 +64,18 @@ pub fn build_model_cards(
         .iter()
         .map(|m| {
             let is_cached = cached_keys.contains(&m.key);
-            let is_downloading = downloading_key == Some(m.key);
+            let is_downloading = downloading_key == Some(m.key) && !is_cached;
+            let is_loading = loading_key == Some(m.key) && is_cached && !is_downloading;
             // A model can never appear simultaneously active/selected and still downloading or missing.
             let is_selected = m.key == selected_key && is_cached && !is_downloading;
-            let has_error = error_key == Some(m.key);
+            let has_error = error_key == Some(m.key) && !is_cached;
 
             let status_text = if has_error {
                 "Failed"
             } else if is_downloading {
                 "Downloading…"
+            } else if is_loading {
+                "Loading…"
             } else if is_selected {
                 "Active"
             } else if is_cached {
@@ -114,6 +118,7 @@ pub fn build_model_cards(
                 is_selected,
                 is_cached,
                 is_downloading,
+                is_loading,
                 has_error,
                 progress: card_progress,
                 status_text: status_text.into(),

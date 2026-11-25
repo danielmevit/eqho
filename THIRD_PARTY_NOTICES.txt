@@ -19,12 +19,18 @@ following third-party components:
    - Copyright (c) SixtyFPS GmbH
    - Source: https://github.com/slint-ui/slint
 
-3. Whisper speech recognition models (downloaded on demand by the user)
+3. Phosphor Icons
+   - License: MIT License
+   - Copyright (c) 2020-2026 Phosphor Icons (Helena Zhang & Tobias Fried)
+   - Source: https://phosphoricons.com / https://github.com/phosphor-icons/core
+   - Bundled font: assets/fonts/Phosphor.ttf
+
+4. Whisper speech recognition models (downloaded on demand by the user)
    - OpenAI Whisper / Distil-Whisper weights converted to GGML format by the
      whisper.cpp community (https://huggingface.co/ggerganov/whisper.cpp)
    - License: MIT License
 
-4. Direct Rust crate dependencies (compiled statically into Eqho.exe)
+5. Direct Rust crate dependencies (compiled statically into Eqho.exe)
    - windows / windows-core (Microsoft): MIT OR Apache-2.0
    - cpal (RustAudio): Apache-2.0
    - libloading: ISC

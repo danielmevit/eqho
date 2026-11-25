@@ -8,8 +8,8 @@ use eqho_core::history::TranscriptEntry;
 use eqho_core::modelpick::HardwareClass;
 use eqho_core::settings::Settings;
 use eqho_ui::{
-    DashboardWindow, Theme, apply_settings_to_window, build_history_rows, build_model_cards,
-    format_active_engine_display, split_model_cards, wordmark_image,
+    DashboardWindow, HoverTooltip, Theme, apply_settings_to_window, build_history_rows,
+    build_model_cards, format_active_engine_display, split_model_cards, wordmark_image,
 };
 use slint::platform::software_renderer::{
     MinimalSoftwareWindow, PremultipliedRgbaColor, RepaintBufferType,
@@ -114,6 +114,7 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
         "distil-large-v3",
         &["distil-large-v3", "large-v3-turbo", "tiny"],
         Some("small.en-q5"),
+        None,
         0.42,
         "Downloading 42% · 76 MB / 181 MB · 14.2 MB/s",
         None,
@@ -161,18 +162,30 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
     let light_logo = wordmark_image(false);
     win.show().unwrap();
 
-    // 1. General tab (dark & light, wide 940x560)
+    // 1. General tab (dark & light, wide 940x560 + interactive tour card + top-right hover tooltip)
     win.set_active_tab("general".into());
+    win.set_tour_step(0);
+    win.set_tour_active(true);
     win.set_logo_image(dark_logo.clone());
     let dark_wide = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
     assert_non_uniform_and_valid_png(&dark_wide, 940, 560);
     maybe_save_png(dump_dir.as_ref(), "01_general_dark_940x560", &dark_wide, 940, 560);
 
+    // Light mode with floating "Dark mode" hover tooltip pill under top-right theme icon + tour card
     win.set_logo_image(light_logo.clone());
+    let tip = win.global::<HoverTooltip>();
+    tip.set_text("Dark mode".into());
+    tip.set_anchor_x(864.0);
+    tip.set_anchor_y(20.0);
+    tip.set_anchor_w(28.0);
+    tip.set_anchor_h(28.0);
+    tip.set_visible(true);
     let light_wide = render_dashboard_rgba(&window_adapter, &win, 940, 560, false);
     assert_non_uniform_and_valid_png(&light_wide, 940, 560);
     assert_ne!(dark_wide, light_wide, "dark and light renders must differ");
     maybe_save_png(dump_dir.as_ref(), "02_general_light_940x560", &light_wide, 940, 560);
+    tip.set_visible(false);
+    win.set_tour_active(false);
 
     // 2. Models tab (wide dark, wide light, narrow dark & narrow light)
     win.set_active_tab("models".into());
@@ -252,29 +265,74 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
         &sample_entries,
     ))));
 
-    // 4. Settings tab (dark wide + tall light showing About Eqho & Light gradient Overlay sliders)
-    win.set_active_tab("settings".into());
+    // 4. Settings Modal popup (dark & light across Appearance, Overlay, Data & Trash, License, About)
+    win.set_active_tab("general".into());
+    win.set_settings_open(true);
+    win.set_settings_section("appearance".into());
     win.set_logo_image(dark_logo.clone());
     let settings_dark = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
     assert_non_uniform_and_valid_png(&settings_dark, 940, 560);
     maybe_save_png(
         dump_dir.as_ref(),
-        "06_settings_dark_940x560",
+        "06_settings_modal_appearance_dark",
         &settings_dark,
         940,
         560,
     );
 
+    win.set_settings_section("overlay".into());
     win.set_logo_image(light_logo.clone());
-    let settings_light = render_dashboard_rgba(&window_adapter, &win, 940, 1080, false);
-    assert_non_uniform_and_valid_png(&settings_light, 940, 1080);
+    let settings_light = render_dashboard_rgba(&window_adapter, &win, 940, 560, false);
+    assert_non_uniform_and_valid_png(&settings_light, 940, 560);
     maybe_save_png(
         dump_dir.as_ref(),
-        "06b_settings_light_940x1080",
+        "06b_settings_modal_overlay_light",
         &settings_light,
         940,
-        1080,
+        560,
     );
+
+    win.set_settings_section("data".into());
+    win.set_logo_image(dark_logo.clone());
+    let settings_data_dark = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
+    assert_non_uniform_and_valid_png(&settings_data_dark, 940, 560);
+    maybe_save_png(
+        dump_dir.as_ref(),
+        "06c_settings_modal_data_dark",
+        &settings_data_dark,
+        940,
+        560,
+    );
+
+    win.set_store_build(true);
+    win.set_license_state("trial".into());
+    win.set_trial_days_left(14);
+    win.set_trial_days_left_text("14 days left".into());
+    win.set_settings_section("license".into());
+    win.set_logo_image(light_logo.clone());
+    let settings_license_light = render_dashboard_rgba(&window_adapter, &win, 940, 560, false);
+    assert_non_uniform_and_valid_png(&settings_license_light, 940, 560);
+    maybe_save_png(
+        dump_dir.as_ref(),
+        "06d_settings_modal_license_light",
+        &settings_license_light,
+        940,
+        560,
+    );
+
+    win.set_store_build(false);
+    win.set_settings_section("about".into());
+    win.set_logo_image(dark_logo.clone());
+    let settings_about_dark = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
+    assert_non_uniform_and_valid_png(&settings_about_dark, 940, 560);
+    maybe_save_png(
+        dump_dir.as_ref(),
+        "06e_settings_modal_about_dark",
+        &settings_about_dark,
+        940,
+        560,
+    );
+    win.set_settings_open(false);
 
     // 5. Onboarding steps
     win.set_onboarding_active(true);

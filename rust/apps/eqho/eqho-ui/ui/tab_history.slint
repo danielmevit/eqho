@@ -4,8 +4,9 @@ import { Theme } from "@app-theme/theme.slint";
 import { Button, ButtonKind, CloseButton, Dropdown } from "@damt-ui/kit.slint";
 import { HistoryRowItem } from "types.slint";
 import { ScrollArea, SectionCard, ThemedLineEdit } from "components.slint";
+import { Icons, PhIcon, HoverTooltip } from "icons.slint";
 
-// Outline button matching ButtonKind.outline with a crisp vector trash-can icon.
+// Outline button matching ButtonKind.outline with a crisp Phosphor trash-can icon.
 component TrashButton inherits Rectangle {
     in property <int> count: 0;
     callback clicked();
@@ -13,16 +14,16 @@ component TrashButton inherits Rectangle {
     property <string> label-text: root.count > 0 ? "Trash (" + root.count + ")" : "Trash";
 
     min-width: content.preferred-width + 20px;
-    min-height: 29px;
+    min-height: 31px;
     max-height: self.min-height;
     horizontal-stretch: 0;
     vertical-stretch: 0;
-    border-radius: Theme.radius-button;
+    border-radius: 9px;
     border-width: 1px;
-    border-color: Theme.text-muted;
+    border-color: Theme.border;
     background: touch.pressed ? Theme.button-outline-pressed
         : touch.has-hover ? Theme.surface-hover
-        : transparent;
+        : Theme.dark ? #FFFFFF08 : Theme.surface;
 
     accessible-role: button;
     accessible-label: root.label-text;
@@ -36,19 +37,10 @@ component TrashButton inherits Rectangle {
 
         VerticalLayout {
             alignment: center;
-            Path {
-                width: 13px;
-                height: 13px;
-                viewbox-x: 0;
-                viewbox-y: 0;
-                viewbox-width: 24;
-                viewbox-height: 24;
-                stroke: Theme.text;
-                stroke-width: 1.5px;
-                stroke-line-cap: round;
-                stroke-line-join: round;
-                fill: transparent;
-                commands: "M 3 6 L 21 6 M 8 6 L 9 3.5 L 15 3.5 L 16 6 M 5.5 6 L 6.8 20.5 L 17.2 20.5 L 18.5 6 M 10 10.5 L 10 16.5 M 14 10.5 L 14 16.5";
+            PhIcon {
+                glyph: Icons.trash;
+                size: 15px;
+                icon-color: Theme.text;
             }
         }
 
@@ -386,8 +378,20 @@ export component HistoryTab inherits Rectangle {
                             kind: root.copied-ts-key == row.ts_key ? ButtonKind.accent : ButtonKind.outline;
                             clicked => { root.copy-history-entry(row.ts_key, row.text); }
                         }
-                        CloseButton {
+                        del-btn := CloseButton {
                             accessible-name: "Move to Trash";
+                            hover-changed(h) => {
+                                if (h) {
+                                    HoverTooltip.text = "Move to Trash";
+                                    HoverTooltip.anchor-x = self.absolute-position.x;
+                                    HoverTooltip.anchor-y = self.absolute-position.y;
+                                    HoverTooltip.anchor-w = self.width;
+                                    HoverTooltip.anchor-h = self.height;
+                                    HoverTooltip.visible = true;
+                                } else if (HoverTooltip.text == "Move to Trash") {
+                                    HoverTooltip.visible = false;
+                                }
+                            }
                             clicked => {
                                 root.confirm-clear-all = false;
                                 root.confirm-delete-ts = row.ts_key;
@@ -437,8 +441,20 @@ export component HistoryTab inherits Rectangle {
                             kind: root.copied-ts-key == row.ts_key ? ButtonKind.accent : ButtonKind.text;
                             clicked => { root.copy-history-entry(row.ts_key, row.text); }
                         }
-                        CloseButton {
+                        perm-del-btn := CloseButton {
                             accessible-name: "Delete forever";
+                            hover-changed(h) => {
+                                if (h) {
+                                    HoverTooltip.text = "Delete forever";
+                                    HoverTooltip.anchor-x = self.absolute-position.x;
+                                    HoverTooltip.anchor-y = self.absolute-position.y;
+                                    HoverTooltip.anchor-w = self.width;
+                                    HoverTooltip.anchor-h = self.height;
+                                    HoverTooltip.visible = true;
+                                } else if (HoverTooltip.text == "Delete forever") {
+                                    HoverTooltip.visible = false;
+                                }
+                            }
                             clicked => {
                                 root.confirm-empty-trash = false;
                                 root.confirm-delete-ts = row.ts_key;

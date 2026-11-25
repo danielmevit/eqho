@@ -1,0 +1,87 @@
+// Unified Phosphor Icons (MIT, https://phosphoricons.com) embedded directly from assets/fonts/Phosphor.ttf.
+// All codepoints are verified against the GSUB/cmap tables in assets/fonts/Phosphor.ttf.
+import "../../../../../assets/fonts/Phosphor.ttf";
+import { Theme } from "@app-theme/theme.slint";
+
+export global Icons {
+    out property <string> mic: "\u{e326}";              // microphone
+    out property <string> general: "\u{e434}";          // sliders-horizontal
+    out property <string> models: "\u{e466}";           // stack
+    out property <string> history: "\u{e1a0}";          // clock-counter-clockwise
+    out property <string> settings: "\u{e272}";         // gear-six
+    out property <string> sun: "\u{e472}";              // sun
+    out property <string> moon: "\u{e330}";             // moon
+    out property <string> compass: "\u{e1c8}";          // compass
+    out property <string> trash: "\u{e4a6}";            // trash
+    out property <string> download: "\u{e20c}";         // download-simple
+    out property <string> retry: "\u{e036}";            // arrow-clockwise
+    out property <string> search: "\u{e30c}";           // magnifying-glass
+    out property <string> palette: "\u{e6c8}";          // palette
+    out property <string> waveform: "\u{e802}";         // waveform
+    out property <string> overlay: "\u{e5da}";          // app-window
+    out property <string> desktop: "\u{e560}";          // desktop
+    out property <string> database: "\u{e1de}";         // database
+    out property <string> license: "\u{e606}";          // seal-check
+    out property <string> info: "\u{e2ce}";             // info
+    out property <string> folder: "\u{e24a}";           // folder
+}
+
+export component PhIcon inherits Text {
+    in property <string> glyph;
+    in property <length> size: 15px;
+    in property <color> icon-color: Theme.text;
+
+    text: root.glyph;
+    font-family: "Phosphor";
+    font-size: root.size;
+    color: root.icon-color;
+    horizontal-alignment: center;
+    vertical-alignment: center;
+    accessible-role: none;
+}
+
+// Shared hover-tooltip state updated by graphical/icon-only controls across the dashboard.
+export global HoverTooltip {
+    in-out property <bool> visible: false;
+    in-out property <string> text: "";
+    in-out property <length> anchor-x: 0px;
+    in-out property <length> anchor-y: 0px;
+    in-out property <length> anchor-w: 0px;
+    in-out property <length> anchor-h: 0px;
+}
+
+// Compact floating hover tooltip pill rendered on the top window layer (modeled on GatherOS "Dark mode" pill).
+export component TooltipOverlay inherits Rectangle {
+    in property <length> viewport-width: 940px;
+    in property <length> viewport-height: 560px;
+
+    property <length> tip-w: tip-txt.preferred-width + 18px;
+    property <length> tip-h: tip-txt.preferred-height + 9px;
+    property <length> raw-x: HoverTooltip.anchor-x + (HoverTooltip.anchor-w - self.tip-w) / 2;
+    property <bool> flip-up: HoverTooltip.anchor-y + HoverTooltip.anchor-h + 7px + self.tip-h > root.viewport-height - 6px;
+
+    visible: HoverTooltip.visible && HoverTooltip.text != "";
+    x: Math.clamp(self.raw-x, 8px, Math.max(8px, root.viewport-width - self.tip-w - 8px));
+    y: self.flip-up
+        ? Math.max(6px, HoverTooltip.anchor-y - self.tip-h - 7px)
+        : HoverTooltip.anchor-y + HoverTooltip.anchor-h + 7px;
+    width: self.tip-w;
+    height: self.tip-h;
+    border-radius: 7px;
+    background: Theme.dark ? #29292F : #1C1A19;
+    border-width: 1px;
+    border-color: Theme.dark ? #FFFFFF26 : #00000018;
+    drop-shadow-blur: 12px;
+    drop-shadow-offset-y: 4px;
+    drop-shadow-color: #00000044;
+
+    tip-txt := Text {
+        text: HoverTooltip.text;
+        font-size: Theme.font-size-sm;
+        font-weight: 500;
+        color: #F5F6F8;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+}

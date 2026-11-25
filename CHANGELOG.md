@@ -4,6 +4,25 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.9.2] - 2026-11-25
+
+Unified Phosphor Icons across the dashboard, GatherOS-inspired floating top bar and centered tabbed Settings modal, interactive 4-step section guide cards, icon hover tooltip pills, dark-mode depth refinement, Windows 11 Acrylic frosted live transcript overlay, model-selection loading fix, and automatic background-app close during installer upgrades.
+
+### Added
+- **Unified Phosphor Icons (MIT):** Embedded `assets/fonts/Phosphor.ttf` and replaced hand-drawn icon paths across the TopBar, Models, History Trash button, Settings sidebar, and interactive guide cards.
+- **Centered tabbed Settings modal popup:** Clicking the Settings gear now opens a centered rounded modal over a dimmed backdrop (dismiss via `×`, `Esc`, or clicking outside) with a left Phosphor icon-tab sidebar separating **Appearance**, **Dictation**, **Overlay**, **System**, **Data & Trash**, **License** (Microsoft Store builds), and **About**.
+- **Interactive 4-step section walkthrough cards:** Separate from initial first-time setup, a dark floating bottom-left guide card (`1/4`–`4/4`) introduces **General**, **Models**, **History & Trash**, and **Settings** live as you step through — triggered once after onboarding or anytime via the top-right compass icon or Settings → About.
+- **Floating hover tooltip pills:** Graphical/icon-only controls across the dashboard (`Interactive guide`, `Dark mode`/`Light mode`, `Settings`, Model status icons, and row/modal `×` buttons) now show compact dark hover tooltips positioned cleanly above all layers.
+
+### Changed
+- **GatherOS-inspired TopBar & unified button geometry:** Promoted the floating 3-tab center capsule (`General · Models · History`, no top-bar search button), toned down the left `eqho` wordmark and right borderless utility icons, upgraded buttons and dropdowns to sleek `9px` rounded corners with downward chevron indicators, and kept capsule pill styling on multi-option segmented controls.
+- **Dark-mode depth hierarchy & calm active model outline:** Stepped nested cards (`ModelCard`, `SettingsGroup`, `TabList`, dropdowns) progressively lighter as you move deeper inside dark surfaces (`#0A0A0B` → `#151517` → `#1F1F23`/`#24242A`), and replaced the loud full-blue active model card border with a subtle grayish-white outline.
+- **Stronger frosted Acrylic live transcript box & crisp regular-weight overlay language menu:** Upgraded the floating live transcript box (and underbar/language popup/recovery card) to Windows 11 `ACCENT_ENABLE_ACRYLICBLURBEHIND` with full-opacity text and a `1px` glass border so it pops off any background; removed bold weights and fixed GDI gamma bloat in the under-pill language menu so all rows render in crisp regular weight.
+
+### Fixed
+- **Cached model stuck showing "Downloading…" after Select:** Separated in-memory `loading_key` from network `downloading_key` and emitted `"Ready"` after `preload_model()` / `ensure_model_loaded()` completes so selecting an already-downloaded model never falsely displays a downloading state or Cancel button.
+- **Inno Setup in-place upgrade background-close hang:** Added a `PrepareToInstall` hook in `installer-rust.iss` that terminates any running tray-only `Eqho.exe` (and its `--model-host` child) cleanly before extracting updated files.
+
 ## [0.9.1] - 2026-11-25
 
 Dashboard polish, History Trash bin with configurable retention, floating failed-paste recovery card, snappier Live dictation cadence, pure-vector HiDPI wordmark, and refined frosted overlay visuals.
