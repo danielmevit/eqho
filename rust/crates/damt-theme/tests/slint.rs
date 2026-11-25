@@ -18,7 +18,7 @@ fn slint_output_compiles() {
     // Sanity: the global switches on `dark` and carries the palette.
     assert!(slint.contains("export global Theme"));
     assert!(slint.contains("in-out property <bool> dark"));
-    assert!(slint.contains("out property <color> bg: dark ? #0A0A0BFF : #F5F6F8FF;"));
+    assert!(slint.contains("out property <color> bg: dark ? #121215FF : #F5F6F8FF;"));
 
     let compiler = slint_interpreter::Compiler::default();
     // The interpreter requires a component in the file; the generated output is a global meant to

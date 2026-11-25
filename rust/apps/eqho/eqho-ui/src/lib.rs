@@ -11,10 +11,12 @@ pub mod slint_generated {
     slint::include_modules!();
 }
 
+pub mod blur;
 pub mod flags;
 pub mod logo;
 pub mod viewmodel;
 
+pub use blur::*;
 pub use flags::*;
 pub use logo::*;
 pub use slint_generated::*;

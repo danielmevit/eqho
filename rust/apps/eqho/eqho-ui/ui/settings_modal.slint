@@ -71,6 +71,7 @@ component SettingsGroup inherits Rectangle {
 
 export component SettingsModal inherits Rectangle {
     in property <length> window-height: 560px;
+    in property <image> backdrop-image;
     in-out property <string> active-section: "appearance";
 
     in-out property <int> theme-mode-index: 1;
@@ -100,7 +101,7 @@ export component SettingsModal inherits Rectangle {
     in-out property <int> overlay-panel-see-through-pct: 22;
     in-out property <int> overlay-font-size: 14;
 
-    in property <string> app-version: "0.9.2";
+    in property <string> app-version: "0.9.3";
     in property <string> active-engine-display: "GPU (Vulkan) · whisper.cpp 1.8.4";
     in property <bool> store-build: false;
     in property <string> license-state: "unknown";
@@ -144,8 +145,25 @@ export component SettingsModal inherits Rectangle {
         : root.active-section == "license" ? "License"
         : "About";
 
-    // Dimmed backdrop covering the full dashboard window
-    background: Theme.dark ? #00000072 : #0000003A;
+    // Real Gaussian-blurred dashboard snapshot behind the modal (GatherOS style) + soft scrim
+    background: transparent;
+
+    if root.backdrop-image.width > 0 : Image {
+        width: parent.width;
+        height: parent.height;
+        source: root.backdrop-image;
+        image-fit: fill;
+        image-rendering: smooth;
+        accessible-role: none;
+    }
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: root.backdrop-image.width > 0
+            ? (Theme.dark ? #09090C76 : #0F11152C)
+            : (Theme.dark ? #00000084 : #0000003A);
+    }
 
     // Clicking outside the modal closes it cleanly
     TouchArea {

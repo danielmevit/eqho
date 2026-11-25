@@ -7,19 +7,19 @@
 
 [color.bg]
 light = "#F5F6F8"          # light gray canvas
-dark = "#0A0A0B"           # near-black canvas
+dark = "#121215"           # rich obsidian-charcoal canvas (unified with Settings modal)
 
 [color.surface]
 light = "#FFFFFF"          # white cards, sidebar
-dark = "#151517"           # cards, sidebar
+dark = "#17171B"           # elevated cards, TopBar capsule, Settings modal pane
 
 [color.surface-tertiary]
 light = "#ECEDF0"          # inputs, nested surfaces
-dark = "#1F1F23"
+dark = "#202026"           # nested cards (ModelCard, SettingsGroup), inputs
 
 [color.surface-hover]
 light = "#E2E4E8"
-dark = "#29292E"
+dark = "#282830"
 
 [color.text]
 light = "#1A1C1F"          # primary text
@@ -89,11 +89,11 @@ dark = "#D29922"
 
 [color.border]
 light = "#D4D6DC"
-dark = "#2A2A30"
+dark = "#303039"
 
 [color.border-subtle]
 light = "#E4E6EA"
-dark = "#232327"
+dark = "#26262E"
 
 [color.input-border]
 ref = "text-muted"
@@ -117,7 +117,7 @@ alpha = 0.12
 
 [color.overlay-bg]
 light = "#FFFFFF"
-dark = "#151517"
+dark = "#17171B"
 
 [color.overlay-fg]
 light = "#1A1C1F"

@@ -28,7 +28,7 @@ use eqho_overlay::{
 };
 use eqho_platform::{AudioBackend, AudioDeviceInfo, AudioStreamHandle, ClipboardService, GpuProbe, MicPrivacyProbe};
 use eqho_ui::{
-    DashboardWindow, EqhoTray, Theme, apply_settings_to_window, build_history_rows,
+    DashboardWindow, EqhoTray, Theme, apply_settings_to_window, blur_snapshot, build_history_rows,
     build_history_rows_with_trash_meta, build_model_cards, build_onboarding_model_options,
     dashboard_window_title, delivery_mode_index, delivery_mode_key, engine_backend_key,
     filter_history_entries, format_active_engine_display, history_trash_days_value,
@@ -1246,6 +1246,14 @@ fn ensure_dashboard(ctrl: &Rc<RefCell<AppController>>, tab: Option<&str>) {
     }
 }
 
+fn capture_settings_backdrop(dash: &DashboardWindow) {
+    if let Ok(snap) = dash.window().take_snapshot() {
+        dash.set_settings_backdrop(blur_snapshot(&snap));
+    } else {
+        dash.set_settings_backdrop(slint::Image::default());
+    }
+}
+
 fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     let Some(dash) = ctrl.borrow().dashboard.as_ref().map(|d| d.as_weak()) else {
         return;
@@ -1354,6 +1362,8 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         dash.on_open_settings(move || {
             if let Some(d) = dash_w.upgrade() {
                 d.set_tour_active(false);
+                d.set_settings_open(false);
+                capture_settings_backdrop(&d);
                 d.set_settings_open(true);
             }
         });
@@ -1363,6 +1373,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         dash.on_close_settings(move || {
             if let Some(d) = dash_w.upgrade() {
                 d.set_settings_open(false);
+                d.set_settings_backdrop(slint::Image::default());
             }
         });
     }
@@ -1371,6 +1382,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         dash.on_start_tour(move || {
             if let Some(d) = dash_w.upgrade() {
                 d.set_settings_open(false);
+                d.set_settings_backdrop(slint::Image::default());
                 d.set_tour_step(0);
                 d.set_tour_active(true);
                 d.set_active_tab("general".into());
@@ -1858,6 +1870,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     // Settings tab
     {
         let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
         dash.on_theme_mode_changed(move |idx| {
             let c = ctrl_w.borrow();
             c.settings
@@ -1866,6 +1879,13 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
                 .theme = theme_mode_key(idx).to_owned();
             c.save_settings(false);
             c.apply_theme_and_overlay();
+            if let Some(d) = dash_w.upgrade()
+                && d.get_settings_open()
+            {
+                d.set_settings_open(false);
+                capture_settings_backdrop(&d);
+                d.set_settings_open(true);
+            }
         });
     }
     {
@@ -1966,6 +1986,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         dash.on_open_trash(move || {
             if let Some(d) = dash_w.upgrade() {
                 d.set_settings_open(false);
+                d.set_settings_backdrop(slint::Image::default());
                 d.set_showing_trash(true);
                 d.set_history_status("".into());
                 d.set_active_tab("history".into());
@@ -2138,6 +2159,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
             c.refresh_onboarding_models(Some(&initial_key));
             if let Some(d) = dash_w.upgrade() {
                 d.set_settings_open(false);
+                d.set_settings_backdrop(slint::Image::default());
                 d.set_tour_active(false);
                 d.set_onboarding_hotkey_ok(c.hotkey_ok);
                 d.set_onboarding_is_dictating(false);

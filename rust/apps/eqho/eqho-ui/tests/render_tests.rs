@@ -8,14 +8,15 @@ use eqho_core::history::TranscriptEntry;
 use eqho_core::modelpick::HardwareClass;
 use eqho_core::settings::Settings;
 use eqho_ui::{
-    DashboardWindow, HoverTooltip, Theme, apply_settings_to_window, build_history_rows,
-    build_model_cards, format_active_engine_display, split_model_cards, wordmark_image,
+    DashboardWindow, HoverTooltip, Theme, apply_settings_to_window, blur_snapshot,
+    build_history_rows, build_model_cards, format_active_engine_display, split_model_cards,
+    wordmark_image,
 };
 use slint::platform::software_renderer::{
     MinimalSoftwareWindow, PremultipliedRgbaColor, RepaintBufferType,
 };
 use slint::platform::{Platform, WindowAdapter};
-use slint::{ComponentHandle, ModelRc, PhysicalSize, VecModel};
+use slint::{ComponentHandle, ModelRc, PhysicalSize, Rgba8Pixel, SharedPixelBuffer, VecModel};
 
 fn maybe_save_png(dump_dir: Option<&PathBuf>, name: &str, rgba: &[u8], width: u32, height: u32) {
     if let Some(dir) = dump_dir {
@@ -265,10 +266,26 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
         &sample_entries,
     ))));
 
-    // 4. Settings Modal popup (dark & light across Appearance, Overlay, Data & Trash, License, About)
+    // 4. Settings Modal popup with real Gaussian-blurred dashboard backdrop (dark & light)
     win.set_active_tab("general".into());
+    win.set_logo_image(dark_logo.clone());
+    let bg_dark_rgba = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
+    let bg_dark_blur = blur_snapshot(&SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
+        &bg_dark_rgba,
+        940,
+        560,
+    ));
+    win.set_logo_image(light_logo.clone());
+    let bg_light_rgba = render_dashboard_rgba(&window_adapter, &win, 940, 560, false);
+    let bg_light_blur = blur_snapshot(&SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
+        &bg_light_rgba,
+        940,
+        560,
+    ));
+
     win.set_settings_open(true);
     win.set_settings_section("appearance".into());
+    win.set_settings_backdrop(bg_dark_blur.clone());
     win.set_logo_image(dark_logo.clone());
     let settings_dark = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
     assert_non_uniform_and_valid_png(&settings_dark, 940, 560);
@@ -281,6 +298,7 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
     );
 
     win.set_settings_section("overlay".into());
+    win.set_settings_backdrop(bg_light_blur.clone());
     win.set_logo_image(light_logo.clone());
     let settings_light = render_dashboard_rgba(&window_adapter, &win, 940, 560, false);
     assert_non_uniform_and_valid_png(&settings_light, 940, 560);
@@ -293,6 +311,7 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
     );
 
     win.set_settings_section("data".into());
+    win.set_settings_backdrop(bg_dark_blur.clone());
     win.set_logo_image(dark_logo.clone());
     let settings_data_dark = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
     assert_non_uniform_and_valid_png(&settings_data_dark, 940, 560);
@@ -309,6 +328,7 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
     win.set_trial_days_left(14);
     win.set_trial_days_left_text("14 days left".into());
     win.set_settings_section("license".into());
+    win.set_settings_backdrop(bg_light_blur);
     win.set_logo_image(light_logo.clone());
     let settings_license_light = render_dashboard_rgba(&window_adapter, &win, 940, 560, false);
     assert_non_uniform_and_valid_png(&settings_license_light, 940, 560);
@@ -322,6 +342,7 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
 
     win.set_store_build(false);
     win.set_settings_section("about".into());
+    win.set_settings_backdrop(bg_dark_blur);
     win.set_logo_image(dark_logo.clone());
     let settings_about_dark = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
     assert_non_uniform_and_valid_png(&settings_about_dark, 940, 560);
@@ -332,6 +353,7 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
         940,
         560,
     );
+    win.set_settings_backdrop(slint::Image::default());
     win.set_settings_open(false);
 
     // 5. Onboarding steps

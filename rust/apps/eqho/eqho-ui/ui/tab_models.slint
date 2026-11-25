@@ -30,18 +30,18 @@ component ModelStatusIcon inherits Rectangle {
 
     width: 28px;
     height: 28px;
-    border-radius: 14px;
-    border-width: root.is-selected && root.is-cached ? 1.5px : 1px;
+    border-radius: 8px;
+    border-width: (root.is-cached && !root.is-downloading) ? 1.5px : 1px;
     border-color: root.is-cached && !root.is-downloading ? Theme.accent-line
         : root.has-error ? Theme.error
         : root.is-downloading ? Theme.accent-line
         : touch.has-hover && root.clickable ? Theme.border
-        : Theme.dark ? #363640 : Theme.border-subtle;
+        : Theme.dark ? #383844 : Theme.border-subtle;
     background: root.is-cached && !root.is-downloading ? Theme.accent-muted
         : root.is-downloading ? Theme.accent-muted
         : touch.pressed && root.clickable ? Theme.button-outline-pressed
         : touch.has-hover && root.clickable ? Theme.surface-hover
-        : Theme.dark ? #2B2B32 : Theme.surface-tertiary;
+        : Theme.dark ? #2A2A33 : Theme.surface-tertiary;
 
     accessible-role: button;
     accessible-enabled: root.clickable;
@@ -136,10 +136,10 @@ component ModelCard inherits Rectangle {
 
     property <bool> is-active: root.item.is_selected && root.item.is_cached && !root.item.is_downloading;
 
-    // Dark-mode depth ladder: canvas (#0A0A0B) -> SectionCard (#151517) -> ModelCard (#1F1F23 / #242429 active).
+    // Dark-mode depth ladder: canvas (#121215) -> SectionCard (#17171B) -> ModelCard (#202026 / #25252D active).
     // Calm grayish-white outline on the active model (never a loud full-blue rectangle).
     background: Theme.dark
-        ? (root.is-active ? #24242A : Theme.surface-tertiary)
+        ? (root.is-active ? #25252D : Theme.surface-tertiary)
         : Theme.bg;
     border-radius: Theme.radius-card;
     border-width: root.is-active ? 1.5px : 1px;

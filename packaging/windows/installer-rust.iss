@@ -7,7 +7,7 @@
 ; downloaded GGML speech models are never deleted on uninstall.
 
 #ifndef AppVersion
-  #define AppVersion "0.9.2"
+  #define AppVersion "0.9.3"
 #endif
 #ifndef DistDir
   #define DistDir "..\..\dist\Eqho"
@@ -69,7 +69,7 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\Eqho.exe"; Tasks: desktopicon
 Root: HKCU; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#RunKeyName}"; ValueData: """{app}\Eqho.exe"""; Tasks: autostart; Flags: uninsdeletevalue
 
 [Run]
-Filename: "{app}\Eqho.exe"; Description: "Launch {#AppName} now"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Eqho.exe"; Parameters: "--open-dashboard"; Description: "Launch {#AppName} now"; Flags: nowait postinstall skipifsilent
 
 [Code]
 // Eqho runs primarily as a tray app (dashboard window hidden), so Restart Manager cannot

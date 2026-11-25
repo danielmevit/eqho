@@ -44,6 +44,6 @@ fn css_contains_both_dark_blocks() {
     assert!(css.contains("--color-bg: #F5F6F8FF;"));
     // The dark blocks carry the dark values; the light block must not.
     let light_block = css.split("@media").next().unwrap();
-    assert!(!light_block.contains("#0A0A0BFF"));
-    assert!(css.contains("--color-bg: #0A0A0BFF;"));
+    assert!(!light_block.contains("#121215FF"));
+    assert!(css.contains("--color-bg: #121215FF;"));
 }

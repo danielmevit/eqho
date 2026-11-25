@@ -20,6 +20,7 @@ export component ScrollArea inherits Rectangle {
         interactive: true;
 
         inner := VerticalLayout {
+            x: 0px;
             width: flick.width - 10px;
             alignment: start;
             @children
@@ -386,7 +387,7 @@ export component RecoveryBanner inherits Rectangle {
     }
 }
 
-// Compact borderless circular icon button for TopBar utility controls (Guide, Theme, Settings).
+// Compact rounded-square utility icon button for TopBar controls (Guide, Theme, Settings).
 export component CircleIconButton inherits Rectangle {
     in property <bool> active: false;
     in property <string> accessible-name;
@@ -395,10 +396,10 @@ export component CircleIconButton inherits Rectangle {
 
     width: 28px;
     height: 28px;
-    border-radius: 14px;
+    border-radius: 9px;
     border-width: root.active ? 1px : 0px;
-    border-color: root.active ? Theme.accent-line : transparent;
-    background: root.active ? Theme.accent-muted
+    border-color: root.active ? Theme.border : transparent;
+    background: root.active ? Theme.surface-hover
         : touch.pressed ? Theme.button-outline-pressed
         : touch.has-hover ? Theme.surface-hover
         : transparent;
@@ -598,16 +599,16 @@ export component TopBar inherits Rectangle {
                             spacing: 6px;
                             alignment: center;
 
-                            // Unified Phosphor Icons matching GatherOS capsule tabs
-                            VerticalLayout {
+                            // Unified Phosphor icon shown ONLY on the active tab (GatherOS style;
+                            // unselected tabs remain clean text-only until clicked).
+                            if pill.is-active : VerticalLayout {
                                 alignment: center;
                                 PhIcon {
                                     glyph: nav-item.id == "general" ? Icons.mic
                                         : nav-item.id == "models" ? Icons.models
                                         : Icons.history;
                                     size: 15px;
-                                    icon-color: pill.is-active ? Theme.on-accent
-                                        : (nav-touch.has-hover ? Theme.text : Theme.text-muted);
+                                    icon-color: Theme.on-accent;
                                 }
                             }
 
@@ -650,7 +651,7 @@ export component TopBar inherits Rectangle {
                     PhIcon {
                         glyph: Icons.compass;
                         size: 16px;
-                        icon-color: root.tour-active ? Theme.accent-line : Theme.text-muted;
+                        icon-color: root.tour-active ? Theme.text : Theme.text-muted;
                     }
                 }
             }
@@ -682,7 +683,7 @@ export component TopBar inherits Rectangle {
                     PhIcon {
                         glyph: Icons.settings;
                         size: 16px;
-                        icon-color: root.settings-open ? Theme.accent-line : Theme.text-muted;
+                        icon-color: root.settings-open ? Theme.text : Theme.text-muted;
                     }
                 }
             }

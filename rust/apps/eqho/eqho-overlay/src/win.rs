@@ -16,13 +16,12 @@ use windows::Win32::Graphics::Dwm::{
 use windows::Win32::Graphics::Gdi::{
     AC_SRC_ALPHA, AC_SRC_OVER, ANTIALIASED_QUALITY, BI_RGB, BITMAPINFO, BITMAPINFOHEADER,
     BLENDFUNCTION, CLIP_DEFAULT_PRECIS, CreateCompatibleDC, CreateDIBSection, CreateFontW,
-    CreateRoundRectRgn, DEFAULT_CHARSET, DEFAULT_PITCH, DIB_RGB_COLORS, DRAW_TEXT_FORMAT,
-    DT_CALCRECT, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER,
-    DT_WORDBREAK, DeleteDC, DeleteObject, DrawTextW, FF_SWISS, GdiFlush, GetDC, GetDeviceCaps,
-    GetMonitorInfoW, HBITMAP, HDC, HFONT, HGDIOBJ, HMONITOR, LOGPIXELSY,
-    MONITOR_DEFAULTTOPRIMARY, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
-    MonitorFromWindow, OUT_DEFAULT_PRECIS, ReleaseDC, SelectObject, SetBkMode, SetTextColor,
-    SetWindowRgn, TRANSPARENT,
+    DEFAULT_CHARSET, DEFAULT_PITCH, DIB_RGB_COLORS, DRAW_TEXT_FORMAT, DT_CALCRECT, DT_CENTER,
+    DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER, DT_WORDBREAK, DeleteDC,
+    DeleteObject, DrawTextW, FF_SWISS, GdiFlush, GetDC, GetDeviceCaps, GetMonitorInfoW, HBITMAP,
+    HDC, HFONT, HGDIOBJ, HMONITOR, LOGPIXELSY, MONITOR_DEFAULTTOPRIMARY, MONITOR_DEFAULTTONEAREST,
+    MONITORINFO, MonitorFromPoint, MonitorFromWindow, OUT_DEFAULT_PRECIS, ReleaseDC, SelectObject,
+    SetBkMode, SetTextColor, TRANSPARENT,
 };
 use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -112,20 +111,18 @@ fn apply_acrylic_blur_behind(hwnd: HWND, dark: bool, tint_alpha: u8) {
     }
 }
 
-/// Clip DWM blur-behind cleanly to a rounded rectangle so no square blur halo bleeds past corners.
-fn apply_rounded_region(hwnd: HWND, width: u32, height: u32, radius_px: i32) {
-    let w = width as i32;
-    let h = height as i32;
-    if w <= 0 || h <= 0 {
-        return;
-    }
-    let diam = (radius_px * 2).max(2);
-    // SAFETY: `SetWindowRgn` takes ownership of the HRGN on success; delete it on failure.
+/// Apply native Windows 11 8px hardware-antialiased rounded corners (`DWMWCP_ROUND`) so DWM
+/// Acrylic blur clips cleanly flush with our drawn 8px border (zero rectangular corner bleed).
+fn apply_win11_round_corners(hwnd: HWND) {
+    let corner_pref = DWMWCP_ROUND.0;
+    // SAFETY: `corner_pref` is a valid `i32` for `DWMWA_WINDOW_CORNER_PREFERENCE`.
     unsafe {
-        let rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, diam, diam);
-        if !rgn.is_invalid() && SetWindowRgn(hwnd, Some(rgn), true) == 0 {
-            let _ = DeleteObject(rgn.into());
-        }
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            (&corner_pref as *const i32).cast::<c_void>(),
+            std::mem::size_of::<i32>() as u32,
+        );
     }
 }
 
@@ -776,12 +773,6 @@ impl OverlayState {
         );
         self.hovered_recovery_btn = None;
         self.recovery_shown = true;
-        apply_rounded_region(
-            self.recovery_hwnd,
-            self.recovery_rect.width,
-            self.recovery_rect.height,
-            RECOVERY_CARD_RADIUS as i32,
-        );
         self.render_recovery_frame();
         // SAFETY: Surfacing recovery action card without stealing keyboard focus.
         unsafe {
@@ -1037,12 +1028,6 @@ impl OverlayState {
             self.bar_layout.width,
             self.active_work_area,
         );
-        apply_rounded_region(
-            self.bar_hwnd,
-            self.bar_placement.bar_rect.width,
-            self.bar_placement.bar_rect.height,
-            UNDERBAR_RADIUS as i32,
-        );
         self.bar_dirty = true;
     }
 
@@ -1061,12 +1046,6 @@ impl OverlayState {
             self.popup_layout.width,
             self.popup_layout.height,
             self.active_work_area,
-        );
-        apply_rounded_region(
-            self.popup_hwnd,
-            self.popup_rect.width,
-            self.popup_rect.height,
-            10,
         );
         self.popup_dirty = true;
     }
@@ -1203,7 +1182,6 @@ impl OverlayState {
         self.config = cfg;
         if theme_changed {
             apply_acrylic_blur_behind(self.panel_hwnd, self.config.dark_theme, 0xA8);
-            apply_acrylic_blur_behind(self.bar_hwnd, self.config.dark_theme, 0x8E);
             apply_acrylic_blur_behind(self.popup_hwnd, self.config.dark_theme, 0xB8);
             apply_acrylic_blur_behind(self.recovery_hwnd, self.config.dark_theme, 0xA8);
         }
@@ -1338,7 +1316,6 @@ impl OverlayState {
         );
 
         self.panel_rect = rect;
-        apply_rounded_region(self.panel_hwnd, rect.width, rect.height, 10);
         self.render_panel_frame();
         // SAFETY: Showing and positioning layered frosted panel window without stealing focus.
         unsafe {
@@ -1388,7 +1365,7 @@ impl OverlayState {
         self.panel_canvas.reset(w, h);
         self.panel_canvas.fill_rounded_rect(
             LocalRect::new(0, 0, w, h),
-            10.0,
+            8.0,
             panel_bg,
             Some(panel_border),
         );
@@ -1762,10 +1739,10 @@ impl OverlayState {
 
         self.popup_canvas.reset(layout.width, layout.height);
 
-        // Outer rounded card + 1px neutral border.
+        // Outer rounded card + 1px neutral border (8px radius matches Win11 DWMWCP_ROUND).
         self.popup_canvas.fill_rounded_rect(
             LocalRect::new(0, 0, layout.width, layout.height),
-            10.0,
+            8.0,
             theme.popup_bg,
             Some(theme.popup_border),
         );
@@ -2643,35 +2620,16 @@ fn run_overlay_thread(
         return;
     };
 
-    // Best-effort Windows 11 rounded corners + strong Acrylic frosted blur behind panel, underbar,
-    // language popup, and recovery card so floating surfaces pop cleanly off any background.
-    let corner_pref = DWMWCP_ROUND.0;
-    // SAFETY: `corner_pref` is a valid `i32` for `DWMWA_WINDOW_CORNER_PREFERENCE`.
-    unsafe {
-        let _ = DwmSetWindowAttribute(
-            panel_hwnd,
-            DWMWA_WINDOW_CORNER_PREFERENCE,
-            (&corner_pref as *const i32).cast::<c_void>(),
-            std::mem::size_of::<i32>() as u32,
-        );
-    }
+    // Best-effort Windows 11 8px hardware-rounded corners + strong Acrylic frosted blur on
+    // rectangular floating panels (live transcript box, language popup, recovery card).
+    // Note: `bar_hwnd` is a 13px full pill capsule and renders purely via per-pixel alpha
+    // `UpdateLayeredWindow` (NO Acrylic) so square DWM corners never bleed outside the pill.
+    apply_win11_round_corners(panel_hwnd);
+    apply_win11_round_corners(popup_hwnd);
+    apply_win11_round_corners(recovery_hwnd);
     apply_acrylic_blur_behind(panel_hwnd, config.dark_theme, 0xA8);
-    apply_acrylic_blur_behind(bar_hwnd, config.dark_theme, 0x8E);
     apply_acrylic_blur_behind(popup_hwnd, config.dark_theme, 0xB8);
     apply_acrylic_blur_behind(recovery_hwnd, config.dark_theme, 0xA8);
-    apply_rounded_region(
-        bar_hwnd,
-        bar_placement.bar_rect.width,
-        bar_placement.bar_rect.height,
-        UNDERBAR_RADIUS as i32,
-    );
-    apply_rounded_region(popup_hwnd, popup_rect.width, popup_rect.height, 10);
-    apply_rounded_region(
-        recovery_hwnd,
-        recovery_rect.width,
-        recovery_rect.height,
-        RECOVERY_CARD_RADIUS as i32,
-    );
 
     let visibility = UnderbarVisibility::new(config.controls_enabled, config.controls_pinned);
     let now = Instant::now();

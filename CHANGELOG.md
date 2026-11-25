@@ -4,6 +4,23 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.9.3] - 2026-11-25
+
+Obsidian-charcoal dark palette unified across the entire dashboard, real Gaussian-blurred dashboard backdrop behind the Settings modal, concentric rounded-square icon geometry, active-only top-bar tab icons, flush Win11 overlay silhouettes, and post-install dashboard auto-launch.
+
+### Added
+- **Real blurred dashboard backdrop behind Settings modal:** Opening Settings now captures the live dashboard framebuffer via `Window::take_snapshot()` and applies a fast pure-Rust 3-pass separable blur so background elements melt smoothly behind the modal (and refresh live if you switch themes while Settings is open).
+- **Post-install dashboard launch:** Inno Setup's post-install launch now runs `Eqho.exe --open-dashboard` so fresh installs and upgrades immediately surface the dashboard while Windows sign-in autostart stays quiet in the tray.
+
+### Changed
+- **Unified obsidian-charcoal dark theme:** Promoted the richer `#121215` → `#17171B` → `#202026` → `#282830` Settings modal dark palette to the entire dashboard (`tokens.toml`).
+- **Active-only TopBar tab icons & neutral utility state:** The center floating capsule now shows the Phosphor icon only on the currently selected tab while unselected tabs stay clean text-only (GatherOS style); active TopBar utility icons use a calm neutral highlight so the blue outline belongs exclusively to downloaded models.
+- **Concentric rounded-square icon buttons:** Updated model-card download/status icons (`28×28`, `8px` radius, crisp `1.5px` blue outline for all downloaded models) and TopBar utility icons (`9px` radius) to echo the rounded-rectangle cards and `×` close buttons.
+
+### Fixed
+- **Under-pill bar true pill silhouette & flush Win11 Acrylic corners:** Removed DWM Acrylic from the 13px pill-shaped underbar so square compositor corners never bleed behind its pill border; applied native Win11 `DWMWCP_ROUND` (`8px`) clipping matching the drawn `8px` radius on the live transcript box, language popup, and recovery card.
+- **Settings modal title alignment:** Anchored `ScrollArea`'s inner layout to `x: 0px` so Settings modal section titles align to the exact pixel with the grouped cards below.
+
 ## [0.9.2] - 2026-11-25
 
 Unified Phosphor Icons across the dashboard, GatherOS-inspired floating top bar and centered tabbed Settings modal, interactive 4-step section guide cards, icon hover tooltip pills, dark-mode depth refinement, Windows 11 Acrylic frosted live transcript overlay, model-selection loading fix, and automatic background-app close during installer upgrades.

@@ -53,9 +53,10 @@ pub const UNDERBAR_REST_ALPHA_RATIO: f32 = 0.72;
 /// Elevated opacity multiplier for the under-pill bar while hovered/interacting (never 100%).
 pub const UNDERBAR_HOVER_ALPHA_RATIO: f32 = 0.88;
 /// Dimensions of the floating failed-paste recovery card anchored at the pill's screen position.
+/// Corner radius matches Windows 11 `DWMWCP_ROUND` (`8 px`) so Acrylic backdrop clips flush.
 pub const RECOVERY_CARD_WIDTH: u32 = 264;
 pub const RECOVERY_CARD_HEIGHT: u32 = 76;
-pub const RECOVERY_CARD_RADIUS: f32 = 10.0;
+pub const RECOVERY_CARD_RADIUS: f32 = 8.0;
 
 /// RGBA color tuple `(r, g, b, a)` in straight 8-bit channels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,8 +124,8 @@ impl UnderbarTheme {
     pub const fn for_theme(dark: bool) -> Self {
         if dark {
             Self {
-                bar_bg: Rgba::new(0x15, 0x15, 0x17, 210),
-                bar_border: Rgba::new(0x3A, 0x3A, 0x42, 220),
+                bar_bg: Rgba::new(0x16, 0x16, 0x1A, 228),
+                bar_border: Rgba::new(0x3E, 0x3E, 0x48, 225),
                 divider: Rgba::new(0x3A, 0x3A, 0x42, 210),
                 text_primary: Rgba::rgb(0xF5, 0xF6, 0xF8),
                 text_muted: Rgba::rgb(0x98, 0x98, 0xA2),
@@ -147,8 +148,8 @@ impl UnderbarTheme {
             }
         } else {
             Self {
-                bar_bg: Rgba::new(0xFF, 0xFF, 0xFF, 216),
-                bar_border: Rgba::new(0xC8, 0xCB, 0xD2, 225),
+                bar_bg: Rgba::new(0xFF, 0xFF, 0xFF, 236),
+                bar_border: Rgba::new(0xC8, 0xCB, 0xD2, 232),
                 divider: Rgba::new(0xD4, 0xD6, 0xDC, 220),
                 text_primary: Rgba::rgb(0x1A, 0x1C, 0x1F),
                 text_muted: Rgba::rgb(0x68, 0x6A, 0x74),

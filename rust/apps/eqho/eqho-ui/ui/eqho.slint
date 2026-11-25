@@ -25,6 +25,7 @@ export component DashboardWindow inherits Window {
     in-out property <string> active-tab: "general";
     in-out property <bool> settings-open: false;
     in-out property <string> settings-section: "appearance";
+    in-out property <image> settings-backdrop;
     in-out property <bool> tour-active: false;
     in-out property <int> tour-step: 0;
     in-out property <bool> onboarding-active: false;
@@ -149,7 +150,7 @@ export component DashboardWindow inherits Window {
     in-out property <int> overlay-see-through-pct: 5;
     in-out property <int> overlay-panel-see-through-pct: 22;
     in-out property <int> overlay-font-size: 14;
-    in property <string> app-version: "0.9.2";
+    in property <string> app-version: "0.9.3";
     in-out property <string> active-engine-display: "GPU (Vulkan) · whisper.cpp 1.8.4";
 
     callback theme-mode-changed(int);
@@ -410,11 +411,12 @@ export component DashboardWindow inherits Window {
         dismiss-clicked => { root.dismiss-tour(); }
     }
 
-    // Centered tabbed Settings modal popup over dimmed backdrop
+    // Centered tabbed Settings modal popup over blurred dashboard backdrop
     if !root.onboarding-active && root.settings-open : SettingsModal {
         width: root.width;
         height: root.height;
         window-height: root.height;
+        backdrop-image: root.settings-backdrop;
         active-section <=> root.settings-section;
         theme-mode-index <=> root.theme-mode-index;
         ui-scale-index <=> root.ui-scale-index;
