@@ -1,6 +1,7 @@
 //! GGML model downloader (native Windows WinHTTP + non-Windows stub).
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use eqho_core::modelstore::{model_info, whispercpp_model_path};
 
@@ -141,6 +142,21 @@ pub fn download_ggml_model(
     model_dir: &Path,
     on_progress: &mut dyn FnMut(&str, Option<f32>),
 ) -> Result<PathBuf, HostError> {
+    let never_cancel = AtomicBool::new(false);
+    download_ggml_model_cancellable(model_key, model_dir, &never_cancel, on_progress)
+}
+
+/// Same as [`download_ggml_model`], aborting cleanly and removing partial temp files
+/// whenever `cancel` is set to `true`.
+pub fn download_ggml_model_cancellable(
+    model_key: &str,
+    model_dir: &Path,
+    cancel: &AtomicBool,
+    on_progress: &mut dyn FnMut(&str, Option<f32>),
+) -> Result<PathBuf, HostError> {
+    if cancel.load(Ordering::Acquire) {
+        return Err(HostError::DownloadCancelled);
+    }
     let target = whispercpp_model_path(model_dir, model_key);
     if let Ok(meta) = std::fs::metadata(&target)
         && meta.is_file()
@@ -152,7 +168,7 @@ pub fn download_ggml_model(
     let info = model_info(model_key)
         .ok_or_else(|| HostError::DownloadFailed(format!("unknown model key: {model_key}")))?;
 
-    download_https_to_file(info.download_url, &target, on_progress)?;
+    download_https_to_file(info.download_url, &target, cancel, on_progress)?;
     Ok(target)
 }
 
@@ -160,6 +176,7 @@ pub fn download_ggml_model(
 fn download_https_to_file(
     url: &str,
     target: &Path,
+    cancel: &AtomicBool,
     on_progress: &mut dyn FnMut(&str, Option<f32>),
 ) -> Result<(), HostError> {
     use std::ffi::c_void;
@@ -358,6 +375,9 @@ fn download_https_to_file(
         let mut last_report = download_start;
 
         loop {
+            if cancel.load(Ordering::Acquire) {
+                return Err(HostError::DownloadCancelled);
+            }
             let mut bytes_read: u32 = 0;
             // SAFETY: `request.0` is valid and `chunk` is a writable buffer of `chunk.len()` bytes.
             unsafe {
@@ -411,8 +431,12 @@ fn download_https_to_file(
 fn download_https_to_file(
     _url: &str,
     _target: &Path,
+    cancel: &AtomicBool,
     _on_progress: &mut dyn FnMut(&str, Option<f32>),
 ) -> Result<(), HostError> {
+    if cancel.load(Ordering::Acquire) {
+        return Err(HostError::DownloadCancelled);
+    }
     Err(HostError::DownloadFailed(
         "WinHTTP download is Windows-only; pre-place model file".into(),
     ))
@@ -485,6 +509,16 @@ mod tests {
         assert_eq!(res.unwrap(), model_path);
         assert!(!progress_called);
 
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn cancellable_download_honours_cancel_flag() {
+        let tmp = std::env::temp_dir().join(format!("eqho_dl_cancel_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let cancel = AtomicBool::new(true);
+        let err = download_ggml_model_cancellable("tiny", &tmp, &cancel, &mut |_, _| {}).unwrap_err();
+        assert!(matches!(err, HostError::DownloadCancelled));
         let _ = std::fs::remove_dir_all(&tmp);
     }
 

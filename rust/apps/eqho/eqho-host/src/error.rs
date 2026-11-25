@@ -53,6 +53,9 @@ pub enum HostError {
 
     #[error("model download failed: {0}")]
     DownloadFailed(String),
+
+    #[error("model download cancelled")]
+    DownloadCancelled,
 }
 
 /// Typed errors surfaced by [`crate::ModelHost`] to the parent application.

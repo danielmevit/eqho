@@ -200,6 +200,22 @@ fn model_cards_and_history_rows_populate_and_fire_callbacks() {
     });
     win.invoke_toggle_trash_view(true);
     assert!(*trash_toggled.borrow());
+
+    let cancelled_model = Rc::new(RefCell::new(String::new()));
+    let cm_c = Rc::clone(&cancelled_model);
+    win.on_cancel_download_model(move |k| {
+        *cm_c.borrow_mut() = k.to_string();
+    });
+    win.invoke_cancel_download_model("small.en-q5".into());
+    assert_eq!(cancelled_model.borrow().as_str(), "small.en-q5");
+
+    let opened_trash = Rc::new(RefCell::new(false));
+    let ot_c = Rc::clone(&opened_trash);
+    win.on_open_trash(move || {
+        *ot_c.borrow_mut() = true;
+    });
+    win.invoke_open_trash();
+    assert!(*opened_trash.borrow());
 }
 
 #[test]

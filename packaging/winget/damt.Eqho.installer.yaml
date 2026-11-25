@@ -11,7 +11,7 @@ UpgradeBehavior: install
 Installers:
 - Architecture: x64
   InstallerUrl: https://github.com/danielmevit/eqho/releases/download/v0.9.1/Eqho-Setup-0.9.1-win-x64.exe
-  InstallerSha256: 4D288BA5BAAD428094F5556544A60572E359EB077B4E5D20471BB9A8F8899D9B
+  InstallerSha256: CB575FE8A48B1DD1FA808F8358827381DA72E2CF99653E4AA262ABACF3409270
   ProductCode: '{7C21F6E3-9B4A-4D2E-8F0C-5A6B3D91C4E7}_is1'
 ManifestType: installer
 ManifestVersion: 1.6.0

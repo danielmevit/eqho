@@ -4,12 +4,11 @@ import { Button, ButtonKind, ProgressLine, TabList } from "@damt-ui/kit.slint";
 import { ModelCardItem } from "types.slint";
 import { ScrollArea, SectionCard } from "components.slint";
 
-// Clean 28x28 circular icon-led status indicator (no loud green pills).
-// - Active: solid Eqho-blue circle + crisp white checkmark
-// - Ready (cached): tinted Eqho-blue circle + Eqho-blue checkmark
+// Clean 28x28 circular icon-led status indicator (no checkmarks, no loud green pills).
+// - Downloaded / Active: blue download icon + blue outline (stronger outline when active)
 // - Downloading: tinted Eqho-blue circle + animated 3-dot indicator
 // - Error: subtle circle with error border + clickable retry icon
-// - Not downloaded: muted neutral circle + clickable grey download arrow
+// - Not downloaded: muted neutral circle + clickable grey download arrow with standard gray hover
 component ModelStatusIcon inherits Rectangle {
     in property <bool> is-selected: false;
     in property <bool> is-cached: false;
@@ -23,27 +22,27 @@ component ModelStatusIcon inherits Rectangle {
     width: 28px;
     height: 28px;
     border-radius: 14px;
-    border-width: 1px;
-    border-color: root.is-selected && root.is-cached ? Theme.accent-line
+    border-width: root.is-selected && root.is-cached ? 1.5px : 1px;
+    border-color: root.is-cached && !root.is-downloading ? Theme.accent-line
         : root.has-error ? Theme.error
-        : root.is-downloading || root.is-cached ? Theme.accent-line
-        : touch.has-hover ? Theme.accent-line
+        : root.is-downloading ? Theme.accent-line
+        : touch.has-hover && root.clickable ? Theme.border
         : Theme.border-subtle;
-    background: root.is-selected && root.is-cached ? Theme.accent
-        : root.is-downloading || root.is-cached ? Theme.accent-muted
+    background: root.is-cached && !root.is-downloading ? Theme.accent-muted
+        : root.is-downloading ? Theme.accent-muted
         : touch.pressed && root.clickable ? Theme.button-outline-pressed
-        : touch.has-hover && root.clickable ? Theme.button-outline-hover
+        : touch.has-hover && root.clickable ? Theme.surface-hover
         : Theme.surface-tertiary;
 
     accessible-role: button;
     accessible-enabled: root.clickable;
-    accessible-label: root.is-selected && root.is-cached ? "Active model"
+    accessible-label: root.is-selected && root.is-cached ? "Active model (downloaded)"
         : root.is-downloading ? "Downloading"
         : root.has-error ? "Download failed, click to retry"
         : root.is-cached ? "Downloaded"
         : "Download model";
 
-    // Active or Cached checkmark
+    // Downloaded (cached or active): blue download icon inside blue-outlined circle
     if root.is-cached && !root.is-downloading : Path {
         width: 14px;
         height: 14px;
@@ -53,11 +52,11 @@ component ModelStatusIcon inherits Rectangle {
         viewbox-y: 0;
         viewbox-width: 24;
         viewbox-height: 24;
-        stroke: root.is-selected ? Theme.on-accent : Theme.accent-text;
-        stroke-width: 2.2px;
+        stroke: Theme.accent-text;
+        stroke-width: 1.9px;
         stroke-line-cap: round;
         stroke-line-join: round;
-        commands: "M 5 12.5 L 10 17.5 L 19 7.5";
+        commands: "M 12 4 L 12 15 M 7.5 11 L 12 15.5 L 16.5 11 M 5 19.5 L 19 19.5";
     }
 
     // Downloading animated 3 dots (Eqho blue)
@@ -113,7 +112,7 @@ component ModelStatusIcon inherits Rectangle {
         commands: "M 20 11 A 8 8 0 1 0 18.2 16.5 M 20 5 L 20 11 L 14 11";
     }
 
-    // Not downloaded: muted grey download arrow (turns Eqho-blue on hover)
+    // Not downloaded: muted grey download arrow (same subtle neutral gray hover as other buttons)
     if !root.is-cached && !root.is-downloading && !root.has-error : Path {
         width: 14px;
         height: 14px;
@@ -123,7 +122,7 @@ component ModelStatusIcon inherits Rectangle {
         viewbox-y: 0;
         viewbox-width: 24;
         viewbox-height: 24;
-        stroke: touch.has-hover ? Theme.accent-text : Theme.text-muted;
+        stroke: touch.has-hover ? Theme.text : Theme.text-muted;
         stroke-width: 1.8px;
         stroke-line-cap: round;
         stroke-line-join: round;
@@ -141,6 +140,7 @@ component ModelCard inherits Rectangle {
     in property <ModelCardItem> item;
     callback select-clicked(string);
     callback download-clicked(string);
+    callback cancel-download-clicked(string);
     callback delete-clicked(string);
 
     property <bool> is-active: root.item.is_selected && root.item.is_cached && !root.item.is_downloading;
@@ -241,6 +241,12 @@ component ModelCard inherits Rectangle {
                 clicked => { root.delete-clicked(root.item.key); }
             }
 
+            if root.item.is_downloading : Button {
+                text: "Cancel";
+                kind: ButtonKind.outline;
+                clicked => { root.cancel-download-clicked(root.item.key); }
+            }
+
             if root.item.is_downloading : Text {
                 height: 30px;
                 text: "Downloading…";
@@ -272,6 +278,7 @@ export component ModelsTab inherits Rectangle {
     callback engine-backend-changed(int);
     callback select-model(string);
     callback download-model(string);
+    callback cancel-download-model(string);
     callback delete-model(string);
     callback open-model-folder();
 
@@ -411,6 +418,7 @@ export component ModelsTab inherits Rectangle {
                             item: root.english-models[row-idx * 2];
                             select-clicked(k) => { root.select-model(k); }
                             download-clicked(k) => { root.download-model(k); }
+                            cancel-download-clicked(k) => { root.cancel-download-model(k); }
                             delete-clicked(k) => { root.delete-model(k); }
                         }
                         if row-idx * 2 + 1 < root.english-models.length : ModelCard {
@@ -418,6 +426,7 @@ export component ModelsTab inherits Rectangle {
                             item: root.english-models[row-idx * 2 + 1];
                             select-clicked(k) => { root.select-model(k); }
                             download-clicked(k) => { root.download-model(k); }
+                            cancel-download-clicked(k) => { root.cancel-download-model(k); }
                             delete-clicked(k) => { root.delete-model(k); }
                         }
                         if row-idx * 2 + 1 >= root.english-models.length : Rectangle {
@@ -431,6 +440,7 @@ export component ModelsTab inherits Rectangle {
                         item: m;
                         select-clicked(k) => { root.select-model(k); }
                         download-clicked(k) => { root.download-model(k); }
+                        cancel-download-clicked(k) => { root.cancel-download-model(k); }
                         delete-clicked(k) => { root.delete-model(k); }
                     }
                 }
@@ -448,6 +458,7 @@ export component ModelsTab inherits Rectangle {
                             item: root.multilingual-models[row-idx * 2];
                             select-clicked(k) => { root.select-model(k); }
                             download-clicked(k) => { root.download-model(k); }
+                            cancel-download-clicked(k) => { root.cancel-download-model(k); }
                             delete-clicked(k) => { root.delete-model(k); }
                         }
                         if row-idx * 2 + 1 < root.multilingual-models.length : ModelCard {
@@ -455,6 +466,7 @@ export component ModelsTab inherits Rectangle {
                             item: root.multilingual-models[row-idx * 2 + 1];
                             select-clicked(k) => { root.select-model(k); }
                             download-clicked(k) => { root.download-model(k); }
+                            cancel-download-clicked(k) => { root.cancel-download-model(k); }
                             delete-clicked(k) => { root.delete-model(k); }
                         }
                         if row-idx * 2 + 1 >= root.multilingual-models.length : Rectangle {
@@ -468,6 +480,7 @@ export component ModelsTab inherits Rectangle {
                         item: m;
                         select-clicked(k) => { root.select-model(k); }
                         download-clicked(k) => { root.download-model(k); }
+                        cancel-download-clicked(k) => { root.cancel-download-model(k); }
                         delete-clicked(k) => { root.delete-model(k); }
                     }
                 }

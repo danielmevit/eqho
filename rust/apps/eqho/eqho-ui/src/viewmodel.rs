@@ -354,6 +354,7 @@ pub fn build_language_options() -> Vec<LanguageOption> {
     LANGUAGE_TIERS
         .iter()
         .map(|e| LanguageOption {
+            code: e.code.into(),
             label: e.name.into(),
             flag: flag_image_for_language(e.code),
         })

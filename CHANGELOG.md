@@ -10,9 +10,12 @@ Dashboard polish, History Trash bin with configurable retention, floating failed
 
 ### Added
 - **History Trash bin & configurable retention:**
-  - Soft-delete single items or Clear All to **Trash** with inline confirmations instead of instant permanent deletion, plus a **`Trash (N)`** toggle to **Restore**, **Delete forever**, or **Empty Trash**.
-  - Added **History Trash Retention** setting (`7 / 14 / 30 / 90 days / Never`, default `30 days`) under Settings → System with automatic expired-item cleanup on startup.
+  - Soft-delete single items or Clear All to **Trash** with inline confirmations instead of instant permanent deletion, plus a trash-can **`Trash (N)`** toolbar button to **Restore**, **Delete forever**, or **Empty Trash**.
+  - Added **Trashed Data Retention** (`7 / 14 / 30 / 90 days / Never`, default `30 days`) with an **Open Trash →** link under Settings → System and automatic expired-item cleanup on startup.
   - Failed-paste dictations are always saved into History with a subtle yellow border and `"Not pasted"` badge, and clicking **Copy** gives per-row Eqho-blue **`Copied`** feedback.
+- **Searchable Language dropdown & cancellable model downloads:**
+  - Clicking the **Language** dropdown opens a live Search bar pinned at the top of the list filtering all 99 languages by name or code.
+  - Added a **Cancel** button on active model downloads that immediately aborts transfer and cleans up partial temp files.
 - **Floating failed-paste recovery card & redesigned recovery banner:**
   - When automatic paste cannot target a window, a compact frosted-glass recovery card appears at the pill's screen position with **Show text**, **Copy**, and **Discard**.
   - Dashboard recovery banner redesigned with a neutral-warm surface, yellow status dot only, 3-line scrollable clamped preview, and fixed-height bottom actions (**Copy**, **View in History**, **Dismiss**).
@@ -20,9 +23,9 @@ Dashboard polish, History Trash bin with configurable retention, floating failed
 - **Mic Sensitivity percentage readout:** General → Audio Input displays both tier and exact percentage (e.g. `Normal (100%)`).
 
 ### Changed
-- **General tab layout:** Pinned the quick left column (`Audio Input` + `Hotkey`) so only the taller right column (`Speech` + `Behavior`) scrolls independently.
-- **Models tab layout & icon-led states:** Paired `Inference Engine` and `Storage` side-by-side at the top; replaced text/green status pills with clean circular icon states (muted grey clickable download arrow, animated 3-dot Eqho-blue indicator while downloading, Eqho-blue checkmark for ready/active).
-- **Settings tab layout & Light-theme sliders:** Combined `Theme` and `UI Zoom` onto a single compact `Appearance` row; balanced `Dictation Extras + About Eqho` alongside `System + Overlay`; added a light-to-navy blue gradient on Light-theme slider tracks.
+- **General tab layout:** Pinned a sleek narrow left column (`Audio Input` + `Hotkey`) so the wider right column (`Speech` + `Behavior`) scrolls independently.
+- **Models tab layout & icon-led states:** Paired `Inference Engine` and `Storage` side-by-side at the top; replaced text/green status pills with clean circular icon states (muted grey clickable download arrow with standard neutral hover, animated 3-dot Eqho-blue indicator while downloading, and Eqho-blue download icon with blue outline when downloaded/active).
+- **Settings tab layout, capsule segmented buttons & Light-theme sliders:** Placed `Appearance` cleanly at the top of the left column alongside `Dictation Extras + About Eqho` to match `System + Overlay` on the right; unified all segmented selectors (`TabList`) with the rounded capsule pill style of the main navigation bar; added a light-to-navy blue gradient on Light-theme slider tracks.
 - **Header wordmark & icon polish:** Replaced the raster header logo with a 4× HiDPI pure-vector SVG wordmark and thinned the top-right theme and Settings icon strokes.
 - **Overlay visuals & snappier Live dictation:**
   - Slimmed the under-pill control bar narrower than the pill (removed bar flag icon, regular font weight, translucent hover elevation from `72%` to `88%`), applied subtle frosted blur behind the text preview panel, control bar, and recovery card, and made the listening pill more solid by default (`95%`).

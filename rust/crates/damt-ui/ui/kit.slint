@@ -35,7 +35,7 @@ export component Button inherits Rectangle {
     background: root.kind == ButtonKind.accent
         ? (!root.enabled ? Theme.accent : touch.pressed ? Theme.button-accent-pressed : touch.has-hover ? Theme.button-accent-hover : Theme.accent)
         : root.kind == ButtonKind.outline
-            ? (!root.enabled ? transparent : touch.pressed ? Theme.button-outline-pressed : touch.has-hover ? Theme.button-outline-hover : transparent)
+            ? (!root.enabled ? transparent : touch.pressed ? Theme.button-outline-pressed : touch.has-hover ? Theme.surface-hover : transparent)
             : transparent;
     opacity: root.enabled ? 1.0 : 0.4;
 
@@ -95,7 +95,7 @@ export component CloseButton inherits Rectangle {
     width: 28px;
     height: 28px;
     border-radius: Theme.radius-button;
-    background: touch.pressed ? Theme.button-outline-pressed : touch.has-hover ? Theme.button-outline-hover : transparent;
+    background: touch.pressed ? Theme.button-outline-pressed : touch.has-hover ? Theme.surface-hover : transparent;
     accessible-role: button;
     accessible-label: root.accessible-name;
     accessible-action-default => { if (root.enabled) { root.clicked(); } }
@@ -508,7 +508,8 @@ export component Slider inherits Rectangle {
     }
 }
 
-// Segmented tab list: equal segments, the selected one in accent fill with on-accent text. Labels wrap.
+// Segmented tab list matching the top capsule pill nav bar: equal segments inside a
+// rounded pill shell, with the selected item rendered as a solid accent capsule pill.
 // One tab stop: Left/Right (and Home/End) move the selection, Space/Enter re-pick the current tab.
 export component TabList inherits Rectangle {
     in property <[string]> items;
@@ -516,10 +517,11 @@ export component TabList inherits Rectangle {
     in property <string> accessible-name;
     callback picked(int);
 
-    min-height: Math.max(30px, lay.preferred-height);
-    border-radius: Theme.radius-button;
+    min-height: Math.max(34px, lay.preferred-height);
+    border-radius: 17px;
     border-width: 1px;
-    border-color: Theme.input-border;
+    border-color: Theme.border-subtle;
+    background: Theme.bg;
     accessible-role: tab-list;
     accessible-label: root.accessible-name;
 
@@ -530,14 +532,19 @@ export component TabList inherits Rectangle {
     }
 
     lay := HorizontalLayout {
-        padding: 2px;
-        spacing: 2px;
+        padding: 3px;
+        spacing: 3px;
         for item[i] in root.items : Rectangle {
             // Equal segments: no preferred width, so the layout splits the row evenly.
             preferred-width: 0px;
             horizontal-stretch: 1;
-            border-radius: Theme.radius-button - 2px;
-            background: i == root.selected ? Theme.accent : seg.pressed ? Theme.button-outline-pressed : seg.has-hover ? Theme.button-outline-hover : transparent;
+            min-height: 26px;
+            border-radius: 14px;
+            background: i == root.selected
+                ? (seg.pressed ? Theme.button-accent-pressed : seg.has-hover ? Theme.button-accent-hover : Theme.accent)
+                : seg.pressed ? Theme.button-outline-pressed
+                : seg.has-hover ? Theme.surface-hover
+                : transparent;
             accessible-role: tab;
             accessible-label: item;
             accessible-item-selectable: true;
@@ -546,15 +553,15 @@ export component TabList inherits Rectangle {
             accessible-item-count: root.items.length;
             accessible-action-default => { root.pick(i); }
             HorizontalLayout {
-                padding-left: 6px;
-                padding-right: 6px;
+                padding-left: 8px;
+                padding-right: 8px;
                 padding-top: 4px;
                 padding-bottom: 4px;
                 Text {
                     text: item;
                     font-size: Theme.font-size-label;
-                    font-weight: 400;
-                    color: i == root.selected ? Theme.on-accent : Theme.text;
+                    font-weight: i == root.selected ? 600 : 500;
+                    color: i == root.selected ? Theme.on-accent : (seg.has-hover ? Theme.text : Theme.text-muted);
                     horizontal-alignment: center;
                     vertical-alignment: center;
                     wrap: word-wrap;
@@ -587,7 +594,7 @@ export component TabList inherits Rectangle {
         height: parent.height + 6px;
         border-width: 2px;
         border-color: Theme.accent-line;
-        border-radius: Theme.radius-button + 3px;
+        border-radius: 20px;
     }
 }
 

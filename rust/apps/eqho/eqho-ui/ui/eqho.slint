@@ -91,6 +91,7 @@ export component DashboardWindow inherits Window {
     callback engine-backend-changed(int);
     callback select-model(string);
     callback download-model(string);
+    callback cancel-download-model(string);
     callback delete-model(string);
     callback open-model-folder();
 
@@ -148,6 +149,7 @@ export component DashboardWindow inherits Window {
     callback save-paste-rules(string);
     callback volume-duck-selected(int);
     callback history-trash-days-selected(int);
+    callback open-trash();
     callback start-with-windows-toggled(bool);
     callback overlay-enabled-toggled(bool);
     callback overlay-show-text-toggled(bool);
@@ -345,6 +347,7 @@ export component DashboardWindow inherits Window {
                 engine-backend-changed(i) => { root.engine-backend-changed(i); }
                 select-model(k) => { root.select-model(k); }
                 download-model(k) => { root.download-model(k); }
+                cancel-download-model(k) => { root.cancel-download-model(k); }
                 delete-model(k) => { root.delete-model(k); }
                 open-model-folder => { root.open-model-folder(); }
             }
@@ -412,6 +415,7 @@ export component DashboardWindow inherits Window {
                 save-paste-rules(s) => { root.save-paste-rules(s); }
                 volume-duck-selected(i) => { root.volume-duck-selected(i); }
                 history-trash-days-selected(i) => { root.history-trash-days-selected(i); }
+                open-trash => { root.open-trash(); }
                 start-with-windows-toggled(b) => { root.start-with-windows-toggled(b); }
                 overlay-enabled-toggled(b) => { root.overlay-enabled-toggled(b); }
                 overlay-show-text-toggled(b) => { root.overlay-show-text-toggled(b); }

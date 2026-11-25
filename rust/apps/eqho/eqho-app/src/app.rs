@@ -21,8 +21,8 @@ use eqho_core::modelstore::{MODELS, whispercpp_model_path};
 use eqho_core::settings::Settings;
 use eqho_core::vad::level_meter;
 use eqho_engine::{DictationCoordinator, UiEventSink};
-use eqho_host::downloader::download_ggml_model;
-use eqho_host::{ModelHost, ModelHostConfig};
+use eqho_host::downloader::download_ggml_model_cancellable;
+use eqho_host::{HostError, ModelHost, ModelHostConfig};
 use eqho_overlay::{
     FlagBitmapProvider, OverlayAction, OverlayActionCallback, OverlayConfig, OverlayHandle,
 };
@@ -277,6 +277,33 @@ impl AppUiSink {
             }
         });
     }
+    fn clear_cancelled_download(&self, model_key: &str) {
+        {
+            let mut snap = self.snapshot.lock().unwrap_or_else(|e| e.into_inner());
+            if snap.downloading_key.as_deref() == Some(model_key) {
+                snap.downloading_key = None;
+                snap.download_progress = 0.0;
+                snap.download_detail.clear();
+                snap.download_error_key = None;
+            }
+        }
+        self.refresh_models_in_dash();
+        let dash_weak_opt = self
+            .dash_weak
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(dash_weak) = dash_weak_opt {
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(dash) = dash_weak.upgrade() {
+                    dash.set_bg_download_active(false);
+                    dash.set_bg_download_error(false);
+                    dash.set_bg_download_detail("".into());
+                }
+            });
+        }
+    }
+
     fn set_step6_hint(&self, text: &str) {
         let dash_weak_opt = self
             .dash_weak
@@ -606,6 +633,7 @@ struct AppController {
     mic_test_stream: Option<Box<dyn AudioStreamHandle>>,
     hotkey_ok: bool,
     hotkey_capture_cancel: Option<Arc<AtomicBool>>,
+    download_cancel: Option<Arc<AtomicBool>>,
     error_log: ErrorLog,
     ui_sink: Arc<AppUiSink>,
     #[cfg(feature = "store")]
@@ -948,7 +976,7 @@ impl AppController {
         }
     }
 
-    fn start_download(&self, model_key: String) {
+    fn start_download(&mut self, model_key: String) {
         let already_downloading = {
             let mut snap = self.snapshot.lock().unwrap_or_else(|e| e.into_inner());
             if snap.downloading_key.as_deref() == Some(model_key.as_str()) {
@@ -965,6 +993,11 @@ impl AppController {
         if already_downloading {
             return;
         }
+        if let Some(prev) = self.download_cancel.take() {
+            prev.store(true, Ordering::Release);
+        }
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        self.download_cancel = Some(Arc::clone(&cancel_flag));
 
         let model_dir = self
             .settings
@@ -990,10 +1023,20 @@ impl AppController {
         let _ = thread::Builder::new()
             .name("eqho-model-download".into())
             .spawn(move || {
-                let res = download_ggml_model(&model_key, &model_dir, &mut |msg, frac| {
-                    ui.on_model_progress(&model_key, msg, frac);
-                });
+                let res = download_ggml_model_cancellable(
+                    &model_key,
+                    &model_dir,
+                    &cancel_flag,
+                    &mut |msg, frac| {
+                        if !cancel_flag.load(Ordering::Acquire) {
+                            ui.on_model_progress(&model_key, msg, frac);
+                        }
+                    },
+                );
                 match res {
+                    Ok(_) if cancel_flag.load(Ordering::Acquire) => {
+                        ui.clear_cancelled_download(&model_key);
+                    }
                     Ok(_) => {
                         // CRITICAL: Drop `settings_arc` lock BEFORE calling into `coordinator`
                         // or `ui` so `on_model_progress -> refresh_models_in_dash` can never
@@ -1010,13 +1053,41 @@ impl AppController {
                         ui.on_model_progress(&model_key, "Ready", None);
                         ui.refresh_models_in_dash();
                     }
+                    Err(HostError::DownloadCancelled) => {
+                        ui.clear_cancelled_download(&model_key);
+                    }
                     Err(err) => {
-                        let msg = format!("Download failed: {err}");
-                        ui.on_model_progress(&model_key, &msg, None);
-                        ui.refresh_models_in_dash();
+                        if cancel_flag.load(Ordering::Acquire) {
+                            ui.clear_cancelled_download(&model_key);
+                        } else {
+                            let msg = format!("Download failed: {err}");
+                            ui.on_model_progress(&model_key, &msg, None);
+                            ui.refresh_models_in_dash();
+                        }
                     }
                 }
             });
+    }
+
+    fn cancel_download(&mut self, model_key: &str) {
+        if let Some(flag) = self.download_cancel.take() {
+            flag.store(true, Ordering::Release);
+        }
+        {
+            let mut snap = self.snapshot.lock().unwrap_or_else(|e| e.into_inner());
+            if snap.downloading_key.as_deref() == Some(model_key) || model_key.is_empty() {
+                snap.downloading_key = None;
+                snap.download_progress = 0.0;
+                snap.download_detail.clear();
+                snap.download_error_key = None;
+            }
+        }
+        if let Some(dash) = &self.dashboard {
+            dash.set_bg_download_active(false);
+            dash.set_bg_download_error(false);
+            dash.set_bg_download_detail("".into());
+        }
+        self.refresh_models();
     }
 }
 
@@ -1481,7 +1552,13 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     {
         let ctrl_w = Rc::clone(ctrl);
         dash.on_download_model(move |key| {
-            ctrl_w.borrow().start_download(key.to_string());
+            ctrl_w.borrow_mut().start_download(key.to_string());
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        dash.on_cancel_download_model(move |key| {
+            ctrl_w.borrow_mut().cancel_download(&key);
         });
     }
     {
@@ -1745,6 +1822,18 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     }
     {
         let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_open_trash(move || {
+            if let Some(d) = dash_w.upgrade() {
+                d.set_showing_trash(true);
+                d.set_history_status("".into());
+                d.set_active_tab("history".into());
+            }
+            ctrl_w.borrow().refresh_history();
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
         dash.on_start_with_windows_toggled(move |enabled| {
             let c = ctrl_w.borrow();
             if let Err(err) = c.damt_platform.autostart().set_enabled(enabled) {
@@ -1961,7 +2050,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
                         .clone();
                     eqho_core::modelpick::recommend_model(c.hw_class, &lang).to_owned()
                 });
-            ctrl_w.borrow().start_download(key);
+            ctrl_w.borrow_mut().start_download(key);
         });
     }
     {
@@ -2632,6 +2721,7 @@ pub fn run_desktop_app(
         mic_test_stream: None,
         hotkey_ok,
         hotkey_capture_cancel: None,
+        download_cancel: None,
         error_log: error_log.clone(),
         ui_sink,
         #[cfg(feature = "store")]

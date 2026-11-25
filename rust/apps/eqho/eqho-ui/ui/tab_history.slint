@@ -5,6 +5,69 @@ import { Button, ButtonKind, CloseButton, Dropdown } from "@damt-ui/kit.slint";
 import { HistoryRowItem } from "types.slint";
 import { ScrollArea, SectionCard, ThemedLineEdit } from "components.slint";
 
+// Outline button matching ButtonKind.outline with a crisp vector trash-can icon.
+component TrashButton inherits Rectangle {
+    in property <int> count: 0;
+    callback clicked();
+
+    property <string> label-text: root.count > 0 ? "Trash (" + root.count + ")" : "Trash";
+
+    min-width: content.preferred-width + 20px;
+    min-height: 29px;
+    max-height: self.min-height;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: Theme.radius-button;
+    border-width: 1px;
+    border-color: Theme.text-muted;
+    background: touch.pressed ? Theme.button-outline-pressed
+        : touch.has-hover ? Theme.surface-hover
+        : transparent;
+
+    accessible-role: button;
+    accessible-label: root.label-text;
+    accessible-action-default => { root.clicked(); }
+
+    content := HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 6px;
+        alignment: center;
+
+        VerticalLayout {
+            alignment: center;
+            Path {
+                width: 13px;
+                height: 13px;
+                viewbox-x: 0;
+                viewbox-y: 0;
+                viewbox-width: 24;
+                viewbox-height: 24;
+                stroke: Theme.text;
+                stroke-width: 1.5px;
+                stroke-line-cap: round;
+                stroke-line-join: round;
+                fill: transparent;
+                commands: "M 3 6 L 21 6 M 8 6 L 9 3.5 L 15 3.5 L 16 6 M 5.5 6 L 6.8 20.5 L 17.2 20.5 L 18.5 6 M 10 10.5 L 10 16.5 M 14 10.5 L 14 16.5";
+            }
+        }
+
+        Text {
+            text: root.label-text;
+            font-size: Theme.font-size-label;
+            font-weight: 400;
+            color: Theme.text;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
 export component HistoryTab inherits Rectangle {
     in property <length> window-height: 560px;
 
@@ -55,9 +118,8 @@ export component HistoryTab inherits Rectangle {
                     accessible-name: "Time period";
                     selected => { root.history-filter-changed(); }
                 }
-                Button {
-                    text: root.trash-count > 0 ? "Trash (" + root.trash-count + ")" : "Trash";
-                    kind: ButtonKind.outline;
+                TrashButton {
+                    count: root.trash-count;
                     clicked => {
                         root.confirm-delete-ts = "";
                         root.confirm-clear-all = false;

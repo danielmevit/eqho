@@ -46,6 +46,7 @@ export component SettingsTab inherits Rectangle {
     callback save-paste-rules(string);
     callback volume-duck-selected(int);
     callback history-trash-days-selected(int);
+    callback open-trash();
     callback start-with-windows-toggled(bool);
     callback overlay-enabled-toggled(bool);
     callback overlay-show-text-toggled(bool);
@@ -71,75 +72,8 @@ export component SettingsTab inherits Rectangle {
             padding: Theme.space-16;
             spacing: Theme.space-12;
 
-            // APPEARANCE — single compact row on wide layouts
-            SectionCard {
-                title: "APPEARANCE";
-                if root.two-col : HorizontalLayout {
-                    spacing: Theme.space-16;
-                    alignment: space-between;
-
-                    VerticalLayout {
-                        horizontal-stretch: 0;
-                        spacing: 4px;
-                        Text {
-                            text: "Theme";
-                            font-size: Theme.font-size-sm;
-                            font-weight: 500;
-                            color: Theme.text;
-                        }
-                        TabList {
-                            items: ["Light", "Dark", "System"];
-                            selected <=> root.theme-mode-index;
-                            accessible-name: "Theme";
-                            picked(i) => { root.theme-mode-changed(i); }
-                        }
-                    }
-
-                    VerticalLayout {
-                        horizontal-stretch: 1;
-                        spacing: 4px;
-                        Text {
-                            text: "UI Zoom";
-                            font-size: Theme.font-size-sm;
-                            font-weight: 500;
-                            color: Theme.text;
-                        }
-                        TabList {
-                            items: ["100%", "125%", "150%", "175%", "200%"];
-                            selected <=> root.ui-scale-index;
-                            accessible-name: "UI Zoom";
-                            picked(i) => { root.ui-scale-changed(i); }
-                        }
-                    }
-                }
-
-                if !root.two-col : VerticalLayout {
-                    spacing: Theme.space-10;
-                    StackedSettingRow {
-                        label: "Theme";
-                        help: "Light, dark, or follow Windows";
-                        TabList {
-                            items: ["Light", "Dark", "System"];
-                            selected <=> root.theme-mode-index;
-                            accessible-name: "Theme";
-                            picked(i) => { root.theme-mode-changed(i); }
-                        }
-                    }
-                    StackedSettingRow {
-                        label: "UI Zoom";
-                        help: "Scale the whole dashboard";
-                        TabList {
-                            items: ["100%", "125%", "150%", "175%", "200%"];
-                            selected <=> root.ui-scale-index;
-                            accessible-name: "UI Zoom";
-                            picked(i) => { root.ui-scale-changed(i); }
-                        }
-                    }
-                }
-            }
-
             // BALANCED 2-COLUMN BODY:
-            // Left: DICTATION EXTRAS + ABOUT EQHO
+            // Left: APPEARANCE + DICTATION EXTRAS + ABOUT EQHO
             // Right: SYSTEM + OVERLAY
             if root.two-col : HorizontalLayout {
                 spacing: Theme.space-16;
@@ -149,6 +83,30 @@ export component SettingsTab inherits Rectangle {
                     horizontal-stretch: 1;
                     spacing: Theme.space-12;
                     alignment: start;
+
+                    SectionCard {
+                        title: "APPEARANCE";
+                        StackedSettingRow {
+                            label: "Theme";
+                            help: "Light, dark, or follow Windows";
+                            TabList {
+                                items: ["Light", "Dark", "System"];
+                                selected <=> root.theme-mode-index;
+                                accessible-name: "Theme";
+                                picked(i) => { root.theme-mode-changed(i); }
+                            }
+                        }
+                        StackedSettingRow {
+                            label: "UI Zoom";
+                            help: "Scale the whole dashboard";
+                            TabList {
+                                items: ["100%", "125%", "150%", "175%", "200%"];
+                                selected <=> root.ui-scale-index;
+                                accessible-name: "UI Zoom";
+                                picked(i) => { root.ui-scale-changed(i); }
+                            }
+                        }
+                    }
 
                     SectionCard {
                         title: "DICTATION EXTRAS";
@@ -329,14 +287,23 @@ export component SettingsTab inherits Rectangle {
                             }
                         }
                         StackedSettingRow {
-                            label: "History Trash Retention";
-                            help: "How long deleted dictations stay in Trash before permanent removal";
+                            label: "Trashed Data Retention";
+                            help: "How long deleted transcripts stay in Trash before permanent removal";
                             Dropdown {
                                 model: ["7 days", "14 days", "30 days", "90 days", "Never"];
                                 current-index <=> root.history-trash-days-index;
                                 window-height: root.window-height;
-                                accessible-name: "History Trash Retention";
+                                accessible-name: "Trashed Data Retention";
                                 selected(i) => { root.history-trash-days-selected(i); }
+                            }
+                            HorizontalLayout {
+                                alignment: start;
+                                LinkButton {
+                                    text: "Open Trash →";
+                                    font-size: Theme.font-size-sm;
+                                    padding-y: 2px;
+                                    clicked => { root.open-trash(); }
+                                }
                             }
                         }
                         CompactRow {
@@ -464,6 +431,30 @@ export component SettingsTab inherits Rectangle {
                 spacing: Theme.space-12;
 
                 SectionCard {
+                    title: "APPEARANCE";
+                    StackedSettingRow {
+                        label: "Theme";
+                        help: "Light, dark, or follow Windows";
+                        TabList {
+                            items: ["Light", "Dark", "System"];
+                            selected <=> root.theme-mode-index;
+                            accessible-name: "Theme";
+                            picked(i) => { root.theme-mode-changed(i); }
+                        }
+                    }
+                    StackedSettingRow {
+                        label: "UI Zoom";
+                        help: "Scale the whole dashboard";
+                        TabList {
+                            items: ["100%", "125%", "150%", "175%", "200%"];
+                            selected <=> root.ui-scale-index;
+                            accessible-name: "UI Zoom";
+                            picked(i) => { root.ui-scale-changed(i); }
+                        }
+                    }
+                }
+
+                SectionCard {
                     title: "DICTATION EXTRAS";
                     CompactRow {
                         label: "Remove Filler Words";
@@ -551,14 +542,23 @@ export component SettingsTab inherits Rectangle {
                         }
                     }
                     StackedSettingRow {
-                        label: "History Trash Retention";
-                        help: "How long deleted dictations stay in Trash before permanent removal";
+                        label: "Trashed Data Retention";
+                        help: "How long deleted transcripts stay in Trash before permanent removal";
                         Dropdown {
                             model: ["7 days", "14 days", "30 days", "90 days", "Never"];
                             current-index <=> root.history-trash-days-index;
                             window-height: root.window-height;
-                            accessible-name: "History Trash Retention";
+                            accessible-name: "Trashed Data Retention";
                             selected(i) => { root.history-trash-days-selected(i); }
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            LinkButton {
+                                text: "Open Trash →";
+                                font-size: Theme.font-size-sm;
+                                padding-y: 2px;
+                                clicked => { root.open-trash(); }
+                            }
                         }
                     }
                     CompactRow {

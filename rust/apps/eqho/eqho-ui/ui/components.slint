@@ -676,32 +676,42 @@ export component FlagDropdown inherits Rectangle {
 
     property <length> row-h: 28px;
     property <length> pad: 4px;
+    property <length> header-h: 37px;
     property <int> visible-rows: Math.max(1, Math.min(root.model.length, root.max-rows));
-    property <bool> list-scrolls: root.model.length > root.max-rows;
-    property <length> content-h: root.model.length * root.row-h + 2 * root.pad;
-    property <length> popup-h: root.visible-rows * root.row-h + 2 * root.pad;
-    property <length> max-scroll: Math.max(0px, root.content-h - root.popup-h);
+    property <length> list-h: root.visible-rows * root.row-h + 2 * root.pad;
+    property <length> popup-h: root.header-h + root.list-h;
     property <bool> opens-up: root.window-height > 0px
         && root.absolute-position.y + root.height + 4px + root.popup-h > root.window-height
         && root.absolute-position.y >= root.popup-h + 4px;
     property <int> hl: 0;
     property <length> scroll-y: 0px;
+    property <string> search-query: "";
+
+    pure function matches-query(label: string, code: string, q: string) -> bool {
+        if (q == "") {
+            return true;
+        }
+        return label.to-lowercase().replace-all(q, "") != label.to-lowercase()
+            || code.to-lowercase().replace-all(q, "") != code.to-lowercase();
+    }
 
     function clamp-index(idx: int) -> int {
         Math.max(0, Math.min(idx, Math.max(0, root.model.length - 1)))
     }
 
     function scroll-into-view(i: int) {
-        if (!root.list-scrolls) {
+        let total-h = root.model.length * root.row-h + 2 * root.pad;
+        let max-sc = Math.max(0px, total-h - root.list-h);
+        if (max-sc <= 0px) {
             root.scroll-y = 0px;
             return;
         }
         let top = root.pad + i * root.row-h;
         let bot = top + root.row-h;
         if (top < -root.scroll-y) {
-            root.scroll-y = -Math.min(top, root.max-scroll);
-        } else if (bot > -root.scroll-y + root.popup-h) {
-            root.scroll-y = -Math.min(Math.max(0px, bot - root.popup-h), root.max-scroll);
+            root.scroll-y = -Math.min(top, max-sc);
+        } else if (bot > -root.scroll-y + root.list-h) {
+            root.scroll-y = -Math.min(Math.max(0px, bot - root.list-h), max-sc);
         }
     }
 
@@ -720,6 +730,7 @@ export component FlagDropdown inherits Rectangle {
 
     function open-popup() {
         if (!root.enabled || root.model.length == 0) { return; }
+        root.search-query = "";
         root.hl = root.clamp-index(root.current-index);
         root.scroll-into-view(root.hl);
         popup.show();
@@ -833,20 +844,13 @@ export component FlagDropdown inherits Rectangle {
             popup-focus := FocusScope {
                 width: parent.width;
                 height: parent.height;
-                init => { self.focus(); }
                 key-pressed(event) => {
-                    if (event.text == Key.UpArrow) { root.move-to(root.hl - 1); return accept; }
-                    if (event.text == Key.DownArrow) { root.move-to(root.hl + 1); return accept; }
-                    if (event.text == Key.Home) { root.move-to(0); return accept; }
-                    if (event.text == Key.End) { root.move-to(root.model.length - 1); return accept; }
-                    if (event.text == Key.PageUp) { root.move-to(root.hl - root.max-rows); return accept; }
-                    if (event.text == Key.PageDown) { root.move-to(root.hl + root.max-rows); return accept; }
-                    if (event.text == "\n" || event.text == " ") {
-                        root.pick(root.hl);
-                        popup.close();
-                        focus.focus();
-                        return accept;
-                    }
+                    if (event.text == Key.UpArrow && root.search-query == "") { root.move-to(root.hl - 1); return accept; }
+                    if (event.text == Key.DownArrow && root.search-query == "") { root.move-to(root.hl + 1); return accept; }
+                    if (event.text == Key.Home && root.search-query == "") { root.move-to(0); return accept; }
+                    if (event.text == Key.End && root.search-query == "") { root.move-to(root.model.length - 1); return accept; }
+                    if (event.text == Key.PageUp && root.search-query == "") { root.move-to(root.hl - root.max-rows); return accept; }
+                    if (event.text == Key.PageDown && root.search-query == "") { root.move-to(root.hl + root.max-rows); return accept; }
                     if (event.text == Key.Escape) {
                         popup.close();
                         focus.focus();
@@ -855,88 +859,227 @@ export component FlagDropdown inherits Rectangle {
                     reject
                 }
 
-                flick := Flickable {
+                VerticalLayout {
                     width: parent.width;
                     height: parent.height;
-                    content-height: root.content-h;
-                    content-width: self.width;
-                    content-y <=> root.scroll-y;
+                    spacing: 0px;
 
-                    VerticalLayout {
-                        padding: root.pad;
-                        padding-right: root.pad + (root.list-scrolls ? 8px : 0px);
+                    // First pinned section: live Search input (auto-focused on popup open)
+                    Rectangle {
+                        height: 36px;
+                        vertical-stretch: 0;
+                        background: Theme.surface-tertiary;
 
-                        for item[i] in root.model : Rectangle {
-                            min-height: root.row-h;
-                            max-height: root.row-h;
-                            border-radius: Theme.radius-button - 1px;
-                            background: i == root.hl ? Theme.button-outline-pressed
-                                : row.has-hover ? Theme.surface-hover
-                                : transparent;
+                        HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 8px;
+                            spacing: 7px;
+                            alignment: start;
 
-                            accessible-role: list-item;
-                            accessible-label: item.label;
-                            accessible-item-selectable: true;
-                            accessible-item-selected: i == root.current-index;
-                            accessible-action-default => { root.pick(i); popup.close(); }
-
-                            HorizontalLayout {
-                                padding-left: 8px;
-                                padding-right: 8px;
-                                spacing: 8px;
-                                alignment: start;
-
-                                if item.flag.width > 0 : VerticalLayout {
-                                    alignment: center;
-                                    Image {
-                                        source: item.flag;
-                                        width: 21px;
-                                        height: 14px;
-                                        image-fit: contain;
-                                        image-rendering: smooth;
-                                        accessible-role: none;
-                                    }
-                                }
-
-                                Text {
-                                    text: item.label;
-                                    font-size: Theme.font-size-label;
-                                    font-weight: i == root.current-index ? 600 : 400;
-                                    color: i == root.current-index ? Theme.accent-text : Theme.text;
-                                    vertical-alignment: center;
-                                    overflow: elide;
-                                    horizontal-stretch: 1;
-                                    accessible-role: none;
+                            // Subtle magnifying glass icon
+                            VerticalLayout {
+                                alignment: center;
+                                horizontal-stretch: 0;
+                                Path {
+                                    width: 13px;
+                                    height: 13px;
+                                    viewbox-x: 0;
+                                    viewbox-y: 0;
+                                    viewbox-width: 24;
+                                    viewbox-height: 24;
+                                    stroke: Theme.text-muted;
+                                    stroke-width: 1.8px;
+                                    stroke-line-cap: round;
+                                    fill: transparent;
+                                    commands: "M 11 4 A 7 7 0 1 0 11 18 A 7 7 0 1 0 11 4 M 16.2 16.2 L 20.5 20.5";
                                 }
                             }
 
-                            row := TouchArea {
-                                mouse-cursor: pointer;
-                                clicked => {
-                                    root.pick(i);
-                                    popup.close();
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                height: parent.height;
+                                clip: true;
+
+                                if root.search-query == "" : Text {
+                                    x: 0px;
+                                    width: parent.width;
+                                    height: parent.height;
+                                    text: "Search language…";
+                                    font-size: Theme.font-size-label;
+                                    color: Theme.text-muted;
+                                    vertical-alignment: center;
+                                    accessible-role: none;
+                                }
+
+                                search-input := TextInput {
+                                    x: 0px;
+                                    width: parent.width;
+                                    height: parent.height;
+                                    text <=> root.search-query;
+                                    font-size: Theme.font-size-label;
+                                    color: Theme.text;
+                                    vertical-alignment: center;
+                                    single-line: true;
+                                    init => { self.focus(); }
+                                    edited => {
+                                        root.scroll-y = 0px;
+                                    }
+                                    accepted => {
+                                        if (root.search-query == "") {
+                                            root.pick(root.hl);
+                                            popup.close();
+                                            focus.focus();
+                                        }
+                                    }
+                                }
+                            }
+
+                            if root.search-query != "" : VerticalLayout {
+                                alignment: center;
+                                horizontal-stretch: 0;
+                                Rectangle {
+                                    width: 20px;
+                                    height: 20px;
+                                    border-radius: 10px;
+                                    background: clr-touch.has-hover ? Theme.surface-hover : transparent;
+                                    Path {
+                                        width: 8px;
+                                        height: 8px;
+                                        x: 6px;
+                                        y: 6px;
+                                        viewbox-width: 10;
+                                        viewbox-height: 10;
+                                        commands: "M1 1 L9 9 M9 1 L1 9";
+                                        stroke: Theme.text-muted;
+                                        stroke-width: 1.4px;
+                                        fill: transparent;
+                                    }
+                                    clr-touch := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            root.search-query = "";
+                                            root.scroll-y = 0px;
+                                            search-input.focus();
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                // Thin scrollbar when list overflows
-                if root.list-scrolls : Rectangle {
-                    property <length> track-h: Math.max(1px, parent.height - 8px);
-                    property <length> thumb-h: Math.max(22px, self.track-h * root.popup-h / Math.max(1px, root.content-h));
-                    x: parent.width - 7px;
-                    y: 4px;
-                    width: 4px;
-                    height: self.track-h;
-
+                    // Hairline divider between Search bar and language rows
                     Rectangle {
-                        y: (parent.track-h - parent.thumb-h) * Math.clamp(-root.scroll-y / Math.max(1px, root.max-scroll), 0, 1);
-                        width: 4px;
-                        height: parent.thumb-h;
-                        border-radius: 2px;
-                        background: Theme.text-muted;
-                        opacity: 0.45;
+                        height: 1px;
+                        vertical-stretch: 0;
+                        background: Theme.border-subtle;
+                    }
+
+                    // Filtered language list
+                    list-viewport := Rectangle {
+                        vertical-stretch: 1;
+                        clip: true;
+
+                        property <string> q-lower: root.search-query.to-lowercase();
+                        property <length> content-h: Math.max(list-col.preferred-height, 1px);
+                        property <bool> scrolls: list-col.preferred-height > self.height;
+                        property <length> max-sc: Math.max(0px, list-col.preferred-height - self.height);
+
+                        flick := Flickable {
+                            width: parent.width;
+                            height: parent.height;
+                            content-height: list-col.preferred-height;
+                            content-width: self.width;
+                            content-y <=> root.scroll-y;
+
+                            list-col := VerticalLayout {
+                                padding: root.pad;
+                                padding-right: root.pad + 8px;
+
+                                for item[i] in root.model : Rectangle {
+                                    property <bool> matched: root.matches-query(item.label, item.code, list-viewport.q-lower);
+                                    min-height: self.matched ? root.row-h : 0px;
+                                    max-height: self.matched ? root.row-h : 0px;
+                                    visible: self.matched;
+                                    clip: true;
+                                    border-radius: Theme.radius-button - 1px;
+                                    background: (root.search-query == "" && i == root.hl) ? Theme.button-outline-pressed
+                                        : row.has-hover ? Theme.surface-hover
+                                        : transparent;
+
+                                    accessible-role: list-item;
+                                    accessible-label: item.label;
+                                    accessible-item-selectable: true;
+                                    accessible-item-selected: i == root.current-index;
+                                    accessible-action-default => { root.pick(i); popup.close(); }
+
+                                    HorizontalLayout {
+                                        padding-left: 8px;
+                                        padding-right: 8px;
+                                        spacing: 8px;
+                                        alignment: start;
+
+                                        if item.flag.width > 0 : VerticalLayout {
+                                            alignment: center;
+                                            Image {
+                                                source: item.flag;
+                                                width: 21px;
+                                                height: 14px;
+                                                image-fit: contain;
+                                                image-rendering: smooth;
+                                                accessible-role: none;
+                                            }
+                                        }
+
+                                        Text {
+                                            text: item.label;
+                                            font-size: Theme.font-size-label;
+                                            font-weight: i == root.current-index ? 600 : 400;
+                                            color: i == root.current-index ? Theme.accent-text : Theme.text;
+                                            vertical-alignment: center;
+                                            overflow: elide;
+                                            horizontal-stretch: 1;
+                                            accessible-role: none;
+                                        }
+                                    }
+
+                                    row := TouchArea {
+                                        enabled: parent.matched;
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            root.pick(i);
+                                            popup.close();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if list-col.preferred-height <= 2 * root.pad && root.search-query != "" : Text {
+                            text: "No matching languages";
+                            font-size: Theme.font-size-sm;
+                            color: Theme.text-muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        // Thin scrollbar when list overflows
+                        if list-viewport.scrolls : Rectangle {
+                            property <length> track-h: Math.max(1px, parent.height - 8px);
+                            property <length> thumb-h: Math.max(22px, self.track-h * parent.height / list-viewport.content-h);
+                            x: parent.width - 7px;
+                            y: 4px;
+                            width: 4px;
+                            height: self.track-h;
+
+                            Rectangle {
+                                y: (parent.track-h - parent.thumb-h) * Math.clamp(-root.scroll-y / Math.max(1px, list-viewport.max-sc), 0, 1);
+                                width: 4px;
+                                height: parent.thumb-h;
+                                border-radius: 2px;
+                                background: Theme.text-muted;
+                                opacity: 0.45;
+                            }
+                        }
                     }
                 }
             }
