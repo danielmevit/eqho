@@ -6,10 +6,10 @@ Date format: `YYYY-MM-DD`.
 
 ## [0.9.0] - 2026-11-24
 
-Ground-up Rust + Slint 1.19 rewrite: ~13 MB installer, ~3.4 MB idle RAM, ~38 ms startup, ~4× faster Vulkan transcription, Deep Navy Blend dark theme, hover/pinnable under-pill controls with Batch/Live delivery, clean-PC multi-threaded CPU + Q5 models, and Microsoft Store MSIX packaging.
+Ground-up Rust + Slint 1.19 rewrite: ~14 MB installer, ~3.4 MB idle RAM, ~38 ms startup, ~4× faster Vulkan transcription, Deep Navy Blend dark theme, hover/pinnable under-pill controls with Batch/Live delivery, clean-PC multi-threaded CPU + Q5 models, and Microsoft Store MSIX packaging.
 
 ### Added
-- **Full Rust + Slint 1.19 rewrite (`Eqho.exe`, static CRT, ~13 MB Inno Setup 6 installer — down from ~250 MB):**
+- **Full Rust + Slint 1.19 rewrite (`Eqho.exe`, static CRT, ~14 MB Inno Setup 6 installer — down from ~250 MB):**
   - ~3.4 MB idle private RAM, ~38 ms tray startup, ~0.25–0.38 s RTX 3060 Vulkan transcription (~4.2× faster than 0.8.11) with 1.39% WER on LibriSpeech and real `no_speech_prob` / `avg_logprob` confidence gating.
   - Out-of-process `--model-host` child running `whisper.cpp 1.8.4` with cross-vendor Vulkan GPU acceleration (NVIDIA, AMD, Intel) and multi-threaded CPU fallback.
 - **Clean-PC multi-threaded CPU DLLs & 4 quantized Q5 models:**
