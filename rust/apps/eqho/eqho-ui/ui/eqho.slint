@@ -29,6 +29,7 @@ export component DashboardWindow inherits Window {
     // Recovery banner
     in-out property <string> recovery-text: "";
     callback copy-recovery();
+    callback view-recovery-in-history();
     callback dismiss-recovery();
 
     // Microsoft Store trial & purchase state (all hidden when store-build is false)
@@ -98,12 +99,20 @@ export component DashboardWindow inherits Window {
     in-out property <int> history-period-index: 0;
     in property <[HistoryRowItem]> history-rows: [];
     in-out property <string> history-status: "";
+    in-out property <bool> showing-trash: false;
+    in-out property <int> trash-count: 0;
+    in-out property <string> trash-retention-label: "Trash auto-clears after 30 days";
+    in-out property <string> copied-ts-key: "";
 
     callback history-filter-changed();
     callback export-history();
     callback clear-history();
-    callback copy-history-entry(string);
+    callback copy-history-entry(string, string);
     callback delete-history-entry(string);
+    callback toggle-trash-view(bool);
+    callback restore-trash-entry(string);
+    callback delete-trash-permanently(string);
+    callback empty-trash();
 
     // Settings tab properties & callbacks
     in-out property <int> theme-mode-index: 1;
@@ -115,6 +124,7 @@ export component DashboardWindow inherits Window {
     in-out property <string> paste-rules-text: "";
     in-out property <string> paste-rules-status: "";
     in-out property <int> volume-duck-index: 0;
+    in-out property <int> history-trash-days-index: 2;
     in-out property <bool> start-with-windows: false;
     in-out property <bool> overlay-enabled: true;
     in-out property <bool> overlay-show-text: true;
@@ -124,10 +134,11 @@ export component DashboardWindow inherits Window {
     in-out property <int> overlay-monitor-index: 0;
     in-out property <int> overlay-position-index: 0;
     in-out property <int> overlay-pill-scale-pct: 80;
-    in-out property <int> overlay-see-through-pct: 15;
-    in-out property <int> overlay-panel-see-through-pct: 15;
+    in-out property <int> overlay-see-through-pct: 5;
+    in-out property <int> overlay-panel-see-through-pct: 22;
     in-out property <int> overlay-font-size: 14;
-    in property <string> app-version: "0.9.0";
+    in property <string> app-version: "0.9.1";
+    in-out property <string> active-engine-display: "GPU (Vulkan) · whisper.cpp 1.8.4";
 
     callback theme-mode-changed(int);
     callback ui-scale-changed(int);
@@ -136,6 +147,7 @@ export component DashboardWindow inherits Window {
     callback save-replacements(string);
     callback save-paste-rules(string);
     callback volume-duck-selected(int);
+    callback history-trash-days-selected(int);
     callback start-with-windows-toggled(bool);
     callback overlay-enabled-toggled(bool);
     callback overlay-show-text-toggled(bool);
@@ -278,6 +290,7 @@ export component DashboardWindow inherits Window {
             RecoveryBanner {
                 text: root.recovery-text;
                 copy-clicked => { root.copy-recovery(); }
+                view-history-clicked => { root.view-recovery-in-history(); }
                 dismiss-clicked => { root.dismiss-recovery(); }
             }
         }
@@ -344,12 +357,20 @@ export component DashboardWindow inherits Window {
                 history-period-index <=> root.history-period-index;
                 history-rows: root.history-rows;
                 history-status <=> root.history-status;
+                showing-trash <=> root.showing-trash;
+                trash-count: root.trash-count;
+                trash-retention-label: root.trash-retention-label;
+                copied-ts-key: root.copied-ts-key;
 
                 history-filter-changed => { root.history-filter-changed(); }
                 export-history => { root.export-history(); }
                 clear-history => { root.clear-history(); }
-                copy-history-entry(t) => { root.copy-history-entry(t); }
+                copy-history-entry(ts, t) => { root.copy-history-entry(ts, t); }
                 delete-history-entry(ts) => { root.delete-history-entry(ts); }
+                toggle-trash-view(show) => { root.toggle-trash-view(show); }
+                restore-trash-entry(ts) => { root.restore-trash-entry(ts); }
+                delete-trash-permanently(ts) => { root.delete-trash-permanently(ts); }
+                empty-trash => { root.empty-trash(); }
             }
 
             if root.active-tab == "settings" : SettingsTab {
@@ -365,6 +386,7 @@ export component DashboardWindow inherits Window {
                 paste-rules-text <=> root.paste-rules-text;
                 paste-rules-status <=> root.paste-rules-status;
                 volume-duck-index <=> root.volume-duck-index;
+                history-trash-days-index <=> root.history-trash-days-index;
                 start-with-windows <=> root.start-with-windows;
                 overlay-enabled <=> root.overlay-enabled;
                 overlay-show-text <=> root.overlay-show-text;
@@ -378,6 +400,7 @@ export component DashboardWindow inherits Window {
                 overlay-panel-see-through-pct <=> root.overlay-panel-see-through-pct;
                 overlay-font-size <=> root.overlay-font-size;
                 app-version: root.app-version;
+                active-engine-display: root.active-engine-display;
                 store-build: root.store-build;
                 made-with-slint-label: root.made-with-slint-label;
 
@@ -388,6 +411,7 @@ export component DashboardWindow inherits Window {
                 save-replacements(s) => { root.save-replacements(s); }
                 save-paste-rules(s) => { root.save-paste-rules(s); }
                 volume-duck-selected(i) => { root.volume-duck-selected(i); }
+                history-trash-days-selected(i) => { root.history-trash-days-selected(i); }
                 start-with-windows-toggled(b) => { root.start-with-windows-toggled(b); }
                 overlay-enabled-toggled(b) => { root.overlay-enabled-toggled(b); }
                 overlay-show-text-toggled(b) => { root.overlay-show-text-toggled(b); }
@@ -400,6 +424,7 @@ export component DashboardWindow inherits Window {
                 overlay-see-through-changed(v) => { root.overlay-see-through-changed(v); }
                 overlay-panel-see-through-changed(v) => { root.overlay-panel-see-through-changed(v); }
                 overlay-font-size-changed(v) => { root.overlay-font-size-changed(v); }
+                open-url(u) => { root.open-url(u); }
                 start-onboarding => { root.start-onboarding(); }
             }
         }

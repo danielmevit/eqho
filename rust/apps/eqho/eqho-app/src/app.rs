@@ -29,19 +29,17 @@ use eqho_overlay::{
 use eqho_platform::{AudioBackend, AudioDeviceInfo, AudioStreamHandle, ClipboardService, GpuProbe, MicPrivacyProbe};
 use eqho_ui::{
     DashboardWindow, EqhoTray, Theme, apply_settings_to_window, build_history_rows,
-    build_model_cards, build_onboarding_model_options, dashboard_window_title, delivery_mode_index,
-    delivery_mode_key, engine_backend_key, filter_history_entries, language_code_for_index,
-    language_index_for_code, language_warning_text, model_short_name,
+    build_history_rows_with_trash_meta, build_model_cards, build_onboarding_model_options,
+    dashboard_window_title, delivery_mode_index, delivery_mode_key, engine_backend_key,
+    filter_history_entries, format_active_engine_display, history_trash_days_value,
+    language_code_for_index, language_index_for_code, language_warning_text, model_short_name,
     onboarding_model_copy_for_key, overlay_monitor_key, overlay_position_key,
     parse_paste_rules_text, parse_replacements_text, render_flag_rgba, split_model_cards,
-    status_summary_title, theme_mode_key, ui_scale_value, volume_duck_key,
+    status_summary_title, theme_mode_key, ui_scale_value, volume_duck_key, wordmark_image,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use crate::assets::{
-    LOGO_32, LOGO_HORIZONTAL_DARK, LOGO_HORIZONTAL_LIGHT, build_tray_icon_rgba,
-    decode_png_rgba, rgba_to_slint_image,
-};
+use crate::assets::{LOGO_32, build_tray_icon_rgba, decode_png_rgba, rgba_to_slint_image};
 use crate::license::{DemoLicense, demo_license_is_honoured};
 #[cfg(feature = "store")]
 use crate::license::{
@@ -128,16 +126,31 @@ fn raw_win32_hwnd(window: &slint::Window) -> Option<isize> {
     }
 }
 
-fn detect_hardware_class(platform: &dyn GpuProbe) -> HardwareClass {
+fn detect_hardware_info(platform: &dyn GpuProbe) -> (HardwareClass, Option<String>) {
     const MIN_VRAM: u64 = 2 * 1024 * 1024 * 1024;
-    let has_gpu = platform
+    let best_gpu = platform
         .list_adapters()
-        .iter()
-        .any(|a| a.dedicated_video_memory_bytes >= MIN_VRAM);
-    if has_gpu {
-        HardwareClass::Gpu
+        .into_iter()
+        .filter(|a| a.dedicated_video_memory_bytes >= MIN_VRAM)
+        .max_by_key(|a| a.dedicated_video_memory_bytes);
+    match best_gpu {
+        Some(adapter) => (HardwareClass::Gpu, Some(adapter.name)),
+        None => (HardwareClass::Cpu, None),
+    }
+}
+
+fn default_cpu_threads() -> u32 {
+    std::thread::available_parallelism()
+        .map(|n| n.get() as u32)
+        .unwrap_or(4)
+        .clamp(1, 32)
+}
+
+fn format_trash_retention_label(days: i32) -> String {
+    if days <= 0 {
+        "Trash items stay until emptied".to_owned()
     } else {
-        HardwareClass::Cpu
+        format!("Trash auto-clears after {days} days")
     }
 }
 
@@ -470,10 +483,13 @@ impl UiEventSink for AppUiSink {
         self.refresh_tray();
 
         if let Some(t) = text {
+            self.overlay.show_recovery(t);
             self.append_step6_text(
                 t,
                 Some("✓ Dictation worked! Try another sentence or click Finish."),
             );
+        } else {
+            self.overlay.hide_recovery();
         }
 
         let dash_weak_opt = self
@@ -507,13 +523,30 @@ impl UiEventSink for AppUiSink {
         let Some(dash_weak) = dash_weak_opt else {
             return;
         };
-        let entries = self.history.read_all();
+        let active_entries = self.history.read_all();
+        let trash_entries = self.history.read_trash();
+        let retention_days = self
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .history_trash_days;
         let _ = slint::invoke_from_event_loop(move || {
             if let Some(dash) = dash_weak.upgrade() {
-                let query = dash.get_history_query().to_string();
-                let period = dash.get_history_period_index();
-                let filtered = filter_history_entries(&entries, &query, period, now_epoch_secs());
-                let rows = build_history_rows(&filtered);
+                dash.set_trash_count(trash_entries.len() as i32);
+                dash.set_trash_retention_label(format_trash_retention_label(retention_days).into());
+                let rows = if dash.get_showing_trash() {
+                    build_history_rows_with_trash_meta(
+                        &trash_entries,
+                        retention_days,
+                        now_epoch_secs(),
+                    )
+                } else {
+                    let query = dash.get_history_query().to_string();
+                    let period = dash.get_history_period_index();
+                    let filtered =
+                        filter_history_entries(&active_entries, &query, period, now_epoch_secs());
+                    build_history_rows(&filtered)
+                };
                 dash.set_history_rows(ModelRc::new(VecModel::from(rows)));
             }
         });
@@ -565,6 +598,7 @@ struct AppController {
     platform: Arc<EqhoPlatformImpl>,
     damt_platform: Arc<DamtPlatformImpl>,
     hw_class: HardwareClass,
+    gpu_name: Option<String>,
     dashboard: Option<DashboardWindow>,
     dash_weak: Arc<Mutex<Option<slint::Weak<DashboardWindow>>>>,
     snapshot: Arc<Mutex<UiSyncSnapshot>>,
@@ -645,26 +679,51 @@ impl AppController {
             .update_config(OverlayConfig::from_settings(&s, is_dark));
         if let Some(dash) = &self.dashboard {
             dash.global::<Theme>().set_dark(is_dark);
-            let logo_bytes = if is_dark {
-                LOGO_HORIZONTAL_DARK
-            } else {
-                LOGO_HORIZONTAL_LIGHT
-            };
-            if let Ok((w, h, rgba)) = decode_png_rgba(logo_bytes) {
-                dash.set_logo_image(rgba_to_slint_image(w, h, &rgba));
-            }
+            dash.set_logo_image(wordmark_image(is_dark));
         }
+    }
+
+    fn refresh_active_engine_display(&self) {
+        let Some(dash) = &self.dashboard else {
+            return;
+        };
+        let backend = self
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .engine_backend
+            .clone();
+        let display = format_active_engine_display(
+            &backend,
+            self.hw_class,
+            self.gpu_name.as_deref(),
+            default_cpu_threads(),
+        );
+        dash.set_active_engine_display(display.into());
     }
 
     fn refresh_history(&self) {
         let Some(dash) = &self.dashboard else {
             return;
         };
-        let entries = self.history.read_all();
-        let query = dash.get_history_query().to_string();
-        let period = dash.get_history_period_index();
-        let filtered = filter_history_entries(&entries, &query, period, now_epoch_secs());
-        let rows = build_history_rows(&filtered);
+        let retention_days = self
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .history_trash_days;
+        let trash_entries = self.history.read_trash();
+        dash.set_trash_count(trash_entries.len() as i32);
+        dash.set_trash_retention_label(format_trash_retention_label(retention_days).into());
+
+        let rows = if dash.get_showing_trash() {
+            build_history_rows_with_trash_meta(&trash_entries, retention_days, now_epoch_secs())
+        } else {
+            let entries = self.history.read_all();
+            let query = dash.get_history_query().to_string();
+            let period = dash.get_history_period_index();
+            let filtered = filter_history_entries(&entries, &query, period, now_epoch_secs());
+            build_history_rows(&filtered)
+        };
         dash.set_history_rows(ModelRc::new(VecModel::from(rows)));
     }
 
@@ -1013,14 +1072,7 @@ fn ensure_dashboard(ctrl: &Rc<RefCell<AppController>>, tab: Option<&str>) {
                     dash.set_window_icon(rgba_to_slint_image(w, h, &rgba));
                 }
 
-                let logo_bytes = if is_dark {
-                    LOGO_HORIZONTAL_DARK
-                } else {
-                    LOGO_HORIZONTAL_LIGHT
-                };
-                if let Ok((w, h, rgba)) = decode_png_rgba(logo_bytes) {
-                    dash.set_logo_image(rgba_to_slint_image(w, h, &rgba));
-                }
+                dash.set_logo_image(wordmark_image(is_dark));
 
                 if let Some(ref key) = snap.downloading_key {
                     dash.set_bg_download_active(true);
@@ -1058,6 +1110,7 @@ fn ensure_dashboard(ctrl: &Rc<RefCell<AppController>>, tab: Option<&str>) {
             c.refresh_models();
             c.refresh_onboarding_models(Some(&initial_model_key));
             c.refresh_history();
+            c.refresh_active_engine_display();
             #[cfg(feature = "store")]
             c.sync_license_to_dash();
         }
@@ -1106,10 +1159,30 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         let ctrl_w = Rc::clone(ctrl);
         let dash_w = dash.as_weak();
         dash.on_copy_recovery(move || {
-            let _ = ctrl_w.borrow().coordinator.copy_last_dictation();
+            let c = ctrl_w.borrow();
+            let _ = c.coordinator.copy_last_dictation();
+            c.overlay.hide_recovery();
+            c.snapshot
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .recovery_text = None;
+            c.ui_sink.refresh_tray();
             if let Some(d) = dash_w.upgrade() {
                 d.set_recovery_text("".into());
             }
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_view_recovery_in_history(move || {
+            let c = ctrl_w.borrow();
+            c.overlay.hide_recovery();
+            if let Some(d) = dash_w.upgrade() {
+                d.set_showing_trash(false);
+                d.set_active_tab("history".into());
+            }
+            c.refresh_history();
         });
     }
     #[cfg(feature = "store")]
@@ -1135,13 +1208,13 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         let ctrl_w = Rc::clone(ctrl);
         let dash_w = dash.as_weak();
         dash.on_dismiss_recovery(move || {
-            ctrl_w
-                .borrow()
-                .snapshot
+            let c = ctrl_w.borrow();
+            c.overlay.hide_recovery();
+            c.snapshot
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .recovery_text = None;
-            ctrl_w.borrow().ui_sink.refresh_tray();
+            c.ui_sink.refresh_tray();
             if let Some(d) = dash_w.upgrade() {
                 d.set_recovery_text("".into());
             }
@@ -1372,6 +1445,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
                 .engine_backend = engine_backend_key(idx).to_owned();
             c.save_settings(false);
             c.refresh_models();
+            c.refresh_active_engine_display();
             let coord = c.coordinator.clone();
             let _ = thread::Builder::new()
                 .name("eqho-engine-reload".into())
@@ -1440,7 +1514,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         });
     }
 
-    // History tab
+    // History tab (with Trash bin & Copy feedback state)
     {
         let ctrl_w = Rc::clone(ctrl);
         let dash_w = dash.as_weak();
@@ -1454,20 +1528,34 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     {
         let ctrl_w = Rc::clone(ctrl);
         let dash_w = dash.as_weak();
-        dash.on_copy_history_entry(move |txt| {
+        dash.on_copy_history_entry(move |ts_key, txt| {
             let _ = ctrl_w.borrow().platform.set_text(&txt, false);
             if let Some(d) = dash_w.upgrade() {
+                d.set_copied_ts_key(ts_key.clone());
                 d.set_history_status("Copied to clipboard".into());
+                let dash_clear = dash_w.clone();
+                let key_clear = ts_key;
+                slint::Timer::single_shot(std::time::Duration::from_millis(1500), move || {
+                    if let Some(d2) = dash_clear.upgrade()
+                        && d2.get_copied_ts_key() == key_clear
+                    {
+                        d2.set_copied_ts_key("".into());
+                    }
+                });
             }
         });
     }
     {
         let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
         dash.on_delete_history_entry(move |ts_key| {
             if let Ok(ts) = ts_key.parse::<f64>() {
                 let c = ctrl_w.borrow();
-                let _ = c.history.delete(ts);
+                let _ = c.history.move_to_trash(ts);
                 c.refresh_history();
+                if let Some(d) = dash_w.upgrade() {
+                    d.set_history_status("Moved to Trash".into());
+                }
             }
         });
     }
@@ -1476,10 +1564,61 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         let dash_w = dash.as_weak();
         dash.on_clear_history(move || {
             let c = ctrl_w.borrow();
-            let _ = c.history.clear();
+            let _ = c.history.move_all_to_trash();
             c.refresh_history();
             if let Some(d) = dash_w.upgrade() {
-                d.set_history_status("History cleared".into());
+                d.set_history_status("Moved all to Trash".into());
+            }
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_toggle_trash_view(move |show_trash| {
+            if let Some(d) = dash_w.upgrade() {
+                d.set_showing_trash(show_trash);
+                d.set_history_status("".into());
+            }
+            ctrl_w.borrow().refresh_history();
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_restore_trash_entry(move |ts_key| {
+            if let Ok(ts) = ts_key.parse::<f64>() {
+                let c = ctrl_w.borrow();
+                let _ = c.history.restore_from_trash(ts);
+                c.refresh_history();
+                if let Some(d) = dash_w.upgrade() {
+                    d.set_history_status("Restored to History".into());
+                }
+            }
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_delete_trash_permanently(move |ts_key| {
+            if let Ok(ts) = ts_key.parse::<f64>() {
+                let c = ctrl_w.borrow();
+                let _ = c.history.delete(ts);
+                c.refresh_history();
+                if let Some(d) = dash_w.upgrade() {
+                    d.set_history_status("Deleted permanently".into());
+                }
+            }
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_empty_trash(move || {
+            let c = ctrl_w.borrow();
+            let _ = c.history.empty_trash();
+            c.refresh_history();
+            if let Some(d) = dash_w.upgrade() {
+                d.set_history_status("Trash emptied".into());
             }
         });
     }
@@ -1588,6 +1727,20 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
                 .unwrap_or_else(|e| e.into_inner())
                 .volume_duck = volume_duck_key(idx).to_owned();
             c.save_settings(false);
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        dash.on_history_trash_days_selected(move |idx| {
+            let days = history_trash_days_value(idx);
+            let c = ctrl_w.borrow();
+            c.settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .history_trash_days = days;
+            c.save_settings(false);
+            let _ = c.history.purge_expired_trash(days, now_epoch_secs());
+            c.refresh_history();
         });
     }
     {
@@ -2228,10 +2381,13 @@ pub fn run_desktop_app(
         settings.onboarding_done = true;
     }
     let history = TranscriptHistory::with_default_cap(&paths.history_path);
+    if !is_isolated {
+        let _ = history.purge_expired_trash(settings.history_trash_days, now_epoch_secs());
+    }
 
     let platform = Arc::new(EqhoPlatformImpl::default());
     let damt_platform = Arc::new(build_damt_platform(is_isolated, &error_log));
-    let hw_class = detect_hardware_class(platform.as_ref());
+    let (hw_class, gpu_name) = detect_hardware_info(platform.as_ref());
 
     let is_dark = resolve_theme_is_dark(
         &settings.theme,
@@ -2246,10 +2402,16 @@ pub fn run_desktop_app(
     let settings_arc = Arc::new(Mutex::new(settings.clone()));
     let coord_slot: Arc<OnceLock<DictationCoordinator>> = Arc::new(OnceLock::new());
     let overlay_slot: Arc<OnceLock<Arc<OverlayHandle>>> = Arc::new(OnceLock::new());
+    let tray_slot: Arc<OnceLock<slint::Weak<EqhoTray>>> = Arc::new(OnceLock::new());
+    let snapshot_slot: Arc<OnceLock<Arc<Mutex<UiSyncSnapshot>>>> = Arc::new(OnceLock::new());
+    let open_history_requested = Arc::new(AtomicBool::new(false));
 
     let on_action: OverlayActionCallback = {
         let coord_slot = Arc::clone(&coord_slot);
         let overlay_slot = Arc::clone(&overlay_slot);
+        let tray_slot = Arc::clone(&tray_slot);
+        let snapshot_slot = Arc::clone(&snapshot_slot);
+        let open_history_requested = Arc::clone(&open_history_requested);
         let settings_arc = Arc::clone(&settings_arc);
         let settings_path = paths.settings_path.clone();
         let dash_weak = Arc::clone(&dash_weak);
@@ -2257,6 +2419,9 @@ pub fn run_desktop_app(
         Arc::new(move |action| {
             let coord_slot = Arc::clone(&coord_slot);
             let overlay_slot = Arc::clone(&overlay_slot);
+            let tray_slot = Arc::clone(&tray_slot);
+            let snapshot_slot = Arc::clone(&snapshot_slot);
+            let open_history_requested = Arc::clone(&open_history_requested);
             let settings_arc = Arc::clone(&settings_arc);
             let settings_path = settings_path.clone();
             let dash_weak = Arc::clone(&dash_weak);
@@ -2304,6 +2469,62 @@ pub fn run_desktop_app(
                                 });
                             }
                         }
+                        OverlayAction::RecoveryShowText => {
+                            if let Some(ov) = overlay_slot.get() {
+                                ov.hide_recovery();
+                            }
+                            open_history_requested.store(true, Ordering::Release);
+                            let dash_weak_opt = dash_weak
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .clone();
+                            let tray_w = tray_slot.get().cloned();
+                            let open_hist = Arc::clone(&open_history_requested);
+                            let _ = slint::invoke_from_event_loop(move || {
+                                if let Some(weak) = dash_weak_opt
+                                    && let Some(dash) = weak.upgrade()
+                                {
+                                    open_hist.store(false, Ordering::Release);
+                                    dash.set_showing_trash(false);
+                                    dash.set_active_tab("history".into());
+                                    let _ = dash.show();
+                                    return;
+                                }
+                                if let Some(tw) = tray_w
+                                    && let Some(t) = tw.upgrade()
+                                {
+                                    t.invoke_open_dashboard();
+                                }
+                            });
+                        }
+                        OverlayAction::RecoveryCopy | OverlayAction::RecoveryDiscard => {
+                            if matches!(action, OverlayAction::RecoveryCopy) {
+                                let _ = coord.copy_last_dictation();
+                            }
+                            if let Some(ov) = overlay_slot.get() {
+                                ov.hide_recovery();
+                            }
+                            if let Some(snap) = snapshot_slot.get() {
+                                snap.lock().unwrap_or_else(|e| e.into_inner()).recovery_text = None;
+                            }
+                            let dash_weak_opt = dash_weak
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .clone();
+                            let tray_w = tray_slot.get().cloned();
+                            let _ = slint::invoke_from_event_loop(move || {
+                                if let Some(weak) = dash_weak_opt
+                                    && let Some(dash) = weak.upgrade()
+                                {
+                                    dash.set_recovery_text("".into());
+                                }
+                                if let Some(tw) = tray_w
+                                    && let Some(t) = tw.upgrade()
+                                {
+                                    t.set_has_recovery(false);
+                                }
+                            });
+                        }
                     }
                 });
         })
@@ -2330,6 +2551,7 @@ pub fn run_desktop_app(
             return ExitCode::from(1);
         }
     };
+    let _ = tray_slot.set(tray.as_weak());
 
     if let Ok((w, h, rgba)) = build_tray_icon_rgba(light_taskbar, false) {
         tray.set_tray_icon(rgba_to_slint_image(w, h, &rgba));
@@ -2351,6 +2573,7 @@ pub fn run_desktop_app(
         hotkey: settings.hotkey.clone(),
         light_taskbar,
     }));
+    let _ = snapshot_slot.set(Arc::clone(&snapshot));
 
     let ui_sink = Arc::new(AppUiSink {
         overlay: Arc::clone(&overlay),
@@ -2401,6 +2624,7 @@ pub fn run_desktop_app(
         platform,
         damt_platform,
         hw_class,
+        gpu_name,
         dashboard: None,
         dash_weak,
         snapshot,
@@ -2458,8 +2682,21 @@ pub fn run_desktop_app(
     }
     {
         let ctrl_w = Rc::clone(&ctrl);
+        let open_hist = Arc::clone(&open_history_requested);
         tray.on_open_dashboard(move || {
-            ensure_dashboard(&ctrl_w, None);
+            let tab = if open_hist.swap(false, Ordering::AcqRel) {
+                Some("history")
+            } else {
+                None
+            };
+            ensure_dashboard(&ctrl_w, tab);
+            if tab == Some("history") {
+                let c = ctrl_w.borrow();
+                if let Some(d) = &c.dashboard {
+                    d.set_showing_trash(false);
+                }
+                c.refresh_history();
+            }
         });
     }
     {

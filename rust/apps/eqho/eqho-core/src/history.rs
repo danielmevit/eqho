@@ -15,6 +15,10 @@ pub const MAX_ENTRIES: usize = 1000;
 
 static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+fn is_false(v: &bool) -> bool {
+    !*v
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TranscriptEntry {
     pub ts: f64,
@@ -22,6 +26,14 @@ pub struct TranscriptEntry {
     pub duration: f64,
     pub model: String,
     pub lang: String,
+    /// Set to `true` when automatic pasting into the target app failed so the
+    /// History tab can highlight the entry with a subtle warning border.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub paste_failed: bool,
+    /// Unix epoch timestamp (seconds) when this entry was soft-deleted to Trash.
+    /// `None` means it is an active history entry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deleted_at: Option<f64>,
 }
 
 #[derive(Debug, Error)]
@@ -63,9 +75,30 @@ impl TranscriptHistory {
         model: &str,
         lang: &str,
     ) -> Result<(), HistoryError> {
+        self.append_with_status(text, duration, model, lang, false)
+    }
+
+    pub fn append_failed_paste(
+        &self,
+        text: &str,
+        duration: f64,
+        model: &str,
+        lang: &str,
+    ) -> Result<(), HistoryError> {
+        self.append_with_status(text, duration, model, lang, true)
+    }
+
+    pub fn append_with_status(
+        &self,
+        text: &str,
+        duration: f64,
+        model: &str,
+        lang: &str,
+        paste_failed: bool,
+    ) -> Result<(), HistoryError> {
         let now = Timestamp::now();
         let ts = now.as_second() as f64 + f64::from(now.subsec_nanosecond()) / 1_000_000_000.0;
-        self.append_with_ts(ts, text, duration, model, lang)
+        self.append_with_ts_and_status(ts, text, duration, model, lang, paste_failed)
     }
 
     pub fn append_with_ts(
@@ -76,6 +109,18 @@ impl TranscriptHistory {
         model: &str,
         lang: &str,
     ) -> Result<(), HistoryError> {
+        self.append_with_ts_and_status(ts, text, duration, model, lang, false)
+    }
+
+    pub fn append_with_ts_and_status(
+        &self,
+        ts: f64,
+        text: &str,
+        duration: f64,
+        model: &str,
+        lang: &str,
+        paste_failed: bool,
+    ) -> Result<(), HistoryError> {
         if text.is_empty() {
             return Ok(());
         }
@@ -85,6 +130,8 @@ impl TranscriptHistory {
             duration: (duration * 100.0).round() / 100.0,
             model: model.to_owned(),
             lang: lang.to_owned(),
+            paste_failed,
+            deleted_at: None,
         };
 
         let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
@@ -102,12 +149,111 @@ impl TranscriptHistory {
         self.prune_locked()
     }
 
-    /// Return all entries, newest first.
+    /// Return all active (non-trashed) entries, newest first.
     pub fn read_all(&self) -> Vec<TranscriptEntry> {
         let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
-        let mut entries = self.read_locked();
+        let mut entries: Vec<TranscriptEntry> = self
+            .read_locked()
+            .into_iter()
+            .filter(|e| e.deleted_at.is_none())
+            .collect();
         entries.reverse();
         entries
+    }
+
+    /// Return all trashed entries, most recently trashed first.
+    pub fn read_trash(&self) -> Vec<TranscriptEntry> {
+        let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        let mut entries: Vec<TranscriptEntry> = self
+            .read_locked()
+            .into_iter()
+            .filter(|e| e.deleted_at.is_some())
+            .collect();
+        entries.sort_by(|a, b| {
+            b.deleted_at
+                .unwrap_or(0.0)
+                .partial_cmp(&a.deleted_at.unwrap_or(0.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        entries
+    }
+
+    /// Soft-delete a single entry into Trash.
+    pub fn move_to_trash(&self, ts: f64) -> Result<(), HistoryError> {
+        let now = Timestamp::now();
+        let now_s = now.as_second() as f64 + f64::from(now.subsec_nanosecond()) / 1_000_000_000.0;
+        self.move_to_trash_at(ts, now_s)
+    }
+
+    pub fn move_to_trash_at(&self, ts: f64, deleted_at: f64) -> Result<(), HistoryError> {
+        let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        let mut entries = self.read_locked();
+        for e in &mut entries {
+            if e.ts == ts && e.deleted_at.is_none() {
+                e.deleted_at = Some(deleted_at);
+            }
+        }
+        self.write_locked(&entries)
+    }
+
+    /// Soft-delete all currently active entries into Trash.
+    pub fn move_all_to_trash(&self) -> Result<(), HistoryError> {
+        let now = Timestamp::now();
+        let now_s = now.as_second() as f64 + f64::from(now.subsec_nanosecond()) / 1_000_000_000.0;
+        let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        let mut entries = self.read_locked();
+        for e in &mut entries {
+            if e.deleted_at.is_none() {
+                e.deleted_at = Some(now_s);
+            }
+        }
+        self.write_locked(&entries)
+    }
+
+    /// Restore a trashed entry back into active History.
+    pub fn restore_from_trash(&self, ts: f64) -> Result<(), HistoryError> {
+        let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        let mut entries = self.read_locked();
+        for e in &mut entries {
+            if e.ts == ts {
+                e.deleted_at = None;
+            }
+        }
+        self.write_locked(&entries)
+    }
+
+    /// Permanently remove all trashed entries while leaving active History untouched.
+    pub fn empty_trash(&self) -> Result<(), HistoryError> {
+        let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        let entries: Vec<TranscriptEntry> = self
+            .read_locked()
+            .into_iter()
+            .filter(|e| e.deleted_at.is_none())
+            .collect();
+        self.write_locked(&entries)
+    }
+
+    /// Permanently purge trashed entries older than `retention_days` (`<= 0` disables auto-purge).
+    pub fn purge_expired_trash(&self, retention_days: i32, now_epoch_s: f64) -> Result<usize, HistoryError> {
+        if retention_days <= 0 {
+            return Ok(0);
+        }
+        let cutoff = now_epoch_s - f64::from(retention_days) * 86_400.0;
+        let _guard = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        let entries = self.read_locked();
+        let before = entries.len();
+        let kept: Vec<TranscriptEntry> = entries
+            .into_iter()
+            .filter(|e| match e.deleted_at {
+                Some(del_ts) => del_ts > cutoff,
+                None => true,
+            })
+            .collect();
+        let removed = before.saturating_sub(kept.len());
+        if removed > 0 {
+            self.write_locked(&kept)?;
+        }
+        Ok(removed)
     }
 
     /// Case-insensitive substring search, newest first.
@@ -352,5 +498,58 @@ mod tests {
         let d0 = local_day_ordinal(1_763_816_400.0);
         let d1 = local_day_ordinal(1_763_816_400.0 + 86_400.0);
         assert_eq!(d1 - d0, 1);
+    }
+
+    #[test]
+    fn trash_lifecycle_restore_failed_paste_and_retention_purge() {
+        let dir = temp_dir("trash_lifecycle");
+        let path = dir.join("history.jsonl");
+        let hist = TranscriptHistory::with_default_cap(&path);
+
+        hist.append_with_ts(1000.0, "active one", 1.0, "tiny", "en")
+            .unwrap();
+        hist.append_failed_paste("failed paste note", 2.0, "distil-large-v3", "en")
+            .unwrap();
+        hist.append_with_ts(2000.0, "old trashed", 1.0, "tiny", "en")
+            .unwrap();
+        hist.append_with_ts(3000.0, "recent trashed", 1.0, "tiny", "en")
+            .unwrap();
+
+        let all = hist.read_all();
+        assert_eq!(all.len(), 4);
+        assert!(all.iter().any(|e| e.text == "failed paste note" && e.paste_failed));
+
+        // Soft-delete two entries at distinct deletion timestamps
+        let day = 86_400.0;
+        let now = 100.0 * day;
+        hist.move_to_trash_at(2000.0, now - 40.0 * day).unwrap();
+        hist.move_to_trash_at(3000.0, now - 5.0 * day).unwrap();
+
+        assert_eq!(hist.read_all().len(), 2);
+        assert_eq!(hist.read_trash().len(), 2);
+
+        // Retention = 0 (Never) purges nothing
+        assert_eq!(hist.purge_expired_trash(0, now).unwrap(), 0);
+        assert_eq!(hist.read_trash().len(), 2);
+
+        // Retention = 30 days purges only the 40-day-old trashed entry
+        assert_eq!(hist.purge_expired_trash(30, now).unwrap(), 1);
+        let remaining_trash = hist.read_trash();
+        assert_eq!(remaining_trash.len(), 1);
+        assert_eq!(remaining_trash[0].text, "recent trashed");
+
+        // Restore brings it back into active history
+        hist.restore_from_trash(3000.0).unwrap();
+        assert!(hist.read_trash().is_empty());
+        assert_eq!(hist.read_all().len(), 3);
+
+        // Move all to trash & empty trash
+        hist.move_all_to_trash().unwrap();
+        assert!(hist.read_all().is_empty());
+        assert_eq!(hist.read_trash().len(), 3);
+        hist.empty_trash().unwrap();
+        assert!(hist.read_trash().is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

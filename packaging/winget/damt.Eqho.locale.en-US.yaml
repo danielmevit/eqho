@@ -1,11 +1,11 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
 PackageIdentifier: damt.Eqho
-PackageVersion: 0.9.0
+PackageVersion: 0.9.1
 PackageLocale: en-US
 Publisher: damt.xyz
 PublisherUrl: https://damt.xyz
 PublisherSupportUrl: https://github.com/danielmevit/eqho/issues
-Author: Daniel Mevit
+Author: damt.xyz
 PackageName: Eqho
 PackageUrl: https://danielmevit.github.io/eqho/
 License: AGPL-3.0
@@ -32,6 +32,6 @@ Tags:
 - privacy
 - accessibility
 - transcription
-ReleaseNotesUrl: https://github.com/danielmevit/eqho/releases/tag/v0.9.0
+ReleaseNotesUrl: https://github.com/danielmevit/eqho/releases/tag/v0.9.1
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0

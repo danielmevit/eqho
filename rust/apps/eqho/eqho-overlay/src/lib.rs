@@ -25,18 +25,21 @@ pub use underbar::{
     FINISHING_LABEL, LANG_ROW_HEIGHT, LANG_VISIBLE_ROWS, LangPopupLayout, LocalRect,
     POPUP_BOTTOM_PAD, POPUP_GAP, POPUP_PADDING_TOP, POPUP_PADDING_X, POPUP_SEARCH_GAP,
     POPUP_SEARCH_HEIGHT, POPUP_WIDTH, PopupHit, RECENT_CHIP_GAP, RECENT_CHIP_HEIGHT,
-    RECENT_FADE_WIDTH, RECENT_STRIP_HEIGHT, RecentChip, RecentStripLayout, Rgba,
-    UNDERBAR_BOTTOM_RESERVE, UNDERBAR_EDGE_MARGIN, UNDERBAR_GAP, UNDERBAR_HEIGHT,
-    UNDERBAR_LINGER_MS, UNDERBAR_RADIUS, UnderbarControl, UnderbarLayout, UnderbarPlacement,
-    UnderbarSide, UnderbarTheme, UnderbarVisibility, calc_lang_popup_rect,
-    calc_panel_rect_with_underbar, calc_pill_position_with_controls, calc_recent_strip_layout,
+    RECENT_FADE_WIDTH, RECENT_STRIP_HEIGHT, RECOVERY_CARD_HEIGHT, RECOVERY_CARD_RADIUS,
+    RECOVERY_CARD_WIDTH, RecentChip, RecentStripLayout, RecoveryCardButton, RecoveryCardLayout,
+    Rgba, UNDERBAR_BOTTOM_RESERVE, UNDERBAR_EDGE_MARGIN, UNDERBAR_GAP, UNDERBAR_HEIGHT,
+    UNDERBAR_HOVER_ALPHA_RATIO, UNDERBAR_LINGER_MS, UNDERBAR_RADIUS, UNDERBAR_REST_ALPHA_RATIO,
+    UnderbarControl, UnderbarLayout, UnderbarPlacement, UnderbarSide, UnderbarTheme,
+    UnderbarVisibility, calc_lang_popup_rect, calc_panel_rect_with_underbar,
+    calc_pill_position_with_controls, calc_recent_strip_layout, calc_recovery_card_rect,
     calc_underbar_placement, calc_underbar_rect, delivery_mode_label, filter_languages,
     format_elapsed, format_language_code, is_cursor_in_hover_zone, next_delivery_mode,
     normalize_delivery_mode, point_in_overlay_rect, sanitize_recent_languages, step_recent_scroll,
     wheel_delta_to_notches,
 };
 
-/// User actions emitted from the floating under-pill control bar and searchable language menu.
+/// User actions emitted from the floating under-pill control bar, language menu, and
+/// failed-paste recovery card.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OverlayAction {
     Cancel,
@@ -44,6 +47,9 @@ pub enum OverlayAction {
     TogglePin(bool),
     ToggleDeliveryMode(String),
     SelectLanguage(String),
+    RecoveryShowText,
+    RecoveryCopy,
+    RecoveryDiscard,
 }
 
 /// Callback invoked when the user clicks an interactive control in the overlay.
@@ -285,6 +291,32 @@ impl OverlayHandle {
             guard.config = config;
             guard.visibility.set_controls_enabled(controls_enabled);
             guard.visibility.set_pinned(controls_pinned);
+        }
+    }
+
+    /// Show the compact floating failed-paste action card (`Show text` / `Copy` / `Discard`)
+    /// anchored at the pill's screen position when automatic pasting fails.
+    pub fn show_recovery(&self, text: &str) {
+        if !self.enabled.load(Ordering::Acquire) || text.trim().is_empty() {
+            return;
+        }
+        #[cfg(windows)]
+        if let Ok(guard) = self.client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(win::OverlayCmd::ShowRecovery(text.to_owned()));
+        }
+        #[cfg(not(windows))]
+        let _ = text;
+    }
+
+    /// Hide the floating failed-paste recovery card if visible.
+    pub fn hide_recovery(&self) {
+        #[cfg(windows)]
+        if let Ok(guard) = self.client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(win::OverlayCmd::HideRecovery);
         }
     }
 

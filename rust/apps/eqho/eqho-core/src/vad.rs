@@ -7,6 +7,9 @@ use std::f32::consts::PI;
 pub const SAMPLE_RATE: usize = 16_000;
 pub const CHUNK_DURATION_S: f64 = 0.5;
 pub const CHUNK_SAMPLES: usize = 8_000;
+/// Finer 250 ms audio chunk size used by the coordinator so Live delivery reacts rapidly to
+/// short natural pauses without waiting for multiple 500 ms chunks.
+pub const FINE_CHUNK_SAMPLES: usize = 4_000;
 pub const WAVE_BLOCK_SAMPLES: usize = 800;
 pub const WAVE_POINTS: usize = 48;
 
@@ -14,8 +17,15 @@ pub const SILENCE_THRESHOLD: f32 = 0.003;
 pub const VAD_THRESHOLD_MIN: f32 = 0.0009;
 pub const VAD_NOISE_MULTIPLIER: f32 = 3.5;
 pub const SILENCE_TIMEOUT_S: f64 = 1.2;
+/// Shorter pause commit threshold used when Live delivery mode is active (~0.45 s).
+pub const LIVE_SILENCE_TIMEOUT_S: f64 = 0.45;
+/// Soft pause commit threshold in Live mode after continuous speech exceeds this duration.
+pub const LIVE_SOFT_FLUSH_S: f64 = 3.5;
+/// Maximum continuous speech duration before forcing a Live delivery flush.
+pub const LIVE_MAX_PHRASE_S: f64 = 6.0;
 pub const MIN_PHRASE_DURATION_S: f64 = 0.4;
 pub const PARTIAL_INTERVAL_S: f64 = 1.0;
+pub const LIVE_PARTIAL_INTERVAL_S: f64 = 0.75;
 pub const PARTIAL_TAIL_SECONDS: f64 = 10.0;
 pub const PARTIAL_MAX_INFER_S: f64 = 1.5;
 
@@ -161,11 +171,13 @@ pub struct PhraseSegmenter {
     vad: AdaptiveVad,
     max_preroll_chunks: usize,
     max_phrase_samples: usize,
+    live_mode: bool,
     preroll: VecDeque<Vec<f32>>,
     chunks: Vec<Vec<f32>>,
     total_samples: usize,
     utterance_peak: f32,
     is_speaking: bool,
+    speech_s: f64,
     silence_s: f64,
     since_partial_s: f64,
 }
@@ -183,14 +195,26 @@ impl PhraseSegmenter {
             vad: AdaptiveVad::new(sensitivity),
             max_preroll_chunks,
             max_phrase_samples,
+            live_mode: false,
             preroll: VecDeque::with_capacity(max_preroll_chunks + 1),
             chunks: Vec::new(),
             total_samples: 0,
             utterance_peak: 0.0,
             is_speaking: false,
+            speech_s: 0.0,
             silence_s: 0.0,
             since_partial_s: 0.0,
         }
+    }
+
+    /// Enable or disable snappy Live delivery segmentation (shorter pause timeout & continuous
+    /// flush cap so dictated words stream into the target app without multi-second lag).
+    pub fn set_live_mode(&mut self, live: bool) {
+        self.live_mode = live;
+    }
+
+    pub fn is_live_mode(&self) -> bool {
+        self.live_mode
     }
 
     pub fn set_sensitivity(&mut self, sensitivity: f32) {
@@ -231,6 +255,7 @@ impl PhraseSegmenter {
             self.silence_s = 0.0;
             if !self.is_speaking {
                 self.is_speaking = true;
+                self.speech_s = 0.0;
                 self.since_partial_s = 0.0;
                 while let Some(pre) = self.preroll.pop_front() {
                     let pre_rms = chunk_rms(&pre);
@@ -243,19 +268,34 @@ impl PhraseSegmenter {
             self.chunks.push(chunk.to_vec());
             self.total_samples += chunk.len();
             self.utterance_peak = self.utterance_peak.max(rms);
+            self.speech_s += chunk_dur;
             self.since_partial_s += chunk_dur;
 
-            if self.total_samples >= self.max_phrase_samples {
+            let effective_max_samples = if self.live_mode {
+                self.max_phrase_samples
+                    .min((LIVE_MAX_PHRASE_S * SAMPLE_RATE as f64).round() as usize)
+            } else {
+                self.max_phrase_samples
+            };
+            let buf_duration = self.total_samples as f64 / SAMPLE_RATE as f64;
+            let live_soft_dip = self.live_mode
+                && buf_duration >= LIVE_SOFT_FLUSH_S
+                && rms < threshold * 1.45;
+            if self.total_samples >= effective_max_samples || live_soft_dip {
                 if let Some(ev) = self.emit_phrase(threshold) {
                     events.push(ev);
                 }
                 return events;
             }
 
-            let buf_duration = self.total_samples as f64 / SAMPLE_RATE as f64;
-            if buf_duration > 1.0 && self.since_partial_s >= PARTIAL_INTERVAL_S {
+            let partial_interval = if self.live_mode {
+                LIVE_PARTIAL_INTERVAL_S
+            } else {
+                PARTIAL_INTERVAL_S
+            };
+            if self.speech_s > 1.0 && self.since_partial_s >= partial_interval {
                 self.since_partial_s = 0.0;
-                let tail_chunks = ((PARTIAL_TAIL_SECONDS / CHUNK_DURATION_S).round() as usize).max(1);
+                let tail_chunks = ((PARTIAL_TAIL_SECONDS / chunk_dur.max(0.1)).round() as usize).max(1);
                 let start = self.chunks.len().saturating_sub(tail_chunks);
                 let partial_audio = concat_chunks(&self.chunks[start..]);
                 events.push(VadEvent::PartialReady(partial_audio));
@@ -266,8 +306,18 @@ impl PhraseSegmenter {
             self.utterance_peak = self.utterance_peak.max(rms);
             self.silence_s += chunk_dur;
 
-            if self.total_samples >= self.max_phrase_samples || self.silence_s > SILENCE_TIMEOUT_S
-            {
+            let silence_timeout = if self.live_mode {
+                LIVE_SILENCE_TIMEOUT_S
+            } else {
+                SILENCE_TIMEOUT_S
+            };
+            let effective_max_samples = if self.live_mode {
+                self.max_phrase_samples
+                    .min((LIVE_MAX_PHRASE_S * SAMPLE_RATE as f64).round() as usize)
+            } else {
+                self.max_phrase_samples
+            };
+            if self.total_samples >= effective_max_samples || self.silence_s >= silence_timeout {
                 let buf_duration = self.total_samples as f64 / SAMPLE_RATE as f64;
                 if buf_duration >= MIN_PHRASE_DURATION_S {
                     if let Some(ev) = self.emit_phrase(threshold) {
@@ -337,6 +387,7 @@ impl PhraseSegmenter {
         self.total_samples = 0;
         self.utterance_peak = 0.0;
         self.is_speaking = false;
+        self.speech_s = 0.0;
         self.silence_s = 0.0;
         self.since_partial_s = 0.0;
     }
@@ -641,6 +692,50 @@ mod tests {
         let ds = downsample_wave(&block, WAVE_POINTS);
         assert_eq!(ds.len(), WAVE_POINTS);
         assert!((ds[0] - (-0.9)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn live_mode_commits_on_short_pause_and_continuous_cap() {
+        let speech = sine_wave(300.0, 0.05, FINE_CHUNK_SAMPLES);
+        let silence = vec![0.0_f32; FINE_CHUNK_SAMPLES];
+
+        // Batch mode: 0.5 s of silence (2 x 250 ms) must NOT commit yet
+        let mut batch = PhraseSegmenter::new(1.0, 2, 30.0);
+        for _ in 0..3 {
+            batch.push_chunk(&speech);
+        }
+        assert!(batch.push_chunk(&silence).is_empty());
+        assert!(batch.push_chunk(&silence).is_empty());
+
+        // Live mode: same 0.5 s of silence (>= 0.45 s) commits immediately!
+        let mut live = PhraseSegmenter::new(1.0, 2, 30.0);
+        live.set_live_mode(true);
+        for _ in 0..3 {
+            live.push_chunk(&speech);
+        }
+        assert!(live.push_chunk(&silence).is_empty());
+        let evs = live.push_chunk(&silence);
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, VadEvent::PhraseReady { .. })),
+            "Live mode should commit phrase after 0.5s pause"
+        );
+
+        // Live mode continuous speech flushes by LIVE_MAX_PHRASE_S (6.0 s = 24 x 250 ms)
+        let mut live_cont = PhraseSegmenter::new(1.0, 0, 30.0);
+        live_cont.set_live_mode(true);
+        let mut committed = false;
+        for _ in 0..24 {
+            if live_cont
+                .push_chunk(&speech)
+                .iter()
+                .any(|e| matches!(e, VadEvent::PhraseReady { .. }))
+            {
+                committed = true;
+                break;
+            }
+        }
+        assert!(committed, "Live mode should cap continuous phrase at 6s");
     }
 
     proptest! {

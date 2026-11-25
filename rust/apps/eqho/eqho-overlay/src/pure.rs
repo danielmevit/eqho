@@ -19,7 +19,7 @@ pub const MAX_TEXT_CHARS: usize = 220;
 /// Placeholder text shown while listening before real words arrive.
 pub const PLACEHOLDER: &str = "Listening...";
 /// Additional alpha multiplier applied to the pill in light theme.
-pub const LIGHT_PILL_ALPHA: f32 = 0.90;
+pub const LIGHT_PILL_ALPHA: f32 = 0.96;
 /// Number of discrete fade steps (matches `src/overlay.py`).
 pub const FADE_STEPS: u32 = 5;
 /// Milliseconds per fade step (matches `src/overlay.py`).
@@ -55,8 +55,8 @@ impl Default for OverlayConfig {
             monitor: "active".to_owned(),
             position: "bottom-center".to_owned(),
             pill_scale: 0.8,
-            pill_opacity: 0.85,
-            panel_opacity: 0.85,
+            pill_opacity: 0.95,
+            panel_opacity: 0.78,
             font_size: 14,
             show_level: true,
             dark_theme: true,
@@ -373,11 +373,13 @@ impl PillAnimator {
         self.alpha_logical
     }
 
-    /// Compute the effective 0..=255 pill alpha (applies `LIGHT_PILL_ALPHA` in light theme).
+    /// Compute the effective 0..=255 pill alpha (applies `LIGHT_PILL_ALPHA` in light theme
+    /// and a gentler opacity curve so the pill remains clearly visible).
     #[must_use]
     pub fn effective_pill_alpha(&self, cfg: &OverlayConfig) -> u8 {
         let theme_scale = if cfg.dark_theme { 1.0 } else { LIGHT_PILL_ALPHA };
-        let a = (self.alpha_logical * (cfg.pill_opacity as f32) * theme_scale).clamp(0.0, 1.0);
+        let base = (cfg.pill_opacity as f32).clamp(0.3, 1.0).powf(0.55);
+        let a = (self.alpha_logical * base * theme_scale).clamp(0.0, 1.0);
         (a * 255.0).round() as u8
     }
 

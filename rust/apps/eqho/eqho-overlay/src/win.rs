@@ -16,16 +16,16 @@ use windows::Win32::Graphics::Dwm::{
 use windows::Win32::Graphics::Gdi::{
     AC_SRC_ALPHA, AC_SRC_OVER, ANTIALIASED_QUALITY, BI_RGB, BITMAPINFO, BITMAPINFOHEADER,
     BLENDFUNCTION, BeginPaint, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, CreateCompatibleDC,
-    CreateDIBSection, CreateFontW, CreateSolidBrush, DEFAULT_CHARSET, DEFAULT_PITCH,
-    DIB_RGB_COLORS, DRAW_TEXT_FORMAT, DT_CALCRECT, DT_CENTER, DT_END_ELLIPSIS, DT_LEFT,
-    DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER, DT_WORDBREAK, DeleteDC, DeleteObject,
+    CreateDIBSection, CreateFontW, CreateRoundRectRgn, CreateSolidBrush, DEFAULT_CHARSET,
+    DEFAULT_PITCH, DIB_RGB_COLORS, DRAW_TEXT_FORMAT, DT_CALCRECT, DT_CENTER, DT_END_ELLIPSIS,
+    DT_LEFT, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER, DT_WORDBREAK, DeleteDC, DeleteObject,
     DrawTextW, EndPaint, FF_SWISS, FillRect, GdiFlush, GetDC, GetDeviceCaps, GetMonitorInfoW,
     HBITMAP, HDC, HFONT, HGDIOBJ, HMONITOR, InvalidateRect, LOGPIXELSY, MONITOR_DEFAULTTOPRIMARY,
     MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint, MonitorFromWindow,
     OUT_DEFAULT_PRECIS, PAINTSTRUCT, ReleaseDC, SelectObject, SetBkMode, SetTextColor,
-    TRANSPARENT,
+    SetWindowRgn, TRANSPARENT,
 };
-use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyState, GetKeyboardState, TME_LEAVE, TRACKMOUSEEVENT, ToUnicode,
     TrackMouseEvent, VK_BACK, VK_CAPITAL, VK_CONTROL, VK_DOWN, VK_ESCAPE, VK_LBUTTON, VK_LWIN,
@@ -45,7 +45,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_PAINT, WM_SETCURSOR, WM_SYSKEYDOWN, WM_TIMER, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
     WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
-use windows::core::PCWSTR;
+use windows::core::{PCSTR, PCWSTR};
 
 use crate::canvas::PremulCanvas;
 use crate::pure::{
@@ -54,10 +54,79 @@ use crate::pure::{
 };
 use crate::underbar::{
     self, FINISHING_LABEL, LANG_ROW_HEIGHT, LangPopupLayout, LocalRect, POPUP_PADDING_X, PopupHit,
-    RECENT_FADE_WIDTH, Rgba, UNDERBAR_RADIUS, UnderbarControl, UnderbarLayout, UnderbarPlacement,
-    UnderbarTheme, UnderbarVisibility,
+    RECENT_FADE_WIDTH, RECOVERY_CARD_RADIUS, RecoveryCardButton, RecoveryCardLayout, Rgba,
+    UNDERBAR_HOVER_ALPHA_RATIO, UNDERBAR_RADIUS, UNDERBAR_REST_ALPHA_RATIO, UnderbarControl,
+    UnderbarLayout, UnderbarPlacement, UnderbarTheme, UnderbarVisibility,
 };
 use crate::{FlagBitmapProvider, OverlayAction, OverlayActionCallback};
+
+#[repr(C)]
+struct AccentPolicy {
+    accent_state: u32,
+    accent_flags: u32,
+    gradient_color: u32,
+    animation_id: u32,
+}
+
+#[repr(C)]
+struct WindowCompositionAttribData {
+    attrib: u32,
+    pv_data: *mut c_void,
+    cb_data: usize,
+}
+
+const WCA_ACCENT_POLICY: u32 = 19;
+const ACCENT_ENABLE_BLURBEHIND: u32 = 3;
+
+/// Enable subtle Windows DWM blur-behind (`ACCENT_ENABLE_BLURBEHIND`) dynamically via `user32.dll`.
+/// Gracefully no-ops if unavailable on older or headless environments.
+fn apply_subtle_blur_behind(hwnd: HWND) {
+    let user32_name: Vec<u16> = "user32.dll\0".encode_utf16().collect();
+    // SAFETY: Resolving `SetWindowCompositionAttribute` from already-loaded `user32.dll`.
+    let Ok(hmod) = (unsafe { GetModuleHandleW(PCWSTR(user32_name.as_ptr())) }) else {
+        return;
+    };
+    let proc_name = b"SetWindowCompositionAttribute\0";
+    // SAFETY: Looking up documented Win10/11 accent policy entrypoint on `user32.dll`.
+    let Some(proc_ptr) = (unsafe { GetProcAddress(hmod, PCSTR(proc_name.as_ptr())) }) else {
+        return;
+    };
+    type SetWcaFn = unsafe extern "system" fn(HWND, *mut WindowCompositionAttribData) -> i32;
+    // SAFETY: Function pointer signature matches `SetWindowCompositionAttribute`.
+    let set_wca: SetWcaFn = unsafe { std::mem::transmute(proc_ptr) };
+    let mut policy = AccentPolicy {
+        accent_state: ACCENT_ENABLE_BLURBEHIND,
+        accent_flags: 0,
+        gradient_color: 0,
+        animation_id: 0,
+    };
+    let mut data = WindowCompositionAttribData {
+        attrib: WCA_ACCENT_POLICY,
+        pv_data: (&mut policy as *mut AccentPolicy).cast::<c_void>(),
+        cb_data: std::mem::size_of::<AccentPolicy>(),
+    };
+    // SAFETY: `hwnd` and `data` are valid for the duration of the call.
+    unsafe {
+        let _ = set_wca(hwnd, &mut data);
+    }
+}
+
+/// Clip DWM blur-behind cleanly to a rounded rectangle so no square blur halo bleeds past corners.
+fn apply_rounded_region(hwnd: HWND, width: u32, height: u32, radius_px: i32) {
+    let w = width as i32;
+    let h = height as i32;
+    if w <= 0 || h <= 0 {
+        return;
+    }
+    let diam = (radius_px * 2).max(2);
+    // SAFETY: `SetWindowRgn` takes ownership of the HRGN on success; delete it on failure.
+    unsafe {
+        let rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, diam, diam);
+        if !rgn.is_invalid() && SetWindowRgn(hwnd, Some(rgn), true) == 0 {
+            let _ = DeleteObject(rgn.into());
+        }
+    }
+}
 
 const WM_APP_CMD: u32 = WM_APP + 1;
 const WM_APP_POPUP_VKEY: u32 = WM_APP + 2;
@@ -84,6 +153,8 @@ pub(crate) enum OverlayCmd {
         recent_languages: Vec<String>,
     },
     UpdateConfig(OverlayConfig),
+    ShowRecovery(String),
+    HideRecovery,
     Hide,
     Shutdown,
 }
@@ -435,14 +506,17 @@ struct OverlayState {
     panel_hwnd: HWND,
     bar_hwnd: HWND,
     popup_hwnd: HWND,
+    recovery_hwnd: HWND,
     animator: PillAnimator,
     pill_dib: LayeredDib,
     bar_dib: LayeredDib,
     popup_dib: LayeredDib,
+    recovery_dib: LayeredDib,
     text_mask: LayeredDib,
     bar_canvas: PremulCanvas,
     popup_canvas: PremulCanvas,
     strip_canvas: PremulCanvas,
+    recovery_canvas: PremulCanvas,
     ui_fonts: UiFonts,
     visible: bool,
     timer_running: bool,
@@ -462,6 +536,7 @@ struct OverlayState {
     bar_placement: UnderbarPlacement,
     hovered_bar_control: Option<UnderbarControl>,
     bar_tracking_leave: bool,
+    bar_hover_blend: f32,
     bar_dirty: bool,
     last_elapsed_secs: u64,
     last_bar_alpha: u8,
@@ -479,6 +554,13 @@ struct OverlayState {
     popup_dirty: bool,
     prev_mouse_down: bool,
     kb_hook: Option<HHOOK>,
+
+    // Floating failed-paste recovery card anchored at the pill position
+    recovery_shown: bool,
+    recovery_rect: OverlayRect,
+    recovery_layout: RecoveryCardLayout,
+    hovered_recovery_btn: Option<RecoveryCardButton>,
+    recovery_tracking_leave: bool,
 }
 
 impl OverlayState {
@@ -496,11 +578,6 @@ impl OverlayState {
             .and_then(|provider| provider(&key));
         self.flag_cache.insert(key, fetched.clone());
         fetched
-    }
-
-    fn has_active_flag(&mut self) -> bool {
-        let code = self.config.language.clone();
-        self.get_flag(&code).is_some()
     }
 
     fn emit_action(&self, action: OverlayAction) {
@@ -616,6 +693,8 @@ impl OverlayState {
                     recent_languages,
                 } => self.cmd_update_session_meta(language, delivery_mode, pinned, recent_languages),
                 OverlayCmd::UpdateConfig(cfg) => self.cmd_update_config(cfg),
+                OverlayCmd::ShowRecovery(text) => self.cmd_show_recovery(text),
+                OverlayCmd::HideRecovery => self.hide_recovery_now(),
                 OverlayCmd::Hide => self.cmd_hide(),
                 OverlayCmd::Shutdown => {
                     should_quit = true;
@@ -635,6 +714,211 @@ impl OverlayState {
             self.panel_shown = false;
         }
         self.panel_text.clear();
+    }
+
+    fn hide_recovery_now(&mut self) {
+        if self.recovery_shown {
+            // SAFETY: Hiding recovery card window without activating.
+            unsafe {
+                let _ = ShowWindow(self.recovery_hwnd, SW_HIDE);
+            }
+            self.recovery_shown = false;
+            self.hovered_recovery_btn = None;
+            self.recovery_tracking_leave = false;
+        }
+    }
+
+    fn cmd_show_recovery(&mut self, _text: String) {
+        if !self.config.enabled {
+            return;
+        }
+        self.update_pill_geometry();
+        self.recovery_layout = RecoveryCardLayout::compute();
+        self.recovery_rect = underbar::calc_recovery_card_rect(
+            self.pill_rect,
+            self.recovery_layout.width,
+            self.recovery_layout.height,
+            self.active_work_area,
+        );
+        self.hovered_recovery_btn = None;
+        self.recovery_shown = true;
+        apply_rounded_region(
+            self.recovery_hwnd,
+            self.recovery_rect.width,
+            self.recovery_rect.height,
+            RECOVERY_CARD_RADIUS as i32,
+        );
+        self.render_recovery_frame();
+        // SAFETY: Surfacing recovery action card without stealing keyboard focus.
+        unsafe {
+            let _ = ShowWindow(self.recovery_hwnd, SW_SHOWNOACTIVATE);
+            let _ = SetWindowPos(
+                self.recovery_hwnd,
+                Some(HWND_TOPMOST),
+                self.recovery_rect.x,
+                self.recovery_rect.y,
+                self.recovery_rect.width as i32,
+                self.recovery_rect.height as i32,
+                SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            );
+        }
+    }
+
+    fn render_recovery_frame(&mut self) {
+        let layout = self.recovery_layout;
+        let theme = UnderbarTheme::for_theme(self.config.dark_theme);
+        let dark = self.config.dark_theme;
+
+        // Subtle neutral-warm translucent notification surface (no heavy brown fill, no left rail).
+        let card_bg = if dark {
+            Rgba::new(0x1B, 0x1A, 0x16, 224)
+        } else {
+            Rgba::new(0xFB, 0xF9, 0xF3, 232)
+        };
+        let card_border = if dark {
+            Rgba::new(0x3D, 0x3A, 0x30, 230)
+        } else {
+            Rgba::new(0xD8, 0xD2, 0xC0, 235)
+        };
+        let dot_yellow = if dark {
+            Rgba::rgb(0xD2, 0x99, 0x22)
+        } else {
+            Rgba::rgb(0x9A, 0x67, 0x00)
+        };
+
+        self.recovery_canvas.reset(layout.width, layout.height);
+        self.recovery_canvas.fill_rounded_rect(
+            LocalRect::new(0, 0, layout.width, layout.height),
+            RECOVERY_CARD_RADIUS,
+            card_bg,
+            Some(card_border),
+        );
+
+        // Yellow notification dot (7x7 circle)
+        self.recovery_canvas.fill_rounded_rect(
+            LocalRect::new(layout.dot_cx - 3, layout.dot_cy - 3, 7, 7),
+            3.5,
+            dot_yellow,
+            None,
+        );
+
+        // Top prompt
+        self.text_mask.draw_text_into_canvas(
+            &mut self.recovery_canvas,
+            "Couldn't paste automatically",
+            layout.title_rect,
+            self.ui_fonts.bar_regular,
+            theme.text_primary,
+            DT_LEFT,
+        );
+
+        // 1. Show text button (outline/subtle fill)
+        let show_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::ShowText) {
+            theme.chip_hover_bg
+        } else {
+            theme.chip_bg
+        };
+        self.recovery_canvas.fill_rounded_rect(
+            layout.show_text,
+            6.0,
+            show_bg,
+            Some(theme.bar_border),
+        );
+        self.text_mask.draw_text_into_canvas(
+            &mut self.recovery_canvas,
+            "Show text",
+            layout.show_text,
+            self.ui_fonts.bar_regular,
+            theme.text_primary,
+            DT_CENTER,
+        );
+
+        // 2. Copy button (Eqho blue accent)
+        let copy_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::Copy) {
+            theme.done_hover_bg
+        } else {
+            theme.done_bg
+        };
+        self.recovery_canvas
+            .fill_rounded_rect(layout.copy, 6.0, copy_bg, None);
+        self.text_mask.draw_text_into_canvas(
+            &mut self.recovery_canvas,
+            "Copy",
+            layout.copy,
+            self.ui_fonts.bar_regular,
+            theme.done_fg,
+            DT_CENTER,
+        );
+
+        // 3. Discard button (muted outline)
+        let disc_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::Discard) {
+            theme.chip_hover_bg
+        } else {
+            theme.chip_bg
+        };
+        self.recovery_canvas.fill_rounded_rect(
+            layout.discard,
+            6.0,
+            disc_bg,
+            Some(theme.bar_border),
+        );
+        self.text_mask.draw_text_into_canvas(
+            &mut self.recovery_canvas,
+            "Discard",
+            layout.discard,
+            self.ui_fonts.bar_regular,
+            theme.text_muted,
+            DT_CENTER,
+        );
+
+        // Keep slightly translucent (~90% max) so subtle blur stays visible behind card.
+        self.recovery_dib.present(
+            self.recovery_hwnd,
+            self.recovery_rect,
+            &self.recovery_canvas.pixels,
+            232,
+        );
+    }
+
+    fn on_recovery_mouse_move(&mut self, lx: i32, ly: i32) {
+        if !self.recovery_tracking_leave {
+            let mut tme = TRACKMOUSEEVENT {
+                cbSize: std::mem::size_of::<TRACKMOUSEEVENT>() as u32,
+                dwFlags: TME_LEAVE,
+                hwndTrack: self.recovery_hwnd,
+                dwHoverTime: 0,
+            };
+            // SAFETY: Requesting `WM_MOUSELEAVE` on `self.recovery_hwnd`.
+            unsafe {
+                let _ = TrackMouseEvent(&mut tme);
+            }
+            self.recovery_tracking_leave = true;
+        }
+        let next = self.recovery_layout.hit_test(lx, ly);
+        if next != self.hovered_recovery_btn {
+            self.hovered_recovery_btn = next;
+            self.render_recovery_frame();
+        }
+    }
+
+    fn on_recovery_mouse_leave(&mut self) {
+        self.recovery_tracking_leave = false;
+        if self.hovered_recovery_btn.is_some() {
+            self.hovered_recovery_btn = None;
+            self.render_recovery_frame();
+        }
+    }
+
+    fn on_recovery_click(&mut self, lx: i32, ly: i32) {
+        let Some(btn) = self.recovery_layout.hit_test(lx, ly) else {
+            return;
+        };
+        self.hide_recovery_now();
+        match btn {
+            RecoveryCardButton::ShowText => self.emit_action(OverlayAction::RecoveryShowText),
+            RecoveryCardButton::Copy => self.emit_action(OverlayAction::RecoveryCopy),
+            RecoveryCardButton::Discard => self.emit_action(OverlayAction::RecoveryDiscard),
+        }
     }
 
     fn hide_bar_now(&mut self) {
@@ -713,12 +997,17 @@ impl OverlayState {
     }
 
     fn recompute_bar_geometry(&mut self) {
-        let has_flag = self.has_active_flag();
-        self.bar_layout = UnderbarLayout::compute(has_flag);
+        self.bar_layout = UnderbarLayout::compute(false);
         self.bar_placement = underbar::calc_underbar_placement(
             self.pill_rect,
             self.bar_layout.width,
             self.active_work_area,
+        );
+        apply_rounded_region(
+            self.bar_hwnd,
+            self.bar_placement.bar_rect.width,
+            self.bar_placement.bar_rect.height,
+            UNDERBAR_RADIUS as i32,
         );
         self.bar_dirty = true;
     }
@@ -776,6 +1065,7 @@ impl OverlayState {
         if !self.config.enabled {
             return;
         }
+        self.hide_recovery_now();
         self.hide_panel_now();
         self.close_lang_popup();
         self.update_pill_geometry();
@@ -1001,6 +1291,7 @@ impl OverlayState {
         );
 
         let alpha = self.animator.effective_panel_alpha(&self.config);
+        apply_rounded_region(self.panel_hwnd, rect.width, rect.height, 10);
         // SAFETY: Positioning, showing without activation, and updating layered alpha on `panel_hwnd`.
         unsafe {
             let _ = SetLayeredWindowAttributes(self.panel_hwnd, COLORREF(0), alpha, LWA_ALPHA);
@@ -1068,6 +1359,17 @@ impl OverlayState {
             self.sync_bar_visibility();
 
             if self.bar_shown {
+                let interacting =
+                    self.bar_tracking_leave || self.hovered_bar_control.is_some() || self.popup_shown;
+                let target_blend = if interacting { 1.0_f32 } else { 0.0_f32 };
+                let step = (dt * 7.5).clamp(0.0, 1.0);
+                let diff = target_blend - self.bar_hover_blend;
+                if diff.abs() <= step {
+                    self.bar_hover_blend = target_blend;
+                } else {
+                    self.bar_hover_blend += diff.signum() * step;
+                }
+
                 let elapsed = now.saturating_duration_since(self.session_start).as_secs();
                 let bar_alpha = self.effective_bar_alpha();
                 if elapsed != self.last_elapsed_secs
@@ -1098,7 +1400,10 @@ impl OverlayState {
 
     fn effective_bar_alpha(&self) -> u8 {
         let a = self.animator.alpha_logical.clamp(0.0, 1.0);
-        (a * 255.0).round() as u8
+        let ratio = UNDERBAR_REST_ALPHA_RATIO
+            + (UNDERBAR_HOVER_ALPHA_RATIO - UNDERBAR_REST_ALPHA_RATIO)
+                * self.bar_hover_blend.clamp(0.0, 1.0);
+        (a * ratio * 255.0).round().clamp(0.0, 240.0) as u8
     }
 
     fn render_pill_frame(&mut self, dt_s: f32) {
@@ -1153,7 +1458,6 @@ impl OverlayState {
             self.hovered_bar_control
         };
 
-        let active_flag = self.get_flag(&self.config.language.clone());
         let elapsed_text = underbar::format_elapsed(self.last_elapsed_secs);
         let lang_code = underbar::format_language_code(&self.config.language);
         let delivery_label = underbar::delivery_mode_label(&self.config.delivery_mode);
@@ -1208,7 +1512,7 @@ impl OverlayState {
                 &mut self.bar_canvas,
                 FINISHING_LABEL,
                 msg_rect,
-                self.ui_fonts.bar_semibold,
+                self.ui_fonts.bar_regular,
                 theme.text_primary,
                 DT_CENTER,
             );
@@ -1223,33 +1527,31 @@ impl OverlayState {
                 DT_CENTER,
             );
 
-            // 4. Language chip (`[flag] EN ▾`).
+            // 4. Compact regular-weight language chip (`EN ▾`, no flag on the bar itself).
             let lang_active = self.popup_shown || hovered == Some(UnderbarControl::Language);
             if lang_active {
                 self.bar_canvas
                     .fill_rounded_rect(layout.language, 9.0, theme.hover_bg, None);
             }
-            let mut text_left = layout.language.x + 5;
-            if let Some((fw, fh, rgba)) = active_flag.as_ref() {
-                let flag_rect = LocalRect::new(layout.language.x + 5, layout.language.y + 5, 14, 10);
-                self.bar_canvas
-                    .blit_flag_rgba(flag_rect, *fw, *fh, rgba, theme.flag_rim);
-                text_left = flag_rect.right() + 4;
-            }
-            let chevron_cx = (layout.language.right() - 8) as f32;
-            let code_w = ((layout.language.right() - 13) - text_left).max(1) as u32;
-            let code_rect = LocalRect::new(text_left, layout.language.y, code_w, layout.language.height);
+            let chevron_cx = (layout.language.right() - 7) as f32;
+            let code_w = (layout.language.width.saturating_sub(14)).max(1);
+            let code_rect = LocalRect::new(
+                layout.language.x + 3,
+                layout.language.y,
+                code_w,
+                layout.language.height,
+            );
             self.text_mask.draw_text_into_canvas(
                 &mut self.bar_canvas,
                 &lang_code,
                 code_rect,
-                self.ui_fonts.bar_semibold,
+                self.ui_fonts.bar_regular,
                 if self.popup_shown {
                     theme.accent_text
                 } else {
                     theme.text_primary
                 },
-                DT_LEFT,
+                DT_CENTER,
             );
             self.bar_canvas.draw_icon_chevron(
                 chevron_cx,
@@ -1262,7 +1564,7 @@ impl OverlayState {
                 },
             );
 
-            // 5. Delivery mode toggle chip (`Batch` / `Live`).
+            // 5. Delivery mode toggle chip (`Batch` / `Live`, regular weight).
             let is_live = underbar::normalize_delivery_mode(&self.config.delivery_mode) == "live";
             if hovered == Some(UnderbarControl::DeliveryMode) {
                 self.bar_canvas
@@ -1272,7 +1574,7 @@ impl OverlayState {
                 &mut self.bar_canvas,
                 delivery_label,
                 layout.delivery_mode,
-                self.ui_fonts.bar_semibold,
+                self.ui_fonts.bar_regular,
                 if is_live {
                     theme.accent_text
                 } else {
@@ -2081,16 +2383,18 @@ fn run_overlay_thread(
     let panel_class: Vec<u16> = "EqhoOverlayPanel\0".encode_utf16().collect();
     let bar_class: Vec<u16> = "EqhoOverlayUnderbar\0".encode_utf16().collect();
     let popup_class: Vec<u16> = "EqhoOverlayLangPopup\0".encode_utf16().collect();
+    let recovery_class: Vec<u16> = "EqhoOverlayRecovery\0".encode_utf16().collect();
 
     type WndProcFn = unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT;
-    let classes: [(&[u16], WndProcFn); 4] = [
+    let classes: [(&[u16], WndProcFn); 5] = [
         (&pill_class, pill_wnd_proc),
         (&panel_class, panel_wnd_proc),
         (&bar_class, bar_wnd_proc),
         (&popup_class, popup_wnd_proc),
+        (&recovery_class, recovery_wnd_proc),
     ];
 
-    let mut registered: Vec<&[u16]> = Vec::with_capacity(4);
+    let mut registered: Vec<&[u16]> = Vec::with_capacity(5);
     for (name, proc_fn) in classes {
         let wc = WNDCLASSEXW {
             cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
@@ -2114,7 +2418,13 @@ fn run_overlay_thread(
     }
 
     let cleanup_classes = |hinst| {
-        for name in [&pill_class, &panel_class, &bar_class, &popup_class] {
+        for name in [
+            &pill_class,
+            &panel_class,
+            &bar_class,
+            &popup_class,
+            &recovery_class,
+        ] {
             // SAFETY: Unregistering classes created on this thread.
             unsafe {
                 let _ = UnregisterClassW(PCWSTR(name.as_ptr()), Some(hinst));
@@ -2137,7 +2447,7 @@ fn run_overlay_thread(
         width: pw,
         height: ph,
     };
-    let bar_layout = UnderbarLayout::compute(flag_provider.is_some());
+    let bar_layout = UnderbarLayout::compute(false);
     let bar_placement = underbar::calc_underbar_placement(pill_rect, bar_layout.width, area);
     let popup_layout = LangPopupLayout::compute(99, &config.recent_languages, 0);
     let popup_rect = underbar::calc_lang_popup_rect(
@@ -2145,6 +2455,13 @@ fn run_overlay_thread(
         bar_layout.language,
         popup_layout.width,
         popup_layout.height,
+        area,
+    );
+    let recovery_layout = RecoveryCardLayout::compute();
+    let recovery_rect = underbar::calc_recovery_card_rect(
+        pill_rect,
+        recovery_layout.width,
+        recovery_layout.height,
         area,
     );
 
@@ -2255,7 +2572,36 @@ fn run_overlay_thread(
         return;
     };
 
-    // Best-effort Windows 11 rounded corners on the text panel (ignored on Windows 10).
+    // SAFETY: Creating borderless non-activating layered recovery action card window.
+    let Ok(recovery_hwnd) = (unsafe {
+        CreateWindowExW(
+            interactive_ex,
+            PCWSTR(recovery_class.as_ptr()),
+            PCWSTR(recovery_class.as_ptr()),
+            WS_POPUP,
+            recovery_rect.x,
+            recovery_rect.y,
+            recovery_rect.width as i32,
+            recovery_rect.height as i32,
+            None,
+            None,
+            Some(hinstance.into()),
+            None,
+        )
+    }) else {
+        // SAFETY: Cleaning up created windows on failure.
+        unsafe {
+            let _ = DestroyWindow(popup_hwnd);
+            let _ = DestroyWindow(bar_hwnd);
+            let _ = DestroyWindow(panel_hwnd);
+            let _ = DestroyWindow(pill_hwnd);
+        }
+        cleanup_classes(hinstance.into());
+        let _ = ready_tx.send(Err("CreateWindowExW recovery failed".to_owned()));
+        return;
+    };
+
+    // Best-effort Windows 11 rounded corners + subtle frosted blur behind panel, underbar, and recovery card.
     let corner_pref = DWMWCP_ROUND.0;
     // SAFETY: `corner_pref` is a valid `i32` for `DWMWA_WINDOW_CORNER_PREFERENCE`.
     unsafe {
@@ -2266,6 +2612,21 @@ fn run_overlay_thread(
             std::mem::size_of::<i32>() as u32,
         );
     }
+    apply_subtle_blur_behind(panel_hwnd);
+    apply_subtle_blur_behind(bar_hwnd);
+    apply_subtle_blur_behind(recovery_hwnd);
+    apply_rounded_region(
+        bar_hwnd,
+        bar_placement.bar_rect.width,
+        bar_placement.bar_rect.height,
+        UNDERBAR_RADIUS as i32,
+    );
+    apply_rounded_region(
+        recovery_hwnd,
+        recovery_rect.width,
+        recovery_rect.height,
+        RECOVERY_CARD_RADIUS as i32,
+    );
 
     let visibility = UnderbarVisibility::new(config.controls_enabled, config.controls_pinned);
     let now = Instant::now();
@@ -2279,14 +2640,17 @@ fn run_overlay_thread(
         panel_hwnd,
         bar_hwnd,
         popup_hwnd,
+        recovery_hwnd,
         animator: PillAnimator::new(),
         pill_dib: LayeredDib::new(),
         bar_dib: LayeredDib::new(),
         popup_dib: LayeredDib::new(),
+        recovery_dib: LayeredDib::new(),
         text_mask: LayeredDib::new(),
         bar_canvas: PremulCanvas::new(bar_layout.width, bar_layout.height),
         popup_canvas: PremulCanvas::new(popup_layout.width, popup_layout.height),
         strip_canvas: PremulCanvas::new(popup_layout.width, underbar::RECENT_CHIP_HEIGHT),
+        recovery_canvas: PremulCanvas::new(recovery_layout.width, recovery_layout.height),
         ui_fonts: UiFonts::create(),
         visible: false,
         timer_running: false,
@@ -2304,6 +2668,7 @@ fn run_overlay_thread(
         bar_placement,
         hovered_bar_control: None,
         bar_tracking_leave: false,
+        bar_hover_blend: 0.0,
         bar_dirty: true,
         last_elapsed_secs: 0,
         last_bar_alpha: 0,
@@ -2319,12 +2684,18 @@ fn run_overlay_thread(
         popup_dirty: true,
         prev_mouse_down: false,
         kb_hook: None,
+        recovery_shown: false,
+        recovery_rect,
+        recovery_layout,
+        hovered_recovery_btn: None,
+        recovery_tracking_leave: false,
     });
     let state_ptr = (&mut *state) as *mut OverlayState;
     set_window_state(pill_hwnd, state_ptr);
     set_window_state(panel_hwnd, state_ptr);
     set_window_state(bar_hwnd, state_ptr);
     set_window_state(popup_hwnd, state_ptr);
+    set_window_state(recovery_hwnd, state_ptr);
 
     let _ = ready_tx.send(Ok(pill_hwnd.0 as isize));
 
@@ -2341,6 +2712,7 @@ fn run_overlay_thread(
     set_window_state(panel_hwnd, null_mut());
     set_window_state(bar_hwnd, null_mut());
     set_window_state(popup_hwnd, null_mut());
+    set_window_state(recovery_hwnd, null_mut());
     drop(state);
     cleanup_classes(hinstance.into());
 }
@@ -2466,24 +2838,32 @@ unsafe extern "system" fn pill_wnd_proc(
     match msg {
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
         WM_APP_CMD => {
-            let mut destroy_handles: Option<(HWND, HWND, HWND, HWND)> = None;
+            let mut destroy_handles: Option<(HWND, HWND, HWND, HWND, HWND)> = None;
             // SAFETY: `hwnd` belongs to the overlay thread.
             if let Some(state) = unsafe { get_window_state(hwnd) }
                 && state.handle_commands()
             {
                 state.stop_timer();
                 state.uninstall_kb_hook();
-                destroy_handles = Some((state.popup_hwnd, state.bar_hwnd, state.panel_hwnd, hwnd));
+                destroy_handles = Some((
+                    state.recovery_hwnd,
+                    state.popup_hwnd,
+                    state.bar_hwnd,
+                    state.panel_hwnd,
+                    hwnd,
+                ));
             }
-            if let Some((popup, bar, panel, pill)) = destroy_handles {
+            if let Some((recovery, popup, bar, panel, pill)) = destroy_handles {
                 // Detach state pointers BEFORE `DestroyWindow` so re-entrant messages
                 // cannot alias `OverlayState`.
+                set_window_state(recovery, null_mut());
                 set_window_state(popup, null_mut());
                 set_window_state(bar, null_mut());
                 set_window_state(panel, null_mut());
                 set_window_state(pill, null_mut());
                 // SAFETY: Destroying all owned overlay windows and exiting message loop on shutdown.
                 unsafe {
+                    let _ = DestroyWindow(recovery);
                     let _ = DestroyWindow(popup);
                     let _ = DestroyWindow(bar);
                     let _ = DestroyWindow(panel);
@@ -2663,6 +3043,57 @@ unsafe extern "system" fn popup_wnd_proc(
                 if let Some(state) = unsafe { get_window_state(hwnd) } {
                     state.on_popup_char(ch);
                 }
+            }
+            LRESULT(0)
+        }
+        // SAFETY: Forwarding unhandled messages to `DefWindowProcW`.
+        _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    }
+}
+
+unsafe extern "system" fn recovery_wnd_proc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    match msg {
+        WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
+        WM_SETCURSOR => {
+            // SAFETY: `hwnd` belongs to the overlay thread.
+            let is_pointer = unsafe { get_window_state(hwnd) }
+                .is_some_and(|s| s.hovered_recovery_btn.is_some());
+            let cursor_id = if is_pointer { IDC_HAND } else { IDC_ARROW };
+            // SAFETY: Loading standard system cursor.
+            if let Ok(cur) = unsafe { LoadCursorW(None, cursor_id) } {
+                // SAFETY: Applying loaded system cursor handle for this window.
+                unsafe {
+                    let _ = SetCursor(Some(cur));
+                }
+                return LRESULT(1);
+            }
+            LRESULT(0)
+        }
+        WM_MOUSEMOVE => {
+            let (lx, ly) = lparam_xy(lparam);
+            // SAFETY: `hwnd` belongs to the overlay thread.
+            if let Some(state) = unsafe { get_window_state(hwnd) } {
+                state.on_recovery_mouse_move(lx, ly);
+            }
+            LRESULT(0)
+        }
+        WM_MOUSELEAVE => {
+            // SAFETY: `hwnd` belongs to the overlay thread.
+            if let Some(state) = unsafe { get_window_state(hwnd) } {
+                state.on_recovery_mouse_leave();
+            }
+            LRESULT(0)
+        }
+        WM_LBUTTONDOWN => {
+            let (lx, ly) = lparam_xy(lparam);
+            // SAFETY: `hwnd` belongs to the overlay thread.
+            if let Some(state) = unsafe { get_window_state(hwnd) } {
+                state.on_recovery_click(lx, ly);
             }
             LRESULT(0)
         }

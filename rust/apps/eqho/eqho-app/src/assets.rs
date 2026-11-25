@@ -7,8 +7,10 @@ use png::{ColorType, Decoder, Transformations};
 pub const LOGO_32: &[u8] = include_bytes!("../../../../../assets/logo_32.png");
 pub const LOGO_32_DARK: &[u8] = include_bytes!("../../../../../assets/logo_32_dark.png");
 pub const LOGO_32_WHITE: &[u8] = include_bytes!("../../../../../assets/logo_32_white.png");
+#[cfg(test)]
 pub const LOGO_HORIZONTAL_DARK: &[u8] =
     include_bytes!("../../../../../assets/logo_horizontal_dark.png");
+#[cfg(test)]
 pub const LOGO_HORIZONTAL_LIGHT: &[u8] =
     include_bytes!("../../../../../assets/logo_horizontal_light.png");
 

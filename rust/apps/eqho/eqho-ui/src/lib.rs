@@ -12,8 +12,10 @@ pub mod slint_generated {
 }
 
 pub mod flags;
+pub mod logo;
 pub mod viewmodel;
 
 pub use flags::*;
+pub use logo::*;
 pub use slint_generated::*;
 pub use viewmodel::*;

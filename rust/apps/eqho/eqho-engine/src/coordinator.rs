@@ -23,7 +23,7 @@ use eqho_core::textproc::{
     apply_replacements, clean_text, is_delete_command, match_command, smart_join,
 };
 use eqho_core::vad::{
-    BlockAssembler, CHUNK_SAMPLES, NEAR_SILENCE_FACTOR, PARTIAL_MAX_INFER_S, PhraseSegmenter,
+    BlockAssembler, FINE_CHUNK_SAMPLES, NEAR_SILENCE_FACTOR, PARTIAL_MAX_INFER_S, PhraseSegmenter,
     SAMPLE_RATE, Segment, VadEvent, filter_segments, level_meter, voice_features,
 };
 use eqho_host::{ModelHostError, ModelInfo};
@@ -35,7 +35,7 @@ use eqho_platform::{
 use crate::traits::{EqhoPlatform, SpeechBackend, UiEventSink};
 use crate::wav_source::TestAudioStream;
 
-const AUDIO_QUEUE_CAPACITY: usize = 64;
+const AUDIO_QUEUE_CAPACITY: usize = 128;
 const CLIPBOARD_RESTORE_DELAY: Duration = Duration::from_millis(200);
 const INJECT_SETTLE_DELAY: Duration = Duration::from_millis(20);
 const DISCRETE_GPU_MIN_VRAM_BYTES: u64 = 2 * 1024 * 1024 * 1024;
@@ -316,7 +316,7 @@ impl CoordinatorInner {
         self.ui.set_tray_active(true);
 
         let (tx, rx) = mpsc::sync_channel::<Vec<f32>>(AUDIO_QUEUE_CAPACITY);
-        let assembler = Arc::new(Mutex::new(BlockAssembler::new(CHUNK_SAMPLES)));
+        let assembler = Arc::new(Mutex::new(BlockAssembler::new(FINE_CHUNK_SAMPLES)));
 
         let make_callback = |tx: mpsc::SyncSender<Vec<f32>>,
                              assembler: Arc<Mutex<BlockAssembler>>,
@@ -593,6 +593,7 @@ impl CoordinatorInner {
         }
 
         let mut segmenter = PhraseSegmenter::new(initial_settings.vad_sensitivity as f32, 2, 30.0);
+        segmenter.set_live_mode(normalize_delivery_mode(&initial_settings.delivery_mode) == "live");
 
         loop {
             if !self.is_session_current(sid) {
@@ -655,6 +656,12 @@ impl CoordinatorInner {
         if self.is_session_current(sid) {
             self.ui.set_overlay_level(level_meter(rms));
         }
+
+        let is_live_now = {
+            let s = lock_unpoisoned(&self.settings);
+            normalize_delivery_mode(&s.delivery_mode) == "live"
+        };
+        segmenter.set_live_mode(is_live_now);
 
         for ev in segmenter.push_chunk(chunk) {
             let settings = lock_unpoisoned(&self.settings).clone();
@@ -1116,6 +1123,7 @@ impl CoordinatorInner {
         // Always store full session text in LastDictationBuffer BEFORE attempting injection.
         lock_unpoisoned(&self.state).recovery.store(&combined_text);
 
+        let mut paste_failed = false;
         let mut committed_text = live_text;
         if !pending_chunk.is_empty() {
             match self.inject_text_chunk(&pending_chunk, target_hwnd, &settings) {
@@ -1125,30 +1133,29 @@ impl CoordinatorInner {
                     committed_text = combined_text;
                 }
                 Err(InjectError::FocusRestoreFailed) => {
-                    self.ui.on_recovery_available(Some(&combined_text));
+                    paste_failed = true;
+                    committed_text = combined_text;
+                    self.ui.on_recovery_available(Some(&committed_text));
                     self.ui.notify(FOCUS_RESTORE_FAILED_TEXT);
-                    if committed_text.is_empty() {
-                        return;
-                    }
                 }
                 Err(InjectError::Platform(err)) => {
-                    self.ui.on_recovery_available(Some(&combined_text));
+                    paste_failed = true;
+                    committed_text = combined_text;
+                    self.ui.on_recovery_available(Some(&committed_text));
                     self.ui.notify(&format!(
                         "Couldn't insert your dictation ({err}). It is saved in Eqho."
                     ));
-                    if committed_text.is_empty() {
-                        return;
-                    }
                 }
             }
         }
 
-        if settings.history_enabled && !committed_text.is_empty() {
-            let _ = self.history.append(
+        if (settings.history_enabled || paste_failed) && !committed_text.is_empty() {
+            let _ = self.history.append_with_status(
                 &committed_text,
                 duration_s,
                 &settings.model_size,
                 &settings.language,
+                paste_failed,
             );
             self.ui.on_history_changed();
         }

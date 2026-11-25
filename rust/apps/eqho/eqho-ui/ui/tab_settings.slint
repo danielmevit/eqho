@@ -1,6 +1,7 @@
-// Settings Tab (Gear view): Appearance, Dictation Extras, System, Overlay, About.
+// Settings Tab (Gear view): Compact single-row Appearance, balanced 2-column
+// Dictation Extras + About (left) & System + Overlay (right).
 import { Theme } from "@app-theme/theme.slint";
-import { Button, ButtonKind, Dropdown, Slider, TabList, Toggle, CompactRow } from "@damt-ui/kit.slint";
+import { Button, ButtonKind, Dropdown, LinkButton, Slider, TabList, Toggle, CompactRow } from "@damt-ui/kit.slint";
 import { ScrollArea, SectionCard, StackedSettingRow, ThemedTextEdit } from "components.slint";
 
 export component SettingsTab inherits Rectangle {
@@ -17,6 +18,7 @@ export component SettingsTab inherits Rectangle {
     in-out property <string> paste-rules-status: "";
 
     in-out property <int> volume-duck-index: 0;
+    in-out property <int> history-trash-days-index: 2;
     in-out property <bool> start-with-windows: false;
 
     in-out property <bool> overlay-enabled: true;
@@ -27,11 +29,12 @@ export component SettingsTab inherits Rectangle {
     in-out property <int> overlay-monitor-index: 0;
     in-out property <int> overlay-position-index: 0;
     in-out property <int> overlay-pill-scale-pct: 80;
-    in-out property <int> overlay-see-through-pct: 15;
-    in-out property <int> overlay-panel-see-through-pct: 15;
+    in-out property <int> overlay-see-through-pct: 5;
+    in-out property <int> overlay-panel-see-through-pct: 22;
     in-out property <int> overlay-font-size: 14;
 
-    in property <string> app-version: "0.9.0";
+    in property <string> app-version: "0.9.1";
+    in property <string> active-engine-display: "GPU (Vulkan) · whisper.cpp 1.8.4";
     in property <bool> store-build: false;
     in property <string> made-with-slint-label: "Made with Slint";
 
@@ -42,6 +45,7 @@ export component SettingsTab inherits Rectangle {
     callback save-replacements(string);
     callback save-paste-rules(string);
     callback volume-duck-selected(int);
+    callback history-trash-days-selected(int);
     callback start-with-windows-toggled(bool);
     callback overlay-enabled-toggled(bool);
     callback overlay-show-text-toggled(bool);
@@ -54,6 +58,7 @@ export component SettingsTab inherits Rectangle {
     callback overlay-see-through-changed(int);
     callback overlay-panel-see-through-changed(int);
     callback overlay-font-size-changed(int);
+    callback open-url(string);
     callback start-onboarding();
 
     property <bool> two-col: root.width >= 760px;
@@ -66,32 +71,76 @@ export component SettingsTab inherits Rectangle {
             padding: Theme.space-16;
             spacing: Theme.space-12;
 
-            // APPEARANCE
+            // APPEARANCE — single compact row on wide layouts
             SectionCard {
                 title: "APPEARANCE";
-                StackedSettingRow {
-                    label: "Theme";
-                    help: "Light, dark, or follow Windows";
-                    TabList {
-                        items: ["Light", "Dark", "System"];
-                        selected <=> root.theme-mode-index;
-                        accessible-name: "Theme";
-                        picked(i) => { root.theme-mode-changed(i); }
+                if root.two-col : HorizontalLayout {
+                    spacing: Theme.space-16;
+                    alignment: space-between;
+
+                    VerticalLayout {
+                        horizontal-stretch: 0;
+                        spacing: 4px;
+                        Text {
+                            text: "Theme";
+                            font-size: Theme.font-size-sm;
+                            font-weight: 500;
+                            color: Theme.text;
+                        }
+                        TabList {
+                            items: ["Light", "Dark", "System"];
+                            selected <=> root.theme-mode-index;
+                            accessible-name: "Theme";
+                            picked(i) => { root.theme-mode-changed(i); }
+                        }
+                    }
+
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 4px;
+                        Text {
+                            text: "UI Zoom";
+                            font-size: Theme.font-size-sm;
+                            font-weight: 500;
+                            color: Theme.text;
+                        }
+                        TabList {
+                            items: ["100%", "125%", "150%", "175%", "200%"];
+                            selected <=> root.ui-scale-index;
+                            accessible-name: "UI Zoom";
+                            picked(i) => { root.ui-scale-changed(i); }
+                        }
                     }
                 }
-                StackedSettingRow {
-                    label: "UI Zoom";
-                    help: "Scale the whole dashboard";
-                    TabList {
-                        items: ["100%", "125%", "150%", "175%", "200%"];
-                        selected <=> root.ui-scale-index;
-                        accessible-name: "UI Zoom";
-                        picked(i) => { root.ui-scale-changed(i); }
+
+                if !root.two-col : VerticalLayout {
+                    spacing: Theme.space-10;
+                    StackedSettingRow {
+                        label: "Theme";
+                        help: "Light, dark, or follow Windows";
+                        TabList {
+                            items: ["Light", "Dark", "System"];
+                            selected <=> root.theme-mode-index;
+                            accessible-name: "Theme";
+                            picked(i) => { root.theme-mode-changed(i); }
+                        }
+                    }
+                    StackedSettingRow {
+                        label: "UI Zoom";
+                        help: "Scale the whole dashboard";
+                        TabList {
+                            items: ["100%", "125%", "150%", "175%", "200%"];
+                            selected <=> root.ui-scale-index;
+                            accessible-name: "UI Zoom";
+                            picked(i) => { root.ui-scale-changed(i); }
+                        }
                     }
                 }
             }
 
-            // DICTATION EXTRAS + SYSTEM
+            // BALANCED 2-COLUMN BODY:
+            // Left: DICTATION EXTRAS + ABOUT EQHO
+            // Right: SYSTEM + OVERLAY
             if root.two-col : HorizontalLayout {
                 spacing: Theme.space-16;
                 alignment: stretch;
@@ -174,6 +223,91 @@ export component SettingsTab inherits Rectangle {
                             }
                         }
                     }
+
+                    // ABOUT EQHO
+                    SectionCard {
+                        title: "ABOUT EQHO";
+                        HorizontalLayout {
+                            spacing: Theme.space-12;
+                            Text {
+                                width: 82px;
+                                text: "Version";
+                                font-size: Theme.font-size-sm;
+                                color: Theme.text-muted;
+                            }
+                            Text {
+                                text: root.app-version;
+                                font-size: Theme.font-size-sm;
+                                color: Theme.text;
+                                horizontal-stretch: 1;
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: Theme.space-12;
+                            Text {
+                                width: 82px;
+                                text: "Engine";
+                                font-size: Theme.font-size-sm;
+                                color: Theme.text-muted;
+                            }
+                            Text {
+                                text: root.active-engine-display;
+                                font-size: Theme.font-size-sm;
+                                color: Theme.text;
+                                horizontal-stretch: 1;
+                                wrap: word-wrap;
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: Theme.space-12;
+                            Text {
+                                width: 82px;
+                                text: "Author";
+                                font-size: Theme.font-size-sm;
+                                color: Theme.text-muted;
+                            }
+                            Text {
+                                text: "damt.xyz";
+                                font-size: Theme.font-size-sm;
+                                color: Theme.text;
+                                horizontal-stretch: 1;
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: Theme.space-12;
+                            alignment: start;
+                            Text {
+                                width: 82px;
+                                text: "Website";
+                                font-size: Theme.font-size-sm;
+                                color: Theme.text-muted;
+                                vertical-alignment: center;
+                            }
+                            LinkButton {
+                                text: "damt.xyz";
+                                clicked => { root.open-url("https://damt.xyz"); }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            padding-top: Theme.space-4;
+                            alignment: start;
+                            Button {
+                                text: "Run first-time setup again";
+                                kind: ButtonKind.outline;
+                                clicked => { root.start-onboarding(); }
+                            }
+                        }
+
+                        Text {
+                            text: root.store-build
+                                ? root.made-with-slint-label + " · Powered by whisper.cpp · Rust"
+                                : "Powered by whisper.cpp · Slint · Rust";
+                            font-size: Theme.font-size-xs;
+                            color: Theme.text-subtle;
+                            wrap: word-wrap;
+                        }
+                    }
                 }
 
                 VerticalLayout {
@@ -192,6 +326,17 @@ export component SettingsTab inherits Rectangle {
                                 window-height: root.window-height;
                                 accessible-name: "Volume While Speaking";
                                 selected(i) => { root.volume-duck-selected(i); }
+                            }
+                        }
+                        StackedSettingRow {
+                            label: "History Trash Retention";
+                            help: "How long deleted dictations stay in Trash before permanent removal";
+                            Dropdown {
+                                model: ["7 days", "14 days", "30 days", "90 days", "Never"];
+                                current-index <=> root.history-trash-days-index;
+                                window-height: root.window-height;
+                                accessible-name: "History Trash Retention";
+                                selected(i) => { root.history-trash-days-selected(i); }
                             }
                         }
                         CompactRow {
@@ -314,6 +459,7 @@ export component SettingsTab inherits Rectangle {
                 }
             }
 
+            // NARROW SINGLE-COLUMN STACK
             if !root.two-col : VerticalLayout {
                 spacing: Theme.space-12;
 
@@ -402,6 +548,17 @@ export component SettingsTab inherits Rectangle {
                             window-height: root.window-height;
                             accessible-name: "Volume While Speaking";
                             selected(i) => { root.volume-duck-selected(i); }
+                        }
+                    }
+                    StackedSettingRow {
+                        label: "History Trash Retention";
+                        help: "How long deleted dictations stay in Trash before permanent removal";
+                        Dropdown {
+                            model: ["7 days", "14 days", "30 days", "90 days", "Never"];
+                            current-index <=> root.history-trash-days-index;
+                            window-height: root.window-height;
+                            accessible-name: "History Trash Retention";
+                            selected(i) => { root.history-trash-days-selected(i); }
                         }
                     }
                     CompactRow {
@@ -521,49 +678,89 @@ export component SettingsTab inherits Rectangle {
                         edited(v) => { root.overlay-font-size-changed(v); }
                     }
                 }
-            }
 
-            // ABOUT EQHO
-            SectionCard {
-                title: "ABOUT EQHO";
-                for row in [
-                    { label: "Version", val: root.app-version },
-                    { label: "Engine", val: "whisper.cpp 1.8.4 (Vulkan / CPU)" },
-                    { label: "Author", val: "Daniel Mevit" },
-                    { label: "Website", val: "damt.xyz" },
-                ] : HorizontalLayout {
-                    spacing: Theme.space-12;
+                SectionCard {
+                    title: "ABOUT EQHO";
+                    HorizontalLayout {
+                        spacing: Theme.space-12;
+                        Text {
+                            width: 82px;
+                            text: "Version";
+                            font-size: Theme.font-size-sm;
+                            color: Theme.text-muted;
+                        }
+                        Text {
+                            text: root.app-version;
+                            font-size: Theme.font-size-sm;
+                            color: Theme.text;
+                            horizontal-stretch: 1;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: Theme.space-12;
+                        Text {
+                            width: 82px;
+                            text: "Engine";
+                            font-size: Theme.font-size-sm;
+                            color: Theme.text-muted;
+                        }
+                        Text {
+                            text: root.active-engine-display;
+                            font-size: Theme.font-size-sm;
+                            color: Theme.text;
+                            horizontal-stretch: 1;
+                            wrap: word-wrap;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: Theme.space-12;
+                        Text {
+                            width: 82px;
+                            text: "Author";
+                            font-size: Theme.font-size-sm;
+                            color: Theme.text-muted;
+                        }
+                        Text {
+                            text: "damt.xyz";
+                            font-size: Theme.font-size-sm;
+                            color: Theme.text;
+                            horizontal-stretch: 1;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: Theme.space-12;
+                        alignment: start;
+                        Text {
+                            width: 82px;
+                            text: "Website";
+                            font-size: Theme.font-size-sm;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+                        LinkButton {
+                            text: "damt.xyz";
+                            clicked => { root.open-url("https://damt.xyz"); }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        padding-top: Theme.space-4;
+                        alignment: start;
+                        Button {
+                            text: "Run first-time setup again";
+                            kind: ButtonKind.outline;
+                            clicked => { root.start-onboarding(); }
+                        }
+                    }
+
                     Text {
-                        width: 110px;
-                        text: row.label;
-                        font-size: Theme.font-size-sm;
-                        color: Theme.text-muted;
+                        text: root.store-build
+                            ? root.made-with-slint-label + " · Powered by whisper.cpp · Rust"
+                            : "Powered by whisper.cpp · Slint · Rust";
+                        font-size: Theme.font-size-xs;
+                        color: Theme.text-subtle;
+                        wrap: word-wrap;
                     }
-                    Text {
-                        text: row.val;
-                        font-size: Theme.font-size-sm;
-                        color: Theme.text;
-                        horizontal-stretch: 1;
-                    }
-                }
-
-                HorizontalLayout {
-                    padding-top: Theme.space-4;
-                    alignment: start;
-                    Button {
-                        text: "Run first-time setup again";
-                        kind: ButtonKind.outline;
-                        clicked => { root.start-onboarding(); }
-                    }
-                }
-
-                Text {
-                    text: root.store-build
-                        ? root.made-with-slint-label + " · Powered by whisper.cpp · Rust"
-                        : "Powered by whisper.cpp · Slint · Rust";
-                    font-size: Theme.font-size-xs;
-                    color: Theme.text-subtle;
-                    wrap: word-wrap;
                 }
             }
         }

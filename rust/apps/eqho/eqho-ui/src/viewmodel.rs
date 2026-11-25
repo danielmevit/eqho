@@ -6,8 +6,8 @@ use eqho_core::history::{TranscriptEntry, format_timestamp_local, local_day_ordi
 use eqho_core::modelpick::{HardwareClass, recommend_model};
 use eqho_core::modelstore::{MODELS, model_info};
 use eqho_core::settings::{
-    LANGUAGE_TIERS, OVERLAY_MONITORS, OVERLAY_POSITIONS, Settings, VOLUME_DUCK_OPTIONS,
-    is_english_only_model, supported_language_name,
+    HISTORY_TRASH_OPTIONS, LANGUAGE_TIERS, OVERLAY_MONITORS, OVERLAY_POSITIONS, Settings,
+    VOLUME_DUCK_OPTIONS, is_english_only_model, supported_language_name,
 };
 use slint::{ComponentHandle, ModelRc, VecModel};
 
@@ -62,17 +62,20 @@ pub fn build_model_cards(
     MODELS
         .iter()
         .map(|m| {
-            let is_selected = m.key == selected_key;
             let is_cached = cached_keys.contains(&m.key);
             let is_downloading = downloading_key == Some(m.key);
+            // A model can never appear simultaneously active/selected and still downloading or missing.
+            let is_selected = m.key == selected_key && is_cached && !is_downloading;
             let has_error = error_key == Some(m.key);
 
             let status_text = if has_error {
-                "Download failed"
+                "Failed"
             } else if is_downloading {
                 "Downloading…"
+            } else if is_selected {
+                "Active"
             } else if is_cached {
-                "✓ Ready"
+                "Ready"
             } else {
                 "Not downloaded"
             };
@@ -157,6 +160,15 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 
 /// Convert `TranscriptEntry` items into Slint `HistoryRowItem` structs (local timezone timestamps).
 pub fn build_history_rows(entries: &[TranscriptEntry]) -> Vec<HistoryRowItem> {
+    build_history_rows_with_trash_meta(entries, 30, 0.0)
+}
+
+/// Convert active or trashed `TranscriptEntry` items into Slint `HistoryRowItem` structs.
+pub fn build_history_rows_with_trash_meta(
+    entries: &[TranscriptEntry],
+    retention_days: i32,
+    now_epoch_s: f64,
+) -> Vec<HistoryRowItem> {
     entries
         .iter()
         .map(|e| {
@@ -167,11 +179,28 @@ pub fn build_history_rows(entries: &[TranscriptEntry]) -> Vec<HistoryRowItem> {
             if !e.lang.is_empty() {
                 meta_parts.push(e.lang.as_str());
             }
+            let trash_expiry_text = match e.deleted_at {
+                None => String::new(),
+                Some(_) if retention_days <= 0 => "Kept until emptied".to_owned(),
+                Some(del_ts) => {
+                    let elapsed_days = ((now_epoch_s - del_ts).max(0.0) / 86_400.0).floor() as i32;
+                    let left = (retention_days - elapsed_days).max(0);
+                    if left <= 0 {
+                        "Auto-deletes soon".to_owned()
+                    } else if left == 1 {
+                        "Auto-deletes in 1 day".to_owned()
+                    } else {
+                        format!("Auto-deletes in {left} days")
+                    }
+                }
+            };
             HistoryRowItem {
                 ts_key: format!("{:.6}", e.ts).into(),
                 timestamp_text: format_timestamp_local(e.ts).into(),
                 meta_text: meta_parts.join("  ·  ").into(),
                 text: e.text.clone().into(),
+                paste_failed: e.paste_failed,
+                trash_expiry_text: trash_expiry_text.into(),
             }
         })
         .collect()
@@ -526,6 +555,49 @@ pub fn delivery_mode_key(idx: i32) -> &'static str {
     if idx == 1 { "live" } else { "batch" }
 }
 
+/// Map `Settings::history_trash_days` to the Settings dropdown index.
+#[must_use]
+pub fn history_trash_days_index(days: i32) -> i32 {
+    HISTORY_TRASH_OPTIONS
+        .iter()
+        .position(|(_, d)| *d == days)
+        .unwrap_or(2) as i32
+}
+
+/// Map the Settings trash-retention dropdown index back to days (`0` = Never).
+#[must_use]
+pub fn history_trash_days_value(idx: i32) -> i32 {
+    HISTORY_TRASH_OPTIONS
+        .get(idx.max(0) as usize)
+        .map(|(_, d)| *d)
+        .unwrap_or(30)
+}
+
+/// Clear human-readable description of the currently active speech engine & hardware backend.
+#[must_use]
+pub fn format_active_engine_display(
+    engine_backend: &str,
+    hw: HardwareClass,
+    gpu_name: Option<&str>,
+    cpu_threads: u32,
+) -> String {
+    let pref = engine_backend.trim().to_ascii_lowercase();
+    let using_gpu = match pref.as_str() {
+        "cpu" => false,
+        "vulkan" | "gpu" => true,
+        _ => hw == HardwareClass::Gpu,
+    };
+    if using_gpu {
+        if let Some(name) = gpu_name.filter(|n| !n.trim().is_empty()) {
+            format!("GPU (Vulkan — {}) · whisper.cpp 1.8.4", name.trim())
+        } else {
+            "GPU (Vulkan) · whisper.cpp 1.8.4".to_owned()
+        }
+    } else {
+        format!("CPU ({cpu_threads} threads) · whisper.cpp 1.8.4")
+    }
+}
+
 /// Dynamic window title showing the active model (and live listening indicator when dictating).
 pub fn dashboard_window_title(model_key: &str, is_dictating: bool) -> String {
     let model = model_short_name(model_key);
@@ -568,6 +640,7 @@ pub fn apply_settings_to_window(
 
     window.set_theme_mode_index(theme_mode_index(&settings.theme));
     window.set_ui_scale_index(ui_scale_index(settings.ui_scale));
+    window.set_history_trash_days_index(history_trash_days_index(settings.history_trash_days));
     window.set_remove_fillers(settings.remove_fillers);
     window.set_voice_commands(settings.voice_commands);
     window.set_replacements_text(format_replacements_text(&settings.replacements).into());

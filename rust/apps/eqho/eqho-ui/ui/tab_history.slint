@@ -1,4 +1,5 @@
-// History Tab: Search, period filter, export, clear, and transcript list.
+// History Tab: Search, period filter, Trash bin with retention, failed-paste highlight,
+// Copy-state feedback, and inline delete confirmations.
 import { Theme } from "@app-theme/theme.slint";
 import { Button, ButtonKind, CloseButton, Dropdown } from "@damt-ui/kit.slint";
 import { HistoryRowItem } from "types.slint";
@@ -11,12 +12,24 @@ export component HistoryTab inherits Rectangle {
     in-out property <int> history-period-index: 0;
     in property <[HistoryRowItem]> history-rows: [];
     in-out property <string> history-status: "";
+    in-out property <bool> showing-trash: false;
+    in-out property <int> trash-count: 0;
+    in-out property <string> trash-retention-label: "Trash auto-clears after 30 days";
+    in-out property <string> copied-ts-key: "";
 
     callback history-filter-changed();
     callback export-history();
     callback clear-history();
-    callback copy-history-entry(string);
+    callback copy-history-entry(string, string);
     callback delete-history-entry(string);
+    callback toggle-trash-view(bool);
+    callback restore-trash-entry(string);
+    callback delete-trash-permanently(string);
+    callback empty-trash();
+
+    property <string> confirm-delete-ts: "";
+    property <bool> confirm-clear-all: false;
+    property <bool> confirm-empty-trash: false;
 
     ScrollArea {
         width: parent.width;
@@ -26,8 +39,8 @@ export component HistoryTab inherits Rectangle {
             padding: Theme.space-16;
             spacing: Theme.space-12;
 
-            // Toolbar
-            HorizontalLayout {
+            // Toolbar — normal History mode
+            if !root.showing-trash : HorizontalLayout {
                 spacing: Theme.space-8;
                 ThemedLineEdit {
                     horizontal-stretch: 1;
@@ -43,6 +56,16 @@ export component HistoryTab inherits Rectangle {
                     selected => { root.history-filter-changed(); }
                 }
                 Button {
+                    text: root.trash-count > 0 ? "Trash (" + root.trash-count + ")" : "Trash";
+                    kind: ButtonKind.outline;
+                    clicked => {
+                        root.confirm-delete-ts = "";
+                        root.confirm-clear-all = false;
+                        root.confirm-empty-trash = false;
+                        root.toggle-trash-view(true);
+                    }
+                }
+                Button {
                     text: "Export .txt";
                     kind: ButtonKind.outline;
                     enabled: root.history-rows.length > 0;
@@ -52,7 +75,137 @@ export component HistoryTab inherits Rectangle {
                     text: "Clear All";
                     kind: ButtonKind.outline;
                     enabled: root.history-rows.length > 0;
-                    clicked => { root.clear-history(); }
+                    clicked => {
+                        root.confirm-delete-ts = "";
+                        root.confirm-clear-all = true;
+                    }
+                }
+            }
+
+            // Toolbar — Trash view
+            if root.showing-trash : HorizontalLayout {
+                spacing: Theme.space-10;
+                alignment: space-between;
+
+                HorizontalLayout {
+                    spacing: Theme.space-10;
+                    alignment: start;
+                    Button {
+                        text: "← Back to History";
+                        kind: ButtonKind.outline;
+                        clicked => {
+                            root.confirm-delete-ts = "";
+                            root.confirm-clear-all = false;
+                            root.confirm-empty-trash = false;
+                            root.toggle-trash-view(false);
+                        }
+                    }
+                    Text {
+                        text: root.trash-retention-label;
+                        font-size: Theme.font-size-xs;
+                        color: Theme.text-muted;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Button {
+                    text: "Empty Trash";
+                    kind: ButtonKind.outline;
+                    enabled: root.history-rows.length > 0;
+                    clicked => {
+                        root.confirm-delete-ts = "";
+                        root.confirm-empty-trash = true;
+                    }
+                }
+            }
+
+            // Inline confirmation banner: Clear All -> Trash
+            if root.confirm-clear-all && !root.showing-trash : Rectangle {
+                background: Theme.surface;
+                border-radius: Theme.radius-card;
+                border-width: 1px;
+                border-color: Theme.warning;
+                min-height: clear-confirm-lay.preferred-height;
+
+                clear-confirm-lay := HorizontalLayout {
+                    padding-left: Theme.space-14;
+                    padding-right: Theme.space-14;
+                    padding-top: Theme.space-10;
+                    padding-bottom: Theme.space-10;
+                    spacing: Theme.space-10;
+                    alignment: space-between;
+
+                    Text {
+                        text: "Move all dictations to Trash? You can restore them anytime before auto-clear.";
+                        font-size: Theme.font-size-sm;
+                        color: Theme.text;
+                        horizontal-stretch: 1;
+                        wrap: word-wrap;
+                        vertical-alignment: center;
+                    }
+                    HorizontalLayout {
+                        horizontal-stretch: 0;
+                        spacing: Theme.space-8;
+                        alignment: center;
+                        Button {
+                            text: "Move to Trash";
+                            kind: ButtonKind.accent;
+                            clicked => {
+                                root.confirm-clear-all = false;
+                                root.clear-history();
+                            }
+                        }
+                        Button {
+                            text: "Cancel";
+                            kind: ButtonKind.outline;
+                            clicked => { root.confirm-clear-all = false; }
+                        }
+                    }
+                }
+            }
+
+            // Inline confirmation banner: Empty Trash forever
+            if root.confirm-empty-trash && root.showing-trash : Rectangle {
+                background: Theme.surface;
+                border-radius: Theme.radius-card;
+                border-width: 1px;
+                border-color: Theme.error;
+                min-height: empty-confirm-lay.preferred-height;
+
+                empty-confirm-lay := HorizontalLayout {
+                    padding-left: Theme.space-14;
+                    padding-right: Theme.space-14;
+                    padding-top: Theme.space-10;
+                    padding-bottom: Theme.space-10;
+                    spacing: Theme.space-10;
+                    alignment: space-between;
+
+                    Text {
+                        text: "Permanently delete everything in Trash? This cannot be undone.";
+                        font-size: Theme.font-size-sm;
+                        color: Theme.text;
+                        horizontal-stretch: 1;
+                        wrap: word-wrap;
+                        vertical-alignment: center;
+                    }
+                    HorizontalLayout {
+                        horizontal-stretch: 0;
+                        spacing: Theme.space-8;
+                        alignment: center;
+                        Button {
+                            text: "Delete forever";
+                            kind: ButtonKind.accent;
+                            clicked => {
+                                root.confirm-empty-trash = false;
+                                root.empty-trash();
+                            }
+                        }
+                        Button {
+                            text: "Cancel";
+                            kind: ButtonKind.outline;
+                            clicked => { root.confirm-empty-trash = false; }
+                        }
+                    }
                 }
             }
 
@@ -62,9 +215,13 @@ export component HistoryTab inherits Rectangle {
                 Text {
                     text: root.history-rows.length == 0
                         ? ""
-                        : root.history-rows.length == 1
-                            ? "1 transcript"
-                            : root.history-rows.length + " transcripts";
+                        : root.showing-trash
+                            ? (root.history-rows.length == 1
+                                ? "1 item in Trash"
+                                : root.history-rows.length + " items in Trash")
+                            : (root.history-rows.length == 1
+                                ? "1 transcript"
+                                : root.history-rows.length + " transcripts");
                     font-size: Theme.font-size-xs;
                     color: Theme.text-muted;
                 }
@@ -79,9 +236,11 @@ export component HistoryTab inherits Rectangle {
             // Empty state
             if root.history-rows.length == 0 : SectionCard {
                 Text {
-                    text: (root.history-query != "" || root.history-period-index != 0)
-                        ? "No matches."
-                        : "No dictations yet — press the hotkey and speak.";
+                    text: root.showing-trash
+                        ? "Trash is empty."
+                        : (root.history-query != "" || root.history-period-index != 0)
+                            ? "No matches."
+                            : "No dictations yet — press the hotkey and speak.";
                     font-size: Theme.font-size-base;
                     color: Theme.text-muted;
                     horizontal-alignment: center;
@@ -89,19 +248,64 @@ export component HistoryTab inherits Rectangle {
             }
 
             // Transcript rows
-            for row in root.history-rows : SectionCard {
-                HorizontalLayout {
-                    spacing: Theme.space-10;
+            for row in root.history-rows : Rectangle {
+                background: Theme.surface;
+                border-radius: Theme.radius-card;
+                border-width: (row.paste_failed && !root.showing-trash) ? 1.5px : 1px;
+                border-color: (row.paste_failed && !root.showing-trash)
+                    ? Theme.warning
+                    : Theme.border-subtle;
+                min-height: row-lay.preferred-height;
+
+                row-lay := HorizontalLayout {
+                    padding: Theme.space-14;
+                    spacing: Theme.space-12;
                     alignment: space-between;
 
                     VerticalLayout {
                         horizontal-stretch: 1;
-                        spacing: 4px;
-                        Text {
-                            text: row.meta_text != "" ? row.timestamp_text + "  ·  " + row.meta_text : row.timestamp_text;
-                            font-size: Theme.font-size-xs;
-                            color: Theme.text-muted;
+                        spacing: 5px;
+
+                        HorizontalLayout {
+                            spacing: Theme.space-8;
+                            alignment: start;
+
+                            Text {
+                                text: row.meta_text != "" ? row.timestamp_text + "  ·  " + row.meta_text : row.timestamp_text;
+                                font-size: Theme.font-size-xs;
+                                color: Theme.text-muted;
+                                vertical-alignment: center;
+                            }
+
+                            if row.paste_failed && !root.showing-trash : HorizontalLayout {
+                                spacing: 5px;
+                                alignment: start;
+                                VerticalLayout {
+                                    alignment: center;
+                                    Rectangle {
+                                        width: 6px;
+                                        height: 6px;
+                                        border-radius: 3px;
+                                        background: Theme.warning;
+                                    }
+                                }
+                                Text {
+                                    text: "Not pasted";
+                                    font-size: Theme.font-size-xs;
+                                    font-weight: 600;
+                                    color: Theme.warning;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            if root.showing-trash && row.trash_expiry_text != "" : Text {
+                                text: "·  " + row.trash_expiry_text;
+                                font-size: Theme.font-size-xs;
+                                color: Theme.text-subtle;
+                                vertical-alignment: center;
+                            }
                         }
+
                         Text {
                             text: row.text;
                             font-size: Theme.font-size-base;
@@ -110,18 +314,100 @@ export component HistoryTab inherits Rectangle {
                         }
                     }
 
-                    HorizontalLayout {
+                    // Normal History row controls (Copy right before ×, plus inline confirm)
+                    if !root.showing-trash && root.confirm-delete-ts != row.ts_key : HorizontalLayout {
                         horizontal-stretch: 0;
-                        spacing: 4px;
+                        spacing: 6px;
                         alignment: start;
                         Button {
-                            text: "Copy";
-                            kind: ButtonKind.text;
-                            clicked => { root.copy-history-entry(row.text); }
+                            text: root.copied-ts-key == row.ts_key ? "Copied" : "Copy";
+                            kind: root.copied-ts-key == row.ts_key ? ButtonKind.accent : ButtonKind.outline;
+                            clicked => { root.copy-history-entry(row.ts_key, row.text); }
                         }
                         CloseButton {
-                            accessible-name: "Delete entry";
-                            clicked => { root.delete-history-entry(row.ts_key); }
+                            accessible-name: "Move to Trash";
+                            clicked => {
+                                root.confirm-clear-all = false;
+                                root.confirm-delete-ts = row.ts_key;
+                            }
+                        }
+                    }
+
+                    if !root.showing-trash && root.confirm-delete-ts == row.ts_key : HorizontalLayout {
+                        horizontal-stretch: 0;
+                        spacing: 6px;
+                        alignment: start;
+                        Text {
+                            height: 30px;
+                            text: "Trash?";
+                            font-size: Theme.font-size-xs;
+                            font-weight: 600;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+                        Button {
+                            text: "Confirm";
+                            kind: ButtonKind.accent;
+                            clicked => {
+                                root.confirm-delete-ts = "";
+                                root.delete-history-entry(row.ts_key);
+                            }
+                        }
+                        Button {
+                            text: "Cancel";
+                            kind: ButtonKind.outline;
+                            clicked => { root.confirm-delete-ts = ""; }
+                        }
+                    }
+
+                    // Trash row controls (Restore, Copy, Delete forever with confirmation)
+                    if root.showing-trash && root.confirm-delete-ts != row.ts_key : HorizontalLayout {
+                        horizontal-stretch: 0;
+                        spacing: 6px;
+                        alignment: start;
+                        Button {
+                            text: "Restore";
+                            kind: ButtonKind.outline;
+                            clicked => { root.restore-trash-entry(row.ts_key); }
+                        }
+                        Button {
+                            text: root.copied-ts-key == row.ts_key ? "Copied" : "Copy";
+                            kind: root.copied-ts-key == row.ts_key ? ButtonKind.accent : ButtonKind.text;
+                            clicked => { root.copy-history-entry(row.ts_key, row.text); }
+                        }
+                        CloseButton {
+                            accessible-name: "Delete forever";
+                            clicked => {
+                                root.confirm-empty-trash = false;
+                                root.confirm-delete-ts = row.ts_key;
+                            }
+                        }
+                    }
+
+                    if root.showing-trash && root.confirm-delete-ts == row.ts_key : HorizontalLayout {
+                        horizontal-stretch: 0;
+                        spacing: 6px;
+                        alignment: start;
+                        Text {
+                            height: 30px;
+                            text: "Delete forever?";
+                            font-size: Theme.font-size-xs;
+                            font-weight: 600;
+                            color: Theme.error;
+                            vertical-alignment: center;
+                        }
+                        Button {
+                            text: "Delete";
+                            kind: ButtonKind.accent;
+                            clicked => {
+                                root.confirm-delete-ts = "";
+                                root.delete-trash-permanently(row.ts_key);
+                            }
+                        }
+                        Button {
+                            text: "Cancel";
+                            kind: ButtonKind.outline;
+                            clicked => { root.confirm-delete-ts = ""; }
                         }
                     }
                 }

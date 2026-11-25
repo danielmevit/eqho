@@ -48,6 +48,14 @@ pub const RECENT_CHIP_GAP: u32 = 4;
 pub const RECENT_FADE_WIDTH: u32 = 18;
 /// Text shown in the under-pill bar during finishing / transcription paste.
 pub const FINISHING_LABEL: &str = "Writing…";
+/// Translucent opacity multiplier for the under-pill bar at rest (with frosted blur behind it).
+pub const UNDERBAR_REST_ALPHA_RATIO: f32 = 0.72;
+/// Elevated opacity multiplier for the under-pill bar while hovered/interacting (never 100%).
+pub const UNDERBAR_HOVER_ALPHA_RATIO: f32 = 0.88;
+/// Dimensions of the floating failed-paste recovery card anchored at the pill's screen position.
+pub const RECOVERY_CARD_WIDTH: u32 = 264;
+pub const RECOVERY_CARD_HEIGHT: u32 = 76;
+pub const RECOVERY_CARD_RADIUS: f32 = 10.0;
 
 /// RGBA color tuple `(r, g, b, a)` in straight 8-bit channels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,21 +123,21 @@ impl UnderbarTheme {
     pub const fn for_theme(dark: bool) -> Self {
         if dark {
             Self {
-                bar_bg: Rgba::new(0x15, 0x15, 0x17, 242),
-                bar_border: Rgba::rgb(0x2A, 0x2A, 0x30),
-                divider: Rgba::rgb(0x2A, 0x2A, 0x30),
+                bar_bg: Rgba::new(0x15, 0x15, 0x17, 210),
+                bar_border: Rgba::new(0x3A, 0x3A, 0x42, 220),
+                divider: Rgba::new(0x3A, 0x3A, 0x42, 210),
                 text_primary: Rgba::rgb(0xF5, 0xF6, 0xF8),
-                text_muted: Rgba::rgb(0x85, 0x85, 0x8F),
-                hover_bg: Rgba::new(0x26, 0x26, 0x2D, 235),
-                chip_bg: Rgba::new(0x1E, 0x1E, 0x24, 245),
-                chip_hover_bg: Rgba::new(0x28, 0x28, 0x31, 250),
+                text_muted: Rgba::rgb(0x98, 0x98, 0xA2),
+                hover_bg: Rgba::new(0x26, 0x26, 0x2D, 220),
+                chip_bg: Rgba::new(0x1E, 0x1E, 0x24, 240),
+                chip_hover_bg: Rgba::new(0x28, 0x28, 0x31, 245),
                 accent_text: Rgba::rgb(0x58, 0xA6, 0xFF),
-                pin_inactive: Rgba::rgb(0x85, 0x85, 0x8F),
+                pin_inactive: Rgba::rgb(0x8E, 0x8E, 0x98),
                 pin_active: Rgba::rgb(0x58, 0xA6, 0xFF),
                 done_bg: Rgba::rgb(0x1A, 0x48, 0x9B),
                 done_hover_bg: Rgba::rgb(0x22, 0x58, 0xB8),
                 done_fg: Rgba::rgb(0xFF, 0xFF, 0xFF),
-                popup_bg: Rgba::new(0x15, 0x15, 0x17, 248),
+                popup_bg: Rgba::new(0x15, 0x15, 0x17, 244),
                 popup_border: Rgba::rgb(0x2A, 0x2A, 0x30),
                 search_bg: Rgba::rgb(0x1C, 0x1C, 0x21),
                 search_border: Rgba::rgb(0x2A, 0x2A, 0x30),
@@ -139,12 +147,12 @@ impl UnderbarTheme {
             }
         } else {
             Self {
-                bar_bg: Rgba::new(0xFF, 0xFF, 0xFF, 246),
-                bar_border: Rgba::rgb(0xD4, 0xD6, 0xDC),
-                divider: Rgba::rgb(0xD4, 0xD6, 0xDC),
+                bar_bg: Rgba::new(0xFF, 0xFF, 0xFF, 216),
+                bar_border: Rgba::new(0xC8, 0xCB, 0xD2, 225),
+                divider: Rgba::new(0xD4, 0xD6, 0xDC, 220),
                 text_primary: Rgba::rgb(0x1A, 0x1C, 0x1F),
-                text_muted: Rgba::rgb(0x74, 0x74, 0x7E),
-                hover_bg: Rgba::new(0xEE, 0xF0, 0xF4, 240),
+                text_muted: Rgba::rgb(0x68, 0x6A, 0x74),
+                hover_bg: Rgba::new(0xEE, 0xF0, 0xF4, 225),
                 chip_bg: Rgba::rgb(0xF5, 0xF6, 0xF8),
                 chip_hover_bg: Rgba::rgb(0xE8, 0xEB, 0xF0),
                 accent_text: Rgba::rgb(0x09, 0x69, 0xDA),
@@ -153,7 +161,7 @@ impl UnderbarTheme {
                 done_bg: Rgba::rgb(0x09, 0x69, 0xDA),
                 done_hover_bg: Rgba::rgb(0x05, 0x50, 0xAE),
                 done_fg: Rgba::rgb(0xFF, 0xFF, 0xFF),
-                popup_bg: Rgba::new(0xFF, 0xFF, 0xFF, 250),
+                popup_bg: Rgba::new(0xFF, 0xFF, 0xFF, 246),
                 popup_border: Rgba::rgb(0xD4, 0xD6, 0xDC),
                 search_bg: Rgba::rgb(0xF5, 0xF6, 0xF8),
                 search_border: Rgba::rgb(0xD4, 0xD6, 0xDC),
@@ -550,21 +558,24 @@ pub struct UnderbarLayout {
 }
 
 impl UnderbarLayout {
-    /// Compute the deterministic left-to-right control geometry for the `26px` capsule.
+    /// Compute the deterministic left-to-right control geometry for the compact `26px` capsule.
+    ///
+    /// Keeps the bar narrower than the dictation pill (`177px` vs `224px` pill at 80% scale) by
+    /// rendering crisp regular-weight language text (`EN ▾`, no flag on the bar itself — flags
+    /// stay inside the 99-language popup).
     #[must_use]
-    pub const fn compute(has_flag: bool) -> Self {
+    pub const fn compute(_has_flag: bool) -> Self {
         let h = UNDERBAR_HEIGHT;
-        let cancel = LocalRect::new(3, 3, 20, 20);
-        let divider_x = 26;
-        let timer = LocalRect::new(32, 3, 36, 20);
-        let lang_w = if has_flag { 56 } else { 44 };
-        let language = LocalRect::new(72, 3, lang_w, 20);
-        let delivery_x = language.right() + 4;
-        let delivery_mode = LocalRect::new(delivery_x, 3, 44, 20);
-        let pin_x = delivery_mode.right() + 3;
-        let pin = LocalRect::new(pin_x, 3, 22, 20);
-        let done_x = pin.right() + 4;
-        let done = LocalRect::new(done_x, 3, 24, 20);
+        let cancel = LocalRect::new(3, 3, 18, 20);
+        let divider_x = 23;
+        let timer = LocalRect::new(27, 3, 30, 20);
+        let language = LocalRect::new(59, 3, 32, 20);
+        let delivery_x = language.right() + 2;
+        let delivery_mode = LocalRect::new(delivery_x, 3, 36, 20);
+        let pin_x = delivery_mode.right() + 2;
+        let pin = LocalRect::new(pin_x, 3, 19, 20);
+        let done_x = pin.right() + 2;
+        let done = LocalRect::new(done_x, 3, 22, 20);
         let width = (done.right() + 3) as u32;
 
         Self {
@@ -1085,6 +1096,99 @@ pub fn calc_lang_popup_rect(
     }
 }
 
+/// Interactive buttons on the floating failed-paste recovery card anchored at the pill position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecoveryCardButton {
+    ShowText,
+    Copy,
+    Discard,
+}
+
+/// Computed local geometry of the floating failed-paste recovery card (`Show text` / `Copy` / `Discard`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RecoveryCardLayout {
+    pub width: u32,
+    pub height: u32,
+    pub dot_cx: i32,
+    pub dot_cy: i32,
+    pub title_rect: LocalRect,
+    pub show_text: LocalRect,
+    pub copy: LocalRect,
+    pub discard: LocalRect,
+}
+
+impl RecoveryCardLayout {
+    /// Deterministic compact layout for the `264×76` floating failed-paste card.
+    #[must_use]
+    pub const fn compute() -> Self {
+        let width = RECOVERY_CARD_WIDTH;
+        let height = RECOVERY_CARD_HEIGHT;
+        let pad_x = 11;
+        let btn_y = 40;
+        let btn_h = 26;
+        let gap = 6;
+        let show_w = 82;
+        let copy_w = 74;
+        let discard_w = 74;
+        let show_text = LocalRect::new(pad_x, btn_y, show_w, btn_h);
+        let copy = LocalRect::new(show_text.right() + gap, btn_y, copy_w, btn_h);
+        let discard = LocalRect::new(copy.right() + gap, btn_y, discard_w, btn_h);
+        Self {
+            width,
+            height,
+            dot_cx: 17,
+            dot_cy: 21,
+            title_rect: LocalRect::new(26, 11, width - 36, 20),
+            show_text,
+            copy,
+            discard,
+        }
+    }
+
+    /// Hit-test local coordinates `(px, py)` against the three recovery card action buttons.
+    #[must_use]
+    pub const fn hit_test(&self, px: i32, py: i32) -> Option<RecoveryCardButton> {
+        if self.show_text.contains(px, py) {
+            Some(RecoveryCardButton::ShowText)
+        } else if self.copy.contains(px, py) {
+            Some(RecoveryCardButton::Copy)
+        } else if self.discard.contains(px, py) {
+            Some(RecoveryCardButton::Discard)
+        } else {
+            None
+        }
+    }
+}
+
+/// Position the floating failed-paste recovery card centered at the pill's screen position,
+/// clamped cleanly inside `area`.
+#[must_use]
+pub fn calc_recovery_card_rect(
+    pill: OverlayRect,
+    card_w: u32,
+    card_h: u32,
+    area: WorkArea,
+) -> OverlayRect {
+    let cw = card_w as i32;
+    let ch = card_h as i32;
+    let pill_cx = pill.x + (pill.width as i32) / 2;
+    let pill_cy = pill.y + (pill.height as i32) / 2;
+    let raw_x = pill_cx - cw / 2;
+    let raw_y = pill_cy - ch / 2;
+
+    let min_x = area.left + UNDERBAR_EDGE_MARGIN;
+    let max_x = (area.right - UNDERBAR_EDGE_MARGIN - cw).max(min_x);
+    let min_y = area.top + UNDERBAR_EDGE_MARGIN;
+    let max_y = (area.bottom - UNDERBAR_EDGE_MARGIN - ch).max(min_y);
+
+    OverlayRect {
+        x: raw_x.clamp(min_x, max_x),
+        y: raw_y.clamp(min_y, max_y),
+        width: card_w,
+        height: card_h,
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -1504,5 +1608,45 @@ mod tests {
             AREA,
         );
         assert_eq!(pr_below.y, bar_top.y + UNDERBAR_HEIGHT as i32 + POPUP_GAP);
+    }
+
+    #[test]
+    fn compact_underbar_narrower_than_pill_and_recovery_card_hits_all_buttons() {
+        let layout = UnderbarLayout::compute(true);
+        // At default 80% scale, pill width is ~224px; under-pill bar must stay narrower.
+        assert!(
+            layout.width < 200,
+            "under-pill bar ({}px) should stay narrower than pill",
+            layout.width
+        );
+
+        let rec = RecoveryCardLayout::compute();
+        assert_eq!(rec.width, RECOVERY_CARD_WIDTH);
+        assert_eq!(rec.height, RECOVERY_CARD_HEIGHT);
+        assert_eq!(
+            rec.hit_test(rec.show_text.x + 5, rec.show_text.y + 5),
+            Some(RecoveryCardButton::ShowText)
+        );
+        assert_eq!(
+            rec.hit_test(rec.copy.x + 5, rec.copy.y + 5),
+            Some(RecoveryCardButton::Copy)
+        );
+        assert_eq!(
+            rec.hit_test(rec.discard.x + 5, rec.discard.y + 5),
+            Some(RecoveryCardButton::Discard)
+        );
+        assert_eq!(rec.hit_test(4, 4), None);
+
+        let pill = OverlayRect {
+            x: 848,
+            y: 960,
+            width: 224,
+            height: 45,
+        };
+        let card_rect = calc_recovery_card_rect(pill, rec.width, rec.height, AREA);
+        assert_eq!(card_rect.width, RECOVERY_CARD_WIDTH);
+        assert_eq!(card_rect.height, RECOVERY_CARD_HEIGHT);
+        assert!(card_rect.x >= AREA.left && card_rect.x + card_rect.width as i32 <= AREA.right);
+        assert!(card_rect.y >= AREA.top && card_rect.y + card_rect.height as i32 <= AREA.bottom);
     }
 }

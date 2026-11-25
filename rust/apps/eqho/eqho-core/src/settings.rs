@@ -40,6 +40,14 @@ pub const VOLUME_DUCK_OPTIONS: [(&str, Option<f32>); 5] = [
     ("mute", Some(0.0)),
 ];
 
+pub const HISTORY_TRASH_OPTIONS: [(&str, i32); 5] = [
+    ("7 days", 7),
+    ("14 days", 14),
+    ("30 days", 30),
+    ("90 days", 90),
+    ("Never", 0),
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LanguageTier {
     Tuned,
@@ -224,6 +232,8 @@ pub struct Settings {
     pub theme: String,
     pub ui_scale: f64,
     pub history_enabled: bool,
+    /// Days to retain soft-deleted History items in Trash before permanent deletion (`0` = never auto-delete).
+    pub history_trash_days: i32,
     pub initial_prompt: String,
     pub replacements: BTreeMap<String, String>,
     pub voice_commands: bool,
@@ -255,17 +265,18 @@ impl Default for Settings {
             overlay_enabled: true,
             overlay_show_text: true,
             overlay_monitor: "active".to_owned(),
-            overlay_opacity: 0.85,
+            overlay_opacity: 0.95,
             overlay_font_size: 14,
             overlay_position: "bottom-center".to_owned(),
             overlay_show_level: true,
             overlay_pill_scale: 0.8,
-            overlay_panel_opacity: 0.85,
+            overlay_panel_opacity: 0.78,
             volume_duck: "off".to_owned(),
             start_with_windows: false,
             theme: "dark".to_owned(),
             ui_scale: 1.25,
             history_enabled: true,
+            history_trash_days: 30,
             initial_prompt: String::new(),
             replacements: BTreeMap::new(),
             voice_commands: false,
@@ -455,6 +466,9 @@ impl Settings {
         if let Some(v) = obj.get("recent_languages") {
             s.recent_languages = coerce_recent_languages(v);
         }
+        if let Some(v) = obj.get("history_trash_days") {
+            s.history_trash_days = coerce_i32(v, s.history_trash_days);
+        }
 
         s.clamp_ranges();
         s
@@ -486,6 +500,7 @@ impl Settings {
         self.overlay_panel_opacity = self.overlay_panel_opacity.clamp(0.3, 1.0);
         self.vad_sensitivity = self.vad_sensitivity.clamp(0.5, 2.0);
         self.ui_scale = self.ui_scale.clamp(1.0, 2.0);
+        self.history_trash_days = self.history_trash_days.clamp(0, 365);
     }
 
     /// Atomically save settings to `path` via a temp file in the same directory,
@@ -916,7 +931,7 @@ mod tests {
         assert_eq!(s.audio_device, Some(3));
         assert!((s.overlay_pill_scale - 1.4).abs() < 1e-9);
         assert!((s.overlay_opacity - 0.3).abs() < 1e-9);
-        assert!((s.overlay_panel_opacity - 0.85).abs() < 1e-9);
+        assert!((s.overlay_panel_opacity - 0.78).abs() < 1e-9);
         assert!((s.vad_sensitivity - 1.0).abs() < 1e-9);
         assert!((s.ui_scale - 2.0).abs() < 1e-9);
         assert!(!s.onboarding_done);

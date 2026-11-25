@@ -278,82 +278,107 @@ export component StoreTrialFooter inherits Rectangle {
 }
 
 // Recovery banner shown when an automatic paste failed.
-// Follows docs/ai/BRAND_STYLE_GUIDE.md: neutral surface with a restrained 3px left accent rail
-// and status dot — never flood containers with solid/muted yellow, green, or red fills.
+// Subtle neutral-warm surface distinct from regular cards, yellow strictly on the status dot,
+// 3-line clamped scrollable preview, and fixed-height bottom actions.
 export component RecoveryBanner inherits Rectangle {
     in property <string> text;
     callback copy-clicked();
+    callback view-history-clicked();
     callback dismiss-clicked();
 
-    background: Theme.surface;
+    background: Theme.dark ? #1B1A16 : #FAF8F2;
     border-radius: Theme.radius-md;
     border-width: 1px;
-    border-color: Theme.border;
+    border-color: Theme.dark ? #363329 : #DDD7C5;
     clip: true;
     min-height: lay.preferred-height;
 
-    Rectangle {
-        x: 0px;
-        y: 0px;
-        width: 3px;
-        height: parent.height;
-        background: Theme.warning;
-    }
-
-    lay := HorizontalLayout {
-        padding-left: Theme.space-16;
-        padding-right: Theme.space-12;
+    lay := VerticalLayout {
+        padding-left: Theme.space-14;
+        padding-right: Theme.space-14;
         padding-top: Theme.space-10;
         padding-bottom: Theme.space-10;
-        spacing: Theme.space-12;
-        alignment: space-between;
+        spacing: Theme.space-8;
 
-        VerticalLayout {
-            horizontal-stretch: 1;
-            alignment: center;
-            spacing: 4px;
-
-            HorizontalLayout {
-                spacing: 6px;
-                alignment: start;
-                VerticalLayout {
-                    alignment: center;
-                    Rectangle {
-                        width: 7px;
-                        height: 7px;
-                        border-radius: 3.5px;
-                        background: Theme.warning;
-                    }
-                }
-                Text {
-                    text: "Dictation couldn't be pasted automatically";
-                    font-size: Theme.font-size-sm;
-                    font-weight: 600;
-                    color: Theme.text;
-                    vertical-alignment: center;
+        // Top header row: yellow dot + clear title
+        HorizontalLayout {
+            spacing: 7px;
+            alignment: start;
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 7px;
+                    height: 7px;
+                    border-radius: 3.5px;
+                    background: Theme.warning;
                 }
             }
-
             Text {
-                text: root.text;
+                text: "Dictation couldn't be pasted automatically";
                 font-size: Theme.font-size-sm;
-                color: Theme.text-muted;
-                wrap: word-wrap;
+                font-weight: 600;
+                color: Theme.text;
+                vertical-alignment: center;
             }
         }
 
+        // Clamped 3-line preview (hover/wheel scrolls full text; subtle ellipsis cue if clipped)
+        Rectangle {
+            property <length> max-preview-h: 48px;
+            property <bool> is-clipped: preview-txt.preferred-height > self.max-preview-h;
+            height: Math.min(preview-txt.preferred-height, self.max-preview-h);
+            clip: true;
+
+            preview-flick := Flickable {
+                width: parent.width;
+                height: parent.height;
+                content-width: self.width;
+                content-height: preview-txt.preferred-height;
+                interactive: parent.is-clipped;
+
+                preview-txt := Text {
+                    width: preview-flick.width;
+                    text: root.text;
+                    font-size: Theme.font-size-sm;
+                    color: Theme.text-muted;
+                    wrap: word-wrap;
+                }
+            }
+
+            if self.is-clipped && (-preview-flick.content-y + self.height + 2px < preview-txt.preferred-height) : Rectangle {
+                x: parent.width - 26px;
+                y: parent.height - 16px;
+                width: 26px;
+                height: 16px;
+                background: Theme.dark ? #1B1A16 : #FAF8F2;
+                Text {
+                    text: "…";
+                    font-size: Theme.font-size-sm;
+                    font-weight: 600;
+                    color: Theme.text-muted;
+                    horizontal-alignment: right;
+                    vertical-alignment: bottom;
+                }
+            }
+        }
+
+        // Bottom fixed-height action row
         HorizontalLayout {
-            horizontal-stretch: 0;
-            spacing: Theme.space-6;
-            alignment: center;
+            spacing: Theme.space-8;
+            alignment: start;
             Button {
                 text: "Copy";
                 kind: ButtonKind.accent;
                 clicked => { root.copy-clicked(); }
             }
             Button {
-                text: "Dismiss";
+                text: "View in History";
                 kind: ButtonKind.outline;
+                clicked => { root.view-history-clicked(); }
+            }
+            Button {
+                text: "Dismiss";
+                kind: ButtonKind.text;
                 clicked => { root.dismiss-clicked(); }
             }
         }
@@ -493,6 +518,7 @@ export component TopBar inherits Rectangle {
                     width: 72px;
                     height: 31px;
                     image-fit: contain;
+                    image-rendering: smooth;
                     accessible-role: none;
                 }
             }
@@ -581,7 +607,7 @@ export component TopBar inherits Rectangle {
                         Theme.dark = !Theme.dark;
                         root.theme-toggled();
                     }
-                    // Sun in dark mode, crescent Moon in light mode (clean Path, no emoji).
+                    // Sun in dark mode, crescent Moon in light mode (clean thin hairline Path).
                     if Theme.dark : Path {
                         width: 16px;
                         height: 16px;
@@ -589,7 +615,7 @@ export component TopBar inherits Rectangle {
                         viewbox-height: 24;
                         commands: "M12 7 A5 5 0 1 0 12 17 A5 5 0 1 0 12 7 M12 1 L12 4 M12 20 L12 23 M4.22 4.22 L6.34 6.34 M17.66 17.66 L19.78 19.78 M1 12 L4 12 M20 12 L23 12 M4.22 19.78 L6.34 17.66 M17.66 6.34 L19.78 4.22";
                         stroke: Theme.text;
-                        stroke-width: 1.8px;
+                        stroke-width: 0.95px;
                         fill: transparent;
                     }
                     if !Theme.dark : Path {
@@ -599,7 +625,7 @@ export component TopBar inherits Rectangle {
                         viewbox-height: 24;
                         commands: "M21 12.79 A9 9 0 1 1 11.21 3 A7 7 0 0 0 21 12.79 Z";
                         stroke: Theme.text;
-                        stroke-width: 1.8px;
+                        stroke-width: 0.95px;
                         fill: transparent;
                     }
                 }
@@ -621,7 +647,7 @@ export component TopBar inherits Rectangle {
                         viewbox-height: 24;
                         commands: "M12 15 A3 3 0 1 0 12 9 A3 3 0 1 0 12 15 M19.4 15 A1.65 1.65 0 0 0 19.73 16.82 L19.79 16.88 A2 2 0 1 1 16.96 19.71 L16.9 19.65 A1.65 1.65 0 0 0 15.08 19.32 A1.65 1.65 0 0 0 14.08 20.83 L14.08 21 A2 2 0 1 1 10.08 21 L10.08 20.91 A1.65 1.65 0 0 0 9 19.4 A1.65 1.65 0 0 0 7.18 19.73 L7.12 19.79 A2 2 0 1 1 4.29 16.96 L4.35 16.9 A1.65 1.65 0 0 0 4.68 15.08 A1.65 1.65 0 0 0 3.17 14.08 L3 14.08 A2 2 0 1 1 3 10.08 L3.09 10.08 A1.65 1.65 0 0 0 4.6 9 A1.65 1.65 0 0 0 4.27 7.18 L4.21 7.12 A2 2 0 1 1 7.04 4.29 L7.1 4.35 A1.65 1.65 0 0 0 8.92 4.68 L9 4.68 A1.65 1.65 0 0 0 10 3.17 L10 3 A2 2 0 1 1 14 3 L14 3.09 A1.65 1.65 0 0 0 15 4.6 A1.65 1.65 0 0 0 16.82 4.27 L16.88 4.21 A2 2 0 1 1 19.71 7.04 L19.65 7.1 A1.65 1.65 0 0 0 19.32 8.92 L19.32 9 A1.65 1.65 0 0 0 20.83 10 L21 10 A2 2 0 1 1 21 14 L20.91 14 A1.65 1.65 0 0 0 19.4 15 Z";
                         stroke: root.active-tab == "settings" ? Theme.accent-line : Theme.text;
-                        stroke-width: 1.7px;
+                        stroke-width: 0.95px;
                         fill: transparent;
                     }
                 }

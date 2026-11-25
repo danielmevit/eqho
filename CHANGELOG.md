@@ -4,6 +4,34 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.9.1] - 2026-11-25
+
+Dashboard polish, History Trash bin with configurable retention, floating failed-paste recovery card, snappier Live dictation cadence, pure-vector HiDPI wordmark, and refined frosted overlay visuals.
+
+### Added
+- **History Trash bin & configurable retention:**
+  - Soft-delete single items or Clear All to **Trash** with inline confirmations instead of instant permanent deletion, plus a **`Trash (N)`** toggle to **Restore**, **Delete forever**, or **Empty Trash**.
+  - Added **History Trash Retention** setting (`7 / 14 / 30 / 90 days / Never`, default `30 days`) under Settings → System with automatic expired-item cleanup on startup.
+  - Failed-paste dictations are always saved into History with a subtle yellow border and `"Not pasted"` badge, and clicking **Copy** gives per-row Eqho-blue **`Copied`** feedback.
+- **Floating failed-paste recovery card & redesigned recovery banner:**
+  - When automatic paste cannot target a window, a compact frosted-glass recovery card appears at the pill's screen position with **Show text**, **Copy**, and **Discard**.
+  - Dashboard recovery banner redesigned with a neutral-warm surface, yellow status dot only, 3-line scrollable clamped preview, and fixed-height bottom actions (**Copy**, **View in History**, **Dismiss**).
+- **Clear active Engine display & clickable Website link:** Settings → About Eqho now shows the exact active backend and GPU or CPU thread count (e.g. `GPU (Vulkan — NVIDIA GeForce RTX 3060) · whisper.cpp 1.8.4`), author `damt.xyz`, and a clickable `damt.xyz` website link.
+- **Mic Sensitivity percentage readout:** General → Audio Input displays both tier and exact percentage (e.g. `Normal (100%)`).
+
+### Changed
+- **General tab layout:** Pinned the quick left column (`Audio Input` + `Hotkey`) so only the taller right column (`Speech` + `Behavior`) scrolls independently.
+- **Models tab layout & icon-led states:** Paired `Inference Engine` and `Storage` side-by-side at the top; replaced text/green status pills with clean circular icon states (muted grey clickable download arrow, animated 3-dot Eqho-blue indicator while downloading, Eqho-blue checkmark for ready/active).
+- **Settings tab layout & Light-theme sliders:** Combined `Theme` and `UI Zoom` onto a single compact `Appearance` row; balanced `Dictation Extras + About Eqho` alongside `System + Overlay`; added a light-to-navy blue gradient on Light-theme slider tracks.
+- **Header wordmark & icon polish:** Replaced the raster header logo with a 4× HiDPI pure-vector SVG wordmark and thinned the top-right theme and Settings icon strokes.
+- **Overlay visuals & snappier Live dictation:**
+  - Slimmed the under-pill control bar narrower than the pill (removed bar flag icon, regular font weight, translucent hover elevation from `72%` to `88%`), applied subtle frosted blur behind the text preview panel, control bar, and recovery card, and made the listening pill more solid by default (`95%`).
+  - Tightened Live delivery segmentation (`250 ms` chunks, `0.45 s` pause commit, `3.5 s` soft dip / `6.0 s` continuous flush) so Live words type into the target app without multi-second lag.
+
+### Fixed
+- **Uniform button heights:** Fixed `Button` vertical stretching so `Download`, `Copy`, and action buttons never stretch to match taller sibling cards or banners.
+- **Active + Downloading state conflict:** Fixed `Models` cards where the selected model could simultaneously display as both Active and Downloading before finishing.
+
 ## [0.9.0] - 2026-11-24
 
 Ground-up Rust + Slint 1.19 rewrite: ~14 MB installer, ~3.4 MB idle RAM, ~38 ms startup, ~4× faster Vulkan transcription, Deep Navy Blend dark theme, hover/pinnable under-pill controls with Batch/Live delivery, clean-PC multi-threaded CPU + Q5 models, and Microsoft Store MSIX packaging.
