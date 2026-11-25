@@ -1,0 +1,165 @@
+---
+const title = "Privacy Policy | Eqho";
+const description = "Privacy policy for Eqho — 100% offline voice-to-text dictation. Your voice is processed locally on your PC and never uploaded.";
+const home = "/eqho/";
+const updated = "2026-11-25";
+---
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href="https://danielmevit.github.io/eqho/privacy/" />
+    <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/DanielMevit/eqho/main/assets/logo_32_dark.png" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/DanielMevit/eqho/main/assets/logo_32_white.png" media="(prefers-color-scheme: dark)" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://danielmevit.github.io/eqho/privacy/" />
+    <style>
+      :root {
+        --color-bg: #0d1117;
+        --color-card-bg: #161b22;
+        --color-text: #c9d1d9;
+        --color-heading: #ffffff;
+        --color-blue: #58a6ff;
+        --color-muted: #8b949e;
+        --color-border: #30363d;
+      }
+      * { box-sizing: border-box; }
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background-color: var(--color-bg);
+        color: var(--color-text);
+        line-height: 1.65;
+        margin: 0;
+        -webkit-font-smoothing: antialiased;
+      }
+      main { max-width: 820px; margin: 5rem auto; padding: 0 1.5rem; }
+      a { color: var(--color-blue); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 3rem; }
+      .logo-img { height: 34px; display: block; }
+      h1 { color: var(--color-heading); font-size: 2.5rem; font-weight: 600; letter-spacing: -0.02em; margin: 2rem 0 0.4rem; }
+      .lede { color: var(--color-muted); margin: 0 0 2.5rem; font-size: 1.05rem; }
+      .card {
+        background: var(--color-card-bg);
+        border: 1px solid var(--color-border);
+        border-radius: 14px;
+        padding: 1.5rem 1.75rem;
+        margin-bottom: 1.25rem;
+      }
+      .card h2 {
+        color: var(--color-heading);
+        font-size: 1.15rem;
+        font-weight: 600;
+        margin: 0 0 0.65rem;
+      }
+      .card p { margin: 0 0 0.75rem; }
+      .card p:last-child { margin-bottom: 0; }
+      ul { margin: 0.4rem 0 0.75rem; padding-left: 1.25rem; }
+      li { margin-bottom: 0.45rem; }
+      li:last-child { margin-bottom: 0; }
+      code {
+        background: rgba(88, 166, 255, 0.1);
+        color: var(--color-heading);
+        padding: 0.12rem 0.4rem;
+        border-radius: 5px;
+        font-size: 0.9em;
+      }
+      footer {
+        text-align: center;
+        margin-top: 4rem;
+        padding: 2.5rem 0;
+        border-top: 1px solid var(--color-border);
+        color: var(--color-muted);
+        font-size: 0.9rem;
+      }
+      @media (max-width: 620px) {
+        h1 { font-size: 2rem; }
+        .card { padding: 1.25rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="top">
+        <a href={home} aria-label="Eqho home">
+          <img src="https://raw.githubusercontent.com/DanielMevit/eqho/main/logo/logo_horizontal_dark.png" alt="Eqho logo" class="logo-img" />
+        </a>
+        <a href={home}>&larr; Back to home</a>
+      </div>
+
+      <h1>Privacy Policy</h1>
+      <p class="lede">
+        Eqho does not collect, store on any server, sell, or share your personal data or voice recordings.
+        Everything runs locally on your computer.
+      </p>
+
+      <section class="card">
+        <h2>Microphone &amp; voice audio</h2>
+        <p>
+          Eqho accesses your microphone only while you actively dictate (after you press your chosen hotkey or click Start Dictation).
+          As soon as you stop or cancel dictation, the microphone stream closes immediately.
+        </p>
+        <p>
+          All speech recognition runs 100% locally on your own CPU or graphics card using <code>whisper.cpp</code>.
+          Audio is kept in memory only for the duration of the phrase being transcribed — it is never written to disk and never sent over the internet.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Files stored locally on your PC</h2>
+        <p>Eqho keeps only your local configuration and downloaded speech models on your own device:</p>
+        <ul>
+          <li><code>%APPDATA%\Eqho\settings.json</code> — your hotkey, language, theme, overlay, custom vocabulary, and replacement preferences.</li>
+          <li><code>%APPDATA%\Eqho\history.jsonl</code> — local transcript history (optional; can be disabled or cleared at any time in Eqho).</li>
+          <li><code>%APPDATA%\Eqho\eqho.log</code> — technical diagnostics and crash logs. Your dictated text and audio are never written to log files.</li>
+          <li><code>%APPDATA%\Eqho\license.json</code> — <em>Microsoft Store edition only:</em> locally cached Store trial or purchase status so Eqho continues working while offline.</li>
+          <li><code>%LOCALAPPDATA%\Eqho\models\</code> — local GGML Whisper speech model files that you choose to download.</li>
+        </ul>
+        <p>Deleting those folders removes all Eqho data from your computer.</p>
+      </section>
+
+      <section class="card">
+        <h2>Network activity</h2>
+        <p>Eqho contains no telemetry, no analytics, no ads, and no user accounts. Network requests occur only in two explicit cases:</p>
+        <ul>
+          <li>
+            <strong>Downloading a speech model you choose:</strong> When you download a Whisper model during first-run setup or in the Models tab, Eqho fetches the selected GGML model file over HTTPS from Hugging Face. Once downloaded, dictation works completely offline.
+          </li>
+          <li>
+            <strong>Microsoft Store licence checks (Store edition only):</strong> The Microsoft Store edition uses the built-in Windows <code>Windows.Services.Store.StoreContext</code> API to check your 15-day free trial or purchase status through the Microsoft Store.
+          </li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>Clipboard &amp; active window</h2>
+        <p>
+          When inserting dictated text using Clipboard mode, Eqho marks the pasted text as private (excluded from Windows Win+V clipboard history and cloud clipboard sync) and restores your previous clipboard text immediately afterward.
+          Eqho reads the active window handle solely to restore focus before inserting your dictation and to apply any per-app paste rules you configure.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>This website &amp; contact</h2>
+        <p>
+          This documentation site uses no cookies, no analytics scripts, and no third-party tracking.
+        </p>
+        <p>
+          Questions about privacy? Reach out via <a href="https://damt.xyz">damt.xyz</a>.
+        </p>
+      </section>
+
+      <footer>
+        Last updated {updated} · © 2026 <a href="https://damt.xyz">Daniel Mevit · damt.xyz</a> · <a href={home}>Eqho</a>
+      </footer>
+    </main>
+  </body>
+</html>
