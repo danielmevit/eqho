@@ -579,6 +579,17 @@ pub fn history_trash_days_value(idx: i32) -> i32 {
         .unwrap_or(30)
 }
 
+fn gpu_driver_label() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "Metal"
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "Vulkan"
+    }
+}
+
 /// Clear human-readable description of the currently active speech engine & hardware backend.
 #[must_use]
 pub fn format_active_engine_display(
@@ -590,14 +601,15 @@ pub fn format_active_engine_display(
     let pref = engine_backend.trim().to_ascii_lowercase();
     let using_gpu = match pref.as_str() {
         "cpu" => false,
-        "vulkan" | "gpu" => true,
+        "vulkan" | "gpu" | "metal" => true,
         _ => hw == HardwareClass::Gpu,
     };
+    let drv = gpu_driver_label();
     if using_gpu {
         if let Some(name) = gpu_name.filter(|n| !n.trim().is_empty()) {
-            format!("GPU (Vulkan — {}) · whisper.cpp 1.8.4", name.trim())
+            format!("GPU ({drv} — {}) · whisper.cpp 1.8.4", name.trim())
         } else {
-            "GPU (Vulkan) · whisper.cpp 1.8.4".to_owned()
+            format!("GPU ({drv}) · whisper.cpp 1.8.4")
         }
     } else {
         format!("CPU ({cpu_threads} threads) · whisper.cpp 1.8.4")
@@ -615,14 +627,15 @@ pub fn format_active_driver_display(
     let pref = engine_backend.trim().to_ascii_lowercase();
     let using_gpu = match pref.as_str() {
         "cpu" => false,
-        "vulkan" | "gpu" => true,
+        "vulkan" | "gpu" | "metal" => true,
         _ => hw == HardwareClass::Gpu,
     };
+    let drv = gpu_driver_label();
     if using_gpu {
         if let Some(name) = gpu_name.filter(|n| !n.trim().is_empty()) {
-            format!("Vulkan · {}", name.trim())
+            format!("{drv} · {}", name.trim())
         } else {
-            "Vulkan".to_owned()
+            drv.to_owned()
         }
     } else {
         format!("CPU · {cpu_threads} threads")

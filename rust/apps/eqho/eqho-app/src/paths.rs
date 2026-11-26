@@ -39,6 +39,16 @@ pub fn resolve_dll_dir(cli_override: Option<&Path>, exe_path: &Path) -> PathBuf 
     resolve_dll_dir_with_env(cli_override, env_override.as_deref(), exe_path)
 }
 
+fn dir_has_whisper_lib(dir: &Path) -> bool {
+    #[cfg(windows)]
+    const NAMES: &[&str] = &["whisper.dll"];
+    #[cfg(target_os = "macos")]
+    const NAMES: &[&str] = &["libwhisper.dylib", "libwhisper.1.dylib"];
+    #[cfg(all(unix, not(target_os = "macos")))]
+    const NAMES: &[&str] = &["libwhisper.so", "libwhisper.so.1", "whisper.dll"];
+    NAMES.iter().any(|n| dir.join(n).is_file())
+}
+
 #[must_use]
 pub(crate) fn resolve_dll_dir_with_env(
     cli_override: Option<&Path>,
@@ -62,9 +72,18 @@ pub(crate) fn resolve_dll_dir_with_env(
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
 
-    let sub_dlls = exe_dir.join("dlls");
-    if sub_dlls.join("whisper.dll").is_file() {
-        return sub_dlls;
+    // Check standard bundle layouts across Windows, macOS (.app/Contents/Frameworks), and Linux
+    // (AppImage/FHS ../lib and co-located dlls/).
+    let candidates = [
+        exe_dir.join("dlls"),
+        exe_dir.join("lib"),
+        exe_dir.join("..").join("Frameworks"),
+        exe_dir.join("..").join("lib"),
+    ];
+    for cand in candidates {
+        if dir_has_whisper_lib(&cand) {
+            return cand;
+        }
     }
 
     exe_dir.to_path_buf()

@@ -1,8 +1,11 @@
 [Desktop Entry]
 Type=Application
+Version=1.0
 Name=Eqho
-Comment=Local voice-to-text dictation
-Exec=Eqho
+Comment=Calm, 100% offline local voice-to-text dictation
+Exec=Eqho --open-dashboard
 Icon=eqho
-Categories=Utility;Accessibility;
 Terminal=false
+Categories=Utility;Audio;Accessibility;
+StartupWMClass=Eqho
+Keywords=dictation;voice;speech;whisper;offline;

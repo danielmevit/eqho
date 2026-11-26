@@ -1,0 +1,15 @@
+[package]
+name = "damt-platform-macos"
+description = "macOS implementations of the damt-platform OS-service contracts (LaunchAgent autostart, AppleInterfaceStyle theme, CoreGraphics active screen, reduceMotion, notifications)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+damt-platform.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

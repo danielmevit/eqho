@@ -17,7 +17,11 @@ use crate::paths::resolve_dll_dir;
 
 #[cfg(windows)]
 type PlatformBundle = eqho_platform_win::WinEqhoPlatform;
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+type PlatformBundle = eqho_platform_linux::LinuxEqhoPlatform;
+#[cfg(target_os = "macos")]
+type PlatformBundle = eqho_platform_macos::MacEqhoPlatform;
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 type PlatformBundle = eqho_platform::UnsupportedEqhoPlatform;
 
 fn create_platform() -> PlatformBundle {
@@ -277,7 +281,57 @@ fn process_memory_bytes() -> (u64, u64) {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+fn process_memory_bytes() -> (u64, u64) {
+    // `/proc/self/statm`: size resident shared text lib data dt (in pages).
+    let Ok(statm) = std::fs::read_to_string("/proc/self/statm") else {
+        return (0, 0);
+    };
+    let mut parts = statm.split_whitespace();
+    let _size = parts.next();
+    let resident_pages: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let shared_pages: u64 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let page_size = 4096_u64;
+    let rss = resident_pages.saturating_mul(page_size);
+    let private = resident_pages
+        .saturating_sub(shared_pages)
+        .saturating_mul(page_size);
+    (private, rss)
+}
+
+#[cfg(target_os = "macos")]
+fn process_memory_bytes() -> (u64, u64) {
+    #[repr(C)]
+    struct TimeVal {
+        tv_sec: i64,
+        tv_usec: i32,
+        _pad: i32,
+    }
+    #[repr(C)]
+    struct Rusage {
+        ru_utime: TimeVal,
+        ru_stime: TimeVal,
+        ru_maxrss: i64,
+        _rest: [i64; 13],
+    }
+    #[link(name = "System", kind = "framework")]
+    unsafe extern "C" {
+        fn getrusage(who: i32, usage: *mut Rusage) -> i32;
+    }
+    // SAFETY: `getrusage(RUSAGE_SELF = 0, &mut ru)` fills a valid stack `Rusage` struct.
+    // On macOS, `ru_maxrss` is reported directly in bytes.
+    unsafe {
+        let mut ru: Rusage = std::mem::zeroed();
+        if getrusage(0, &mut ru) == 0 {
+            let bytes = u64::try_from(ru.ru_maxrss).unwrap_or(0);
+            (bytes, bytes)
+        } else {
+            (0, 0)
+        }
+    }
+}
+
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 fn process_memory_bytes() -> (u64, u64) {
     (0, 0)
 }

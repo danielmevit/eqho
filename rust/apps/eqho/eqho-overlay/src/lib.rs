@@ -5,6 +5,10 @@
 
 #[cfg_attr(not(windows), allow(dead_code))]
 mod canvas;
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
 pub mod pure;
 pub mod underbar;
 #[cfg(windows)]
@@ -91,12 +95,16 @@ pub struct OverlayHandle {
     enabled: Arc<AtomicBool>,
     #[cfg(windows)]
     client: Mutex<Option<win::WinOverlayClient>>,
+    #[cfg(target_os = "linux")]
+    linux_client: Mutex<Option<linux::LinuxOverlayClient>>,
+    #[cfg(target_os = "macos")]
+    macos_client: Mutex<Option<macos::MacOverlayClient>>,
     #[cfg(not(windows))]
     state: Mutex<NonWinState>,
 }
 
 impl OverlayHandle {
-    /// Start the overlay backend (dedicated Win32 thread on Windows; state recorder elsewhere).
+    /// Start the overlay backend (native layered Win32/X11/NSPanel window + headless state recorder).
     #[must_use]
     pub fn start(config: OverlayConfig) -> Self {
         Self::start_with_callbacks(config, None, None)
@@ -123,9 +131,17 @@ impl OverlayHandle {
         #[cfg(not(windows))]
         {
             let visibility = UnderbarVisibility::new(config.controls_enabled, config.controls_pinned);
+            #[cfg(target_os = "linux")]
+            let linux_client = linux::LinuxOverlayClient::start(config.clone());
+            #[cfg(target_os = "macos")]
+            let macos_client = macos::MacOverlayClient::start(config.clone());
             Self {
                 visible,
                 enabled,
+                #[cfg(target_os = "linux")]
+                linux_client: Mutex::new(linux_client),
+                #[cfg(target_os = "macos")]
+                macos_client: Mutex::new(macos_client),
                 state: Mutex::new(NonWinState {
                     config,
                     text: String::new(),
@@ -150,6 +166,18 @@ impl OverlayHandle {
             && let Some(client) = guard.as_ref()
         {
             client.send(win::OverlayCmd::Show(text.to_owned()));
+        }
+        #[cfg(target_os = "linux")]
+        if let Ok(guard) = self.linux_client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(linux::LinuxOverlayCmd::Show);
+        }
+        #[cfg(target_os = "macos")]
+        if let Ok(guard) = self.macos_client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(macos::MacOverlayCmd::Show);
         }
         #[cfg(not(windows))]
         if let Ok(mut guard) = self.state.lock() {
@@ -197,6 +225,18 @@ impl OverlayHandle {
         {
             client.send(win::OverlayCmd::SetLevel(level));
         }
+        #[cfg(target_os = "linux")]
+        if let Ok(guard) = self.linux_client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(linux::LinuxOverlayCmd::SetLevel(level));
+        }
+        #[cfg(target_os = "macos")]
+        if let Ok(guard) = self.macos_client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(macos::MacOverlayCmd::SetLevel(level));
+        }
         #[cfg(not(windows))]
         if let Ok(mut guard) = self.state.lock() {
             guard.animator.set_level(level);
@@ -210,6 +250,18 @@ impl OverlayHandle {
             && let Some(client) = guard.as_ref()
         {
             client.send(win::OverlayCmd::SetWaveform(loud, tone));
+        }
+        #[cfg(target_os = "linux")]
+        if let Ok(guard) = self.linux_client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(linux::LinuxOverlayCmd::SetWaveform(loud, tone));
+        }
+        #[cfg(target_os = "macos")]
+        if let Ok(guard) = self.macos_client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(macos::MacOverlayCmd::SetWaveform(loud, tone));
         }
         #[cfg(not(windows))]
         if let Ok(mut guard) = self.state.lock() {
@@ -284,6 +336,18 @@ impl OverlayHandle {
         {
             client.send(win::OverlayCmd::UpdateConfig(config));
         }
+        #[cfg(target_os = "linux")]
+        if let Ok(guard) = self.linux_client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(linux::LinuxOverlayCmd::UpdateConfig(config.clone()));
+        }
+        #[cfg(target_os = "macos")]
+        if let Ok(guard) = self.macos_client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(macos::MacOverlayCmd::UpdateConfig(config.clone()));
+        }
         #[cfg(not(windows))]
         if let Ok(mut guard) = self.state.lock() {
             let controls_enabled = config.controls_enabled;
@@ -329,6 +393,18 @@ impl OverlayHandle {
         {
             client.send(win::OverlayCmd::Hide);
         }
+        #[cfg(target_os = "linux")]
+        if let Ok(guard) = self.linux_client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(linux::LinuxOverlayCmd::Hide);
+        }
+        #[cfg(target_os = "macos")]
+        if let Ok(guard) = self.macos_client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(macos::MacOverlayCmd::Hide);
+        }
         #[cfg(not(windows))]
         if let Ok(mut guard) = self.state.lock() {
             guard.animator.fade_target = 0.0;
@@ -343,6 +419,18 @@ impl OverlayHandle {
         self.visible.store(false, Ordering::Release);
         #[cfg(windows)]
         if let Ok(mut guard) = self.client.lock()
+            && let Some(mut client) = guard.take()
+        {
+            client.shutdown();
+        }
+        #[cfg(target_os = "linux")]
+        if let Ok(mut guard) = self.linux_client.lock()
+            && let Some(mut client) = guard.take()
+        {
+            client.shutdown();
+        }
+        #[cfg(target_os = "macos")]
+        if let Ok(mut guard) = self.macos_client.lock()
             && let Some(mut client) = guard.take()
         {
             client.shutdown();

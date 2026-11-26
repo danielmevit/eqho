@@ -5,11 +5,15 @@ members = [
     "crates/damt-app",
     "crates/damt-build",
     "crates/damt-platform",
+    "crates/damt-platform-linux",
+    "crates/damt-platform-macos",
     "crates/damt-platform-win",
     "crates/damt-theme",
     "crates/damt-ui",
     "apps/eqho/eqho-core",
     "apps/eqho/eqho-platform",
+    "apps/eqho/eqho-platform-linux",
+    "apps/eqho/eqho-platform-macos",
     "apps/eqho/eqho-platform-win",
     "apps/eqho/eqho-host",
     "apps/eqho/eqho-engine",
@@ -31,11 +35,15 @@ repository = "https://github.com/danielmevit/eqho"
 damt-app = { path = "crates/damt-app" }
 damt-build = { path = "crates/damt-build" }
 damt-platform = { path = "crates/damt-platform" }
+damt-platform-linux = { path = "crates/damt-platform-linux" }
+damt-platform-macos = { path = "crates/damt-platform-macos" }
 damt-platform-win = { path = "crates/damt-platform-win" }
 damt-theme = { path = "crates/damt-theme" }
 damt-ui = { path = "crates/damt-ui" }
 eqho-core = { path = "apps/eqho/eqho-core" }
 eqho-platform = { path = "apps/eqho/eqho-platform" }
+eqho-platform-linux = { path = "apps/eqho/eqho-platform-linux" }
+eqho-platform-macos = { path = "apps/eqho/eqho-platform-macos" }
 eqho-platform-win = { path = "apps/eqho/eqho-platform-win" }
 eqho-host = { path = "apps/eqho/eqho-host" }
 eqho-engine = { path = "apps/eqho/eqho-engine" }

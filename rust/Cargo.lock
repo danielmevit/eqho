@@ -993,6 +993,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "damt-platform-linux"
+version = "0.9.4"
+dependencies = [
+ "damt-platform",
+ "libloading",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "damt-platform-macos"
+version = "0.9.4"
+dependencies = [
+ "damt-platform",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "damt-platform-win"
 version = "0.9.4"
 dependencies = [
@@ -1198,6 +1215,8 @@ dependencies = [
  "damt-app",
  "damt-build",
  "damt-platform",
+ "damt-platform-linux",
+ "damt-platform-macos",
  "damt-platform-win",
  "embed-manifest",
  "eqho-core",
@@ -1205,6 +1224,8 @@ dependencies = [
  "eqho-host",
  "eqho-overlay",
  "eqho-platform",
+ "eqho-platform-linux",
+ "eqho-platform-macos",
  "eqho-platform-win",
  "eqho-ui",
  "jiff",
@@ -1258,6 +1279,7 @@ version = "0.9.4"
 dependencies = [
  "damt-platform",
  "eqho-core",
+ "libloading",
  "windows",
 ]
 
@@ -1266,6 +1288,25 @@ name = "eqho-platform"
 version = "0.9.4"
 dependencies = [
  "damt-platform",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "eqho-platform-linux"
+version = "0.9.4"
+dependencies = [
+ "damt-platform",
+ "eqho-platform",
+ "libloading",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "eqho-platform-macos"
+version = "0.9.4"
+dependencies = [
+ "damt-platform",
+ "eqho-platform",
  "thiserror 2.0.21",
 ]
 

@@ -58,12 +58,20 @@ const STARTUP_TASK_ID: &str = "EqhoStartup";
 
 #[cfg(windows)]
 type EqhoPlatformImpl = eqho_platform_win::WinEqhoPlatform;
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+type EqhoPlatformImpl = eqho_platform_linux::LinuxEqhoPlatform;
+#[cfg(target_os = "macos")]
+type EqhoPlatformImpl = eqho_platform_macos::MacEqhoPlatform;
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 type EqhoPlatformImpl = eqho_platform::UnsupportedEqhoPlatform;
 
 #[cfg(windows)]
 type DamtPlatformImpl = damt_platform_win::WinPlatform;
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+type DamtPlatformImpl = damt_platform_linux::LinuxPlatform;
+#[cfg(target_os = "macos")]
+type DamtPlatformImpl = damt_platform_macos::MacPlatform;
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 type DamtPlatformImpl = damt_platform::Unsupported;
 
 fn build_damt_platform(is_isolated: bool, error_log: &ErrorLog) -> DamtPlatformImpl {
@@ -99,7 +107,26 @@ fn build_damt_platform(is_isolated: bool, error_log: &ErrorLog) -> DamtPlatformI
         let _ = error_log;
         win_platform
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        let _ = error_log;
+        let mut linux_platform = damt_platform_linux::LinuxPlatform::new("Eqho");
+        if !is_isolated {
+            linux_platform = linux_platform
+                .with_notifier(damt_platform_linux::LinuxNotifier::new("Eqho", "eqho"));
+        }
+        linux_platform
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = error_log;
+        let mut mac_platform = damt_platform_macos::MacPlatform::new(SINGLE_INSTANCE_ID);
+        if !is_isolated {
+            mac_platform = mac_platform.with_notifier(damt_platform_macos::MacNotifier);
+        }
+        mac_platform
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     {
         let _ = (is_isolated, error_log);
         damt_platform::Unsupported
@@ -1693,6 +1720,48 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     }
     {
         let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_hotkey_capture_key(move |ctrl_k, alt_k, shift_k, meta_k, text| {
+            let Some(combo) = slint_key_to_hotkey_combo(ctrl_k, alt_k, shift_k, meta_k, text.as_str())
+            else {
+                return false;
+            };
+            let mut c = ctrl_w.borrow_mut();
+            if let Some(cancel) = c.hotkey_capture_cancel.take() {
+                cancel.store(true, Ordering::Release);
+            }
+            let new_settings = {
+                let mut s = c.settings.lock().unwrap_or_else(|e| e.into_inner());
+                s.hotkey = combo.clone();
+                let _ = s.save_to_path(&c.settings_path);
+                s.clone()
+            };
+            c.coordinator.apply_settings(new_settings, false);
+            c.hotkey_ok = c.coordinator.register_hotkey().is_ok();
+            let dictation_allowed = {
+                let mut snap = c.snapshot.lock().unwrap_or_else(|e| e.into_inner());
+                snap.hotkey = combo.clone();
+                snap.dictation_allowed
+            };
+            let display = eqho_ui::format_hotkey_display(&combo);
+            let tooltip = if dictation_allowed {
+                status_summary_title(false, &combo)
+            } else {
+                "Your trial has ended.".to_owned()
+            };
+            if let Some(d) = dash_w.upgrade() {
+                d.set_hotkey_capturing(false);
+                d.set_hotkey_display(display.into());
+                d.set_onboarding_hotkey_ok(c.hotkey_ok);
+            }
+            if let Some(t) = c.ui_sink.tray_weak.upgrade() {
+                t.set_tray_tooltip(tooltip.into());
+            }
+            true
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
         dash.on_hotkey_mode_changed(move |idx| {
             let c = ctrl_w.borrow();
             c.settings
@@ -2615,12 +2684,63 @@ fn matches_slint_hotkey(
     }
 }
 
+/// Convert a Slint `KeyEvent` into a stored hotkey combo such as `"alt+q"` or `"ctrl+shift+f9"`.
+fn slint_key_to_hotkey_combo(
+    ctrl: bool,
+    alt: bool,
+    shift: bool,
+    meta: bool,
+    text: &str,
+) -> Option<String> {
+    let mut chars = text.chars();
+    let ch = chars.next()?;
+    if chars.next().is_some() {
+        return None;
+    }
+    let key_name: String = match ch {
+        ' ' => "space".to_owned(),
+        '\n' | '\r' => "enter".to_owned(),
+        '\t' => "tab".to_owned(),
+        '\u{0008}' => "backspace".to_owned(),
+        '\u{007f}' => "delete".to_owned(),
+        c if ctrl && (1..=26).contains(&(c as u32)) => {
+            (((c as u8) - 1 + b'a') as char).to_string()
+        }
+        c if c.is_ascii_alphanumeric() => c.to_ascii_lowercase().to_string(),
+        c if ('\u{F704}'..='\u{F71B}').contains(&c) => {
+            let n = (c as u32) - 0xF704 + 1;
+            format!("f{n}")
+        }
+        _ => return None,
+    };
+
+    let mut parts: Vec<String> = Vec::new();
+    if ctrl {
+        parts.push("ctrl".to_owned());
+    }
+    if alt {
+        parts.push("alt".to_owned());
+    }
+    if shift {
+        parts.push("shift".to_owned());
+    }
+    if meta {
+        parts.push("win".to_owned());
+    }
+    parts.push(key_name);
+    Some(parts.join("+"))
+}
+
 fn open_folder(path: &Path) {
     #[cfg(windows)]
     {
         let _ = Command::new("explorer.exe").arg(path).spawn();
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("open").arg(path).spawn();
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = Command::new("xdg-open").arg(path).spawn();
     }
@@ -2639,7 +2759,11 @@ fn open_https_url(url: &str) {
             .args(["url.dll,FileProtocolHandler", trimmed])
             .spawn();
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("open").arg(trimmed).spawn();
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = Command::new("xdg-open").arg(trimmed).spawn();
     }
@@ -2761,20 +2885,16 @@ fn spawn_hotkey_capture(
 
 #[cfg(not(windows))]
 fn spawn_hotkey_capture(
-    cancel: Arc<AtomicBool>,
-    dash_weak: slint::Weak<DashboardWindow>,
+    _cancel: Arc<AtomicBool>,
+    _dash_weak: slint::Weak<DashboardWindow>,
     _settings: Arc<Mutex<Settings>>,
     _settings_path: PathBuf,
     _coordinator: DictationCoordinator,
     _snapshot: Arc<Mutex<UiSyncSnapshot>>,
     _tray_weak: slint::Weak<EqhoTray>,
 ) {
-    let _ = cancel;
-    let _ = slint::invoke_from_event_loop(move || {
-        if let Some(d) = dash_weak.upgrade() {
-            d.set_hotkey_capturing(false);
-        }
-    });
+    // On Linux & macOS, `GeneralTab`'s `FocusScope` captures the pressed shortcut natively
+    // (works across X11, Wayland, and macOS without extra OS polling permissions).
 }
 
 #[cfg(windows)]
@@ -3567,7 +3687,27 @@ mod store_license {
 
 #[cfg(test)]
 mod hotkey_match_tests {
-    use super::matches_slint_hotkey;
+    use super::{matches_slint_hotkey, slint_key_to_hotkey_combo};
+
+    #[test]
+    fn converts_slint_keys_to_hotkey_combo() {
+        assert_eq!(
+            slint_key_to_hotkey_combo(false, true, false, false, "Q").as_deref(),
+            Some("alt+q")
+        );
+        assert_eq!(
+            slint_key_to_hotkey_combo(true, false, true, false, " ").as_deref(),
+            Some("ctrl+shift+space")
+        );
+        assert_eq!(
+            slint_key_to_hotkey_combo(false, false, false, true, "\u{F70B}").as_deref(),
+            Some("win+f8")
+        );
+        assert_eq!(
+            slint_key_to_hotkey_combo(false, false, false, false, ""),
+            None
+        );
+    }
 
     #[test]
     fn matches_default_alt_q_and_rejects_plain_q() {

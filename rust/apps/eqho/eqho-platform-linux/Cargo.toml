@@ -1,0 +1,19 @@
+[package]
+name = "eqho-platform-linux"
+description = "Linux implementations of Eqho OS-service contracts (Vulkan GPU probe, AVX2, /proc/meminfo, PipeWire/PulseAudio audio & ducking, Wayland/X11 clipboard, X11/XTest focus/hotkeys/injection)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+damt-platform.workspace = true
+eqho-platform.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libloading.workspace = true
+
+[lints]
+workspace = true

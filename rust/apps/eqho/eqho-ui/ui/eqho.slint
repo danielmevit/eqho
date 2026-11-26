@@ -88,6 +88,7 @@ export component DashboardWindow inherits Window {
     callback vad-sensitivity-changed(int);
     callback start-hotkey-capture();
     callback cancel-hotkey-capture();
+    callback hotkey-capture-key(bool, bool, bool, bool, string) -> bool;
     callback hotkey-mode-changed(int);
     callback language-selected(int);
     callback initial-prompt-changed(string);
@@ -348,6 +349,7 @@ export component DashboardWindow inherits Window {
                 vad-sensitivity-changed(v) => { root.vad-sensitivity-changed(v); }
                 start-hotkey-capture => { root.start-hotkey-capture(); }
                 cancel-hotkey-capture => { root.cancel-hotkey-capture(); }
+                hotkey-capture-key(c, a, s, m, t) => { root.hotkey-capture-key(c, a, s, m, t) }
                 hotkey-mode-changed(i) => { root.hotkey-mode-changed(i); }
                 language-selected(i) => { root.language-selected(i); }
                 initial-prompt-changed(s) => { root.initial-prompt-changed(s); }

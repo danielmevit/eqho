@@ -18,12 +18,16 @@ store = ["damt-platform-win/store"]
 [dependencies]
 damt-app.workspace = true
 damt-platform.workspace = true
+damt-platform-linux.workspace = true
+damt-platform-macos.workspace = true
 damt-platform-win.workspace = true
 eqho-core.workspace = true
 eqho-engine.workspace = true
 eqho-host.workspace = true
 eqho-overlay.workspace = true
 eqho-platform.workspace = true
+eqho-platform-linux.workspace = true
+eqho-platform-macos.workspace = true
 eqho-platform-win.workspace = true
 eqho-ui.workspace = true
 jiff.workspace = true

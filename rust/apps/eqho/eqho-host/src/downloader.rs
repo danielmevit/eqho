@@ -1,4 +1,4 @@
-//! GGML model downloader (native Windows WinHTTP + non-Windows stub).
+//! GGML model downloader (native Windows WinHTTP + Unix streaming curl/wget with live progress).
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -428,18 +428,190 @@ fn download_https_to_file(
 }
 
 #[cfg(not(windows))]
+fn probe_remote_content_length(url: &str) -> Option<u64> {
+    let out = std::process::Command::new("curl")
+        .args([
+            "-sSLI",
+            "--connect-timeout",
+            "10",
+            "--max-time",
+            "15",
+            "--user-agent",
+            "Eqho/0.9",
+            url,
+        ])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    // Take the final redirect's Content-Length header.
+    let mut found = None;
+    for line in text.lines() {
+        if let Some((k, v)) = line.split_once(':')
+            && k.trim().eq_ignore_ascii_case("content-length")
+            && let Ok(n) = v.trim().parse::<u64>()
+            && n > 0
+        {
+            found = Some(n);
+        }
+    }
+    found
+}
+
+#[cfg(not(windows))]
+struct UnixTempFileGuard {
+    path: PathBuf,
+    armed: bool,
+}
+
+#[cfg(not(windows))]
+impl UnixTempFileGuard {
+    fn new(path: PathBuf) -> Self {
+        Self { path, armed: true }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+#[cfg(not(windows))]
+impl Drop for UnixTempFileGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+}
+
+#[cfg(not(windows))]
 fn download_https_to_file(
-    _url: &str,
-    _target: &Path,
+    url: &str,
+    target: &Path,
     cancel: &AtomicBool,
-    _on_progress: &mut dyn FnMut(&str, Option<f32>),
+    on_progress: &mut dyn FnMut(&str, Option<f32>),
 ) -> Result<(), HostError> {
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
     if cancel.load(Ordering::Acquire) {
         return Err(HostError::DownloadCancelled);
     }
-    Err(HostError::DownloadFailed(
-        "WinHTTP download is Windows-only; pre-place model file".into(),
-    ))
+    let _ = parse_https_url(url)?;
+
+    let tmp_path = target.with_extension("bin.tmp");
+    if tmp_path.exists() {
+        let _ = std::fs::remove_file(&tmp_path);
+    }
+    let mut tmp_guard = UnixTempFileGuard::new(tmp_path.clone());
+
+    on_progress("Downloading 0% · Connecting…", Some(0.0));
+    let total_bytes = probe_remote_content_length(url);
+    if cancel.load(Ordering::Acquire) {
+        return Err(HostError::DownloadCancelled);
+    }
+
+    let mut child = Command::new("curl")
+        .args([
+            "--fail",
+            "--location",
+            "--silent",
+            "--show-error",
+            "--connect-timeout",
+            "20",
+            "--user-agent",
+            "Eqho/0.9",
+            "--output",
+        ])
+        .arg(&tmp_path)
+        .arg(url)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .or_else(|_| {
+            Command::new("wget")
+                .args(["-q", "--tries=2", "--timeout=20", "-O"])
+                .arg(&tmp_path)
+                .arg(url)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .spawn()
+        })
+        .map_err(|e| {
+            HostError::DownloadFailed(format!("Neither curl nor wget could be started: {e}"))
+        })?;
+
+    let started = Instant::now();
+    let mut last_bytes = 0u64;
+    let status = loop {
+        if cancel.load(Ordering::Acquire) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(HostError::DownloadCancelled);
+        }
+        match child.try_wait() {
+            Ok(Some(st)) => break st,
+            Ok(None) => {
+                let downloaded = std::fs::metadata(&tmp_path).map(|m| m.len()).unwrap_or(0);
+                if downloaded != last_bytes {
+                    last_bytes = downloaded;
+                    let frac = total_bytes
+                        .filter(|&t| t > 0)
+                        .map(|t| (downloaded as f64 / t as f64).clamp(0.0, 1.0) as f32);
+                    let msg = format_download_progress(
+                        downloaded,
+                        total_bytes,
+                        started.elapsed().as_secs_f64(),
+                    );
+                    on_progress(&msg, frac);
+                }
+                std::thread::sleep(Duration::from_millis(120));
+            }
+            Err(err) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(HostError::DownloadFailed(format!(
+                    "download wait failed: {err}"
+                )));
+            }
+        }
+    };
+
+    if cancel.load(Ordering::Acquire) {
+        return Err(HostError::DownloadCancelled);
+    }
+
+    if !status.success() {
+        let mut stderr_msg = String::new();
+        if let Some(mut err_pipe) = child.stderr.take() {
+            let _ = std::io::Read::read_to_string(&mut err_pipe, &mut stderr_msg);
+        }
+        let detail = stderr_msg.trim();
+        return Err(HostError::DownloadFailed(if detail.is_empty() {
+            format!("download exited with status {status}")
+        } else {
+            detail.to_owned()
+        }));
+    }
+
+    let final_size = std::fs::metadata(&tmp_path).map(|m| m.len()).unwrap_or(0);
+    if final_size < MIN_CACHED_MODEL_BYTES {
+        return Err(HostError::DownloadFailed(format!(
+            "downloaded model is unexpectedly small ({final_size} bytes)"
+        )));
+    }
+
+    if target.exists() {
+        let _ = std::fs::remove_file(target);
+    }
+    std::fs::rename(&tmp_path, target)?;
+    tmp_guard.disarm();
+    on_progress("Downloading 100% · Finishing…", Some(1.0));
+    Ok(())
 }
 
 #[cfg(test)]
@@ -524,11 +696,16 @@ mod tests {
 
     #[cfg(not(windows))]
     #[test]
-    fn non_windows_missing_model_returns_download_failed() {
+    fn non_windows_rejects_non_https_download_url() {
         let tmp = std::env::temp_dir().join(format!("eqho_dl_nonwin_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
-        let err = download_ggml_model("tiny", &tmp, &mut |_, _| {}).unwrap_err();
-        assert!(matches!(err, HostError::DownloadFailed(_)));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let target = tmp.join("ggml-tiny.bin");
+        let cancel = AtomicBool::new(false);
+        let err =
+            download_https_to_file("http://example.invalid/model.bin", &target, &cancel, &mut |_, _| {})
+                .unwrap_err();
+        assert!(matches!(err, HostError::InvalidUrl(_)), "unexpected error: {err:?}");
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

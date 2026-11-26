@@ -230,6 +230,7 @@ struct WhisperFullParams {
 struct WhisperApi {
     _lib: Library,
     _ggml_lib: Option<Library>,
+    _ggml_base_lib: Option<Library>,
     whisper_version: unsafe extern "C" fn() -> *const c_char,
     whisper_print_system_info: unsafe extern "C" fn() -> *const c_char,
     whisper_context_default_params_by_ref: unsafe extern "C" fn() -> *mut WhisperContextParams,
@@ -275,8 +276,9 @@ unsafe fn load_sym<T: Copy>(lib: &Library, name: &'static str) -> Result<T, Host
 
 impl WhisperApi {
     fn load(dll_dir: &Path) -> Result<Self, HostError> {
-        let lib = load_whisper_library(dll_dir)?;
+        let ggml_base_lib = preload_ggml_base(dll_dir);
         let ggml_lib = load_ggml_dynamic_backends(dll_dir);
+        let lib = load_whisper_library(dll_dir)?;
         // SAFETY: Every symbol name and signature matches `rust/vendor/whisper-1.8.4/whisper.h`.
         unsafe {
             Ok(Self {
@@ -309,6 +311,7 @@ impl WhisperApi {
                 whisper_token_eot: load_sym(&lib, "whisper_token_eot")?,
                 _lib: lib,
                 _ggml_lib: ggml_lib,
+                _ggml_base_lib: ggml_base_lib,
             })
         }
     }
@@ -331,23 +334,67 @@ fn normalize_backend_search_dir(dir: &Path) -> String {
     strip_verbatim_prefix(&abs.to_string_lossy())
 }
 
-/// Register dynamically-loaded GGML backends (`ggml-cpu-*.dll`, `ggml-vulkan.dll`) when
-/// `whisper.cpp` was built with `-DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON`.
+#[cfg(unix)]
+fn open_unix_global(path: &Path) -> Option<Library> {
+    // RTLD_NOW | RTLD_GLOBAL so sibling `libwhisper` / `libggml-*` resolve symbols cleanly
+    // without requiring `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH`.
+    #[cfg(target_os = "macos")]
+    const FLAGS: i32 = 0x2 | 0x8; // RTLD_NOW | RTLD_GLOBAL on Darwin
+    #[cfg(not(target_os = "macos"))]
+    const FLAGS: i32 = 0x2 | 0x100; // RTLD_NOW | RTLD_GLOBAL on Linux/glibc/musl
+    // SAFETY: Loading co-located whisper.cpp / ggml shared libraries from `dll_dir`.
+    unsafe { libloading::os::unix::Library::open(Some(path), FLAGS) }
+        .ok()
+        .map(Library::from)
+}
+
+#[cfg(unix)]
+fn find_first_existing(dir: &Path, candidates: &[&str]) -> Option<std::path::PathBuf> {
+    candidates.iter().map(|n| dir.join(n)).find(|p| p.is_file())
+}
+
+fn preload_ggml_base(dll_dir: &Path) -> Option<Library> {
+    #[cfg(windows)]
+    {
+        let _ = dll_dir;
+        None
+    }
+    #[cfg(unix)]
+    {
+        let abs_dir = std::fs::canonicalize(dll_dir).unwrap_or_else(|_| dll_dir.to_path_buf());
+        #[cfg(target_os = "macos")]
+        let candidates: &[&str] = &["libggml-base.dylib", "libggml-base.0.dylib"];
+        #[cfg(not(target_os = "macos"))]
+        let candidates: &[&str] = &["libggml-base.so", "libggml-base.so.0"];
+        let path = find_first_existing(&abs_dir, candidates)?;
+        open_unix_global(&path)
+    }
+}
+
+/// Register dynamically-loaded GGML backends (`ggml-cpu-*`, `ggml-vulkan`, `ggml-metal`) when
+/// `whisper.cpp` was built with `-DGGML_BACKEND_DL=ON`.
 ///
 /// Safe no-op on non-DL builds where `ggml_backend_load_all_from_path` is absent or empty.
 fn load_ggml_dynamic_backends(dll_dir: &Path) -> Option<Library> {
     let abs_dir = std::fs::canonicalize(dll_dir).unwrap_or_else(|_| dll_dir.to_path_buf());
     #[cfg(windows)]
-    let ggml_path = abs_dir.join("ggml.dll");
-    #[cfg(not(windows))]
-    let ggml_path = abs_dir.join("libggml.so");
-
-    if !ggml_path.is_file() {
-        return None;
-    }
-
-    // SAFETY: Loading the co-located `ggml` library matching `whisper.dll` in `dll_dir`.
-    let ggml_lib = unsafe { Library::new(&ggml_path) }.ok()?;
+    let ggml_lib = {
+        let ggml_path = abs_dir.join("ggml.dll");
+        if !ggml_path.is_file() {
+            return None;
+        }
+        // SAFETY: Loading the co-located `ggml.dll` matching `whisper.dll` in `dll_dir`.
+        unsafe { Library::new(&ggml_path) }.ok()?
+    };
+    #[cfg(unix)]
+    let ggml_lib = {
+        #[cfg(target_os = "macos")]
+        let candidates: &[&str] = &["libggml.dylib", "libggml.0.dylib"];
+        #[cfg(not(target_os = "macos"))]
+        let candidates: &[&str] = &["libggml.so", "libggml.so.0"];
+        let ggml_path = find_first_existing(&abs_dir, candidates)?;
+        open_unix_global(&ggml_path)?
+    };
 
     let dir_str = normalize_backend_search_dir(dll_dir);
     if let Ok(dir_cstr) = CString::new(dir_str.as_bytes()) {
@@ -403,9 +450,16 @@ fn load_whisper_library(dll_dir: &Path) -> Result<Library, HostError> {
 
 #[cfg(not(windows))]
 fn load_whisper_library(dll_dir: &Path) -> Result<Library, HostError> {
-    let so_path = dll_dir.join("libwhisper.so");
+    let abs_dir = std::fs::canonicalize(dll_dir).unwrap_or_else(|_| dll_dir.to_path_buf());
+    #[cfg(target_os = "macos")]
+    let candidates: &[&str] = &["libwhisper.dylib", "libwhisper.1.dylib"];
+    #[cfg(not(target_os = "macos"))]
+    let candidates: &[&str] = &["libwhisper.so", "libwhisper.so.1"];
+
+    let so_path = find_first_existing(&abs_dir, candidates)
+        .unwrap_or_else(|| abs_dir.join(candidates[0]));
     let path_str = so_path.display().to_string();
-    // SAFETY: Loading `libwhisper.so` from the configured `dll_dir` directory.
+    // SAFETY: Loading `libwhisper` from the configured `dll_dir` directory.
     unsafe { Library::new(&so_path) }.map_err(|source| HostError::LoadLibrary {
         path: path_str,
         source,

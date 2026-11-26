@@ -1,0 +1,78 @@
+name: Rust Linux Build (Vulkan + All CPU ISA)
+
+on:
+  push:
+    branches: ["dev", "main"]
+  pull_request:
+    branches: ["dev", "main"]
+  workflow_dispatch:
+
+jobs:
+  linux-rust:
+    runs-on: ubuntu-24.04
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_TERM_COLOR: always
+      WHISPER_CPP_TAG: v1.8.4
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.95.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95.0"
+          components: clippy
+
+      - name: Cache Cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+
+      - name: Install Linux build dependencies (Vulkan, X11, Wayland, Fontconfig, AppImage)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build pkg-config \
+            libvulkan-dev glslc \
+            libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev libx11-dev \
+            libpulse0 xclip wl-clipboard libfuse2
+          curl -fsSL -o /tmp/appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage \
+            && chmod +x /tmp/appimagetool && sudo mv /tmp/appimagetool /usr/local/bin/appimagetool || true
+
+      - name: Run Rust workspace tests & clippy
+        run: |
+          cargo test --manifest-path rust/Cargo.toml --workspace --locked
+          cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets --locked -- -D warnings
+
+      - name: Build whisper.cpp v1.8.4 shared libraries (Vulkan + OpenMP OFF + All CPU ISA)
+        run: |
+          git clone --depth 1 --branch "$WHISPER_CPP_TAG" https://github.com/ggml-org/whisper.cpp.git "$RUNNER_TEMP/whisper.cpp"
+          cmake -S "$RUNNER_TEMP/whisper.cpp" -B "$RUNNER_TEMP/whisper-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DGGML_VULKAN=ON \
+            -DGGML_OPENMP=OFF \
+            -DGGML_CPU_ALL_VARIANTS=ON \
+            -DGGML_BACKEND_DL=ON \
+            -DCMAKE_INSTALL_RPATH='$ORIGIN' \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+            -DWHISPER_BUILD_EXAMPLES=OFF \
+            -DWHISPER_BUILD_TESTS=OFF
+          cmake --build "$RUNNER_TEMP/whisper-build" --config Release
+          mkdir -p "$RUNNER_TEMP/whisper-libs"
+          find "$RUNNER_TEMP/whisper-build" \( -name 'libwhisper.so*' -o -name 'libggml*.so*' \) -exec cp -a {} "$RUNNER_TEMP/whisper-libs/" \;
+          ls -lh "$RUNNER_TEMP/whisper-libs"
+
+      - name: Build & package Eqho Linux x64 (tar.gz + AppImage)
+        run: bash packaging/linux/build-rust.sh --lib-dir "$RUNNER_TEMP/whisper-libs"
+
+      - name: Upload Linux Rust artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: eqho-rust-linux-x64
+          path: |
+            dist/Eqho-*-linux-x64.tar.gz
+            dist/Eqho-*-linux-x64.AppImage
+            dist/SHA256SUMS-*-linux-x64.txt

@@ -1,0 +1,85 @@
+name: Rust macOS Build (Metal + Apple Silicon & Intel)
+
+on:
+  push:
+    branches: ["dev", "main"]
+  pull_request:
+    branches: ["dev", "main"]
+  workflow_dispatch:
+
+jobs:
+  macos-rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            arch: arm64
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            arch: x64
+
+    runs-on: ${{ matrix.runner }}
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_TERM_COLOR: always
+      WHISPER_CPP_TAG: v1.8.4
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.95.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95.0"
+          targets: ${{ matrix.target }}
+          components: clippy
+
+      - name: Cache Cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+          key: macos-${{ matrix.arch }}
+
+      - name: Install CMake & Ninja
+        run: brew install cmake ninja
+
+      - name: Run Rust workspace tests & clippy
+        run: |
+          cargo test --manifest-path rust/Cargo.toml --workspace --locked
+          cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets --locked -- -D warnings
+
+      - name: Build whisper.cpp v1.8.4 (Metal GPU + Accelerate + Dynamic CPU backends)
+        run: |
+          git clone --depth 1 --branch "$WHISPER_CPP_TAG" https://github.com/ggml-org/whisper.cpp.git "$RUNNER_TEMP/whisper.cpp"
+          cmake -S "$RUNNER_TEMP/whisper.cpp" -B "$RUNNER_TEMP/whisper-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DGGML_METAL=ON \
+            -DGGML_METAL_EMBED_LIBRARY=ON \
+            -DGGML_BLAS=ON \
+            -DGGML_OPENMP=OFF \
+            -DGGML_BACKEND_DL=ON \
+            -DCMAKE_INSTALL_RPATH='@loader_path' \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+            -DWHISPER_BUILD_EXAMPLES=OFF \
+            -DWHISPER_BUILD_TESTS=OFF
+          cmake --build "$RUNNER_TEMP/whisper-build" --config Release
+          mkdir -p "$RUNNER_TEMP/whisper-libs"
+          find "$RUNNER_TEMP/whisper-build" \( -name 'libwhisper*.dylib' -o -name 'libggml*.dylib' \) -exec cp -a {} "$RUNNER_TEMP/whisper-libs/" \;
+          ls -lh "$RUNNER_TEMP/whisper-libs"
+
+      - name: Build & package Eqho.app + DMG
+        run: |
+          bash packaging/macos/build-rust.sh \
+            --target "${{ matrix.target }}" \
+            --lib-dir "$RUNNER_TEMP/whisper-libs"
+
+      - name: Upload macOS Rust artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: eqho-rust-macos-${{ matrix.arch }}
+          path: |
+            dist/Eqho-*-macos-${{ matrix.arch }}.dmg
+            dist/SHA256SUMS-*-macos-${{ matrix.arch }}.txt
