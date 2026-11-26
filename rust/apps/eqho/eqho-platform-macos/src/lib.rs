@@ -9,7 +9,10 @@
 
 pub mod pure;
 
-pub use pure::{MacHotkeyModifiers, ParsedMacHotkey, classify_apple_gpu, parse_hotkey_combo};
+pub use pure::{
+    MacHotkeyModifiers, ParsedMacHotkey, classify_apple_gpu, metal_effective_vram_bytes,
+    parse_hotkey_combo,
+};
 
 #[cfg(target_os = "macos")]
 mod audio;

@@ -5,7 +5,7 @@ use std::ptr::null_mut;
 
 use eqho_platform::{GpuAdapter, GpuProbe};
 
-use crate::pure::classify_apple_gpu;
+use crate::pure::{classify_apple_gpu, metal_effective_vram_bytes};
 
 #[link(name = "System")]
 unsafe extern "C" {
@@ -131,10 +131,11 @@ impl MacGpuProbe {
 impl GpuProbe for MacGpuProbe {
     fn list_adapters(&self) -> Vec<GpuAdapter> {
         if let Some((name, vram)) = Self::metal_default_device_info() {
+            let effective_vram = metal_effective_vram_bytes(&name, vram, cfg!(target_arch = "aarch64"));
             return vec![GpuAdapter {
                 name,
                 vendor_id: 0x106B,
-                dedicated_video_memory_bytes: vram,
+                dedicated_video_memory_bytes: effective_vram,
             }];
         }
         let brand = Self::sysctl_string(c"machdep.cpu.brand_string").unwrap_or_default();

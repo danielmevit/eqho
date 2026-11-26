@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use eqho_platform::{InputInjector, ModifierKey, PlatformError};
 
+use crate::clipboard;
 use crate::portal_input::{self, PortalOutcome};
 use crate::pure::is_wayland_session;
 use crate::x11_ffi::{CURRENT_TIME, X11Api};
@@ -185,17 +186,26 @@ impl InputInjector for LinuxInputInjector {
 
     fn send_paste_shortcut(&self) -> Result<(), PlatformError> {
         if Self::is_wayland() {
-            // Let Mutter/compositor finish bridging the newly set X11 CLIPBOARD selection to
-            // Wayland `wl_data_device` before delivering Ctrl+V to the focused Wayland window.
-            thread::sleep(Duration::from_millis(35));
-            if Self::run_ok("wtype", &["-M", "ctrl", "-k", "v", "-m", "ctrl"]) {
-                return Ok(());
+            let pending_text = clipboard::take_pending_wayland_paste();
+            if pending_text.is_none() {
+                // `wl-copy` already set the native Wayland clipboard; try fast CLI paste tools first.
+                thread::sleep(Duration::from_millis(20));
+                if Self::run_ok("wtype", &["-M", "ctrl", "-k", "v", "-m", "ctrl"]) {
+                    return Ok(());
+                }
+                // Linux evdev keycodes: KEY_LEFTCTRL=29, KEY_V=47.
+                if Self::run_ok("ydotool", &["key", "29:1", "47:1", "47:0", "29:0"]) {
+                    return Ok(());
+                }
+            } else if let Some(ref text) = pending_text {
+                if Self::run_ok("wtype", &["--", text]) {
+                    return Ok(());
+                }
+                if Self::run_ok("ydotool", &["type", "--", text]) {
+                    return Ok(());
+                }
             }
-            // Linux evdev keycodes: KEY_LEFTCTRL=29, KEY_V=47.
-            if Self::run_ok("ydotool", &["key", "29:1", "47:1", "47:0", "29:0"]) {
-                return Ok(());
-            }
-            match portal_input::send_paste_shortcut() {
+            match portal_input::send_paste_or_type(pending_text) {
                 PortalOutcome::Injected => return Ok(()),
                 PortalOutcome::Denied(msg) => return Err(PlatformError(msg)),
                 PortalOutcome::Unavailable => {}

@@ -3,7 +3,9 @@
 use std::collections::BTreeMap;
 
 use eqho_core::history::{TranscriptEntry, format_timestamp_local, local_day_ordinal};
-use eqho_core::modelpick::{HardwareClass, recommend_model};
+use eqho_core::modelpick::{
+    HardwareClass, HardwareSpecs, HardwareTier, recommend_model_for_specs,
+};
 use eqho_core::modelstore::{MODELS, model_info};
 use eqho_core::settings::{
     HISTORY_TRASH_OPTIONS, LANGUAGE_TIERS, OVERLAY_MONITORS, OVERLAY_POSITIONS, Settings,
@@ -35,7 +37,43 @@ pub fn model_size_label(size_mb: u64) -> String {
     }
 }
 
-/// Hardware summary banner text for the Models tab.
+/// Hardware summary banner text for the Models tab, reflecting real probed PC specs.
+pub fn hardware_summary_for_specs(specs: HardwareSpecs, gpu_name: Option<&str>) -> String {
+    let vram_gb = (specs.gpu_vram_mb as f64) / 1024.0;
+    let ram_str = specs
+        .available_ram_mb
+        .map(|mb| format!(" · {:.0} GB RAM available", (mb as f64) / 1024.0))
+        .unwrap_or_default();
+    let gpu_label = gpu_name
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .unwrap_or("Graphics card");
+
+    match specs.tier() {
+        HardwareTier::GpuHigh => format!(
+            "Detected: {gpu_label} ({vram_gb:.0} GB VRAM) — full GPU models run fast on this PC."
+        ),
+        HardwareTier::GpuMid => format!(
+            "Detected: {gpu_label} ({vram_gb:.1} GB VRAM) — balanced quantized GPU models fit best here."
+        ),
+        HardwareTier::GpuEntry => format!(
+            "Detected: {gpu_label} ({vram_gb:.1} GB VRAM) — compact quantized models fit best here."
+        ),
+        HardwareTier::CpuFast => {
+            let simd = if specs.cpu_fast_simd { " · fast SIMD" } else { "" };
+            format!(
+                "Detected: {} CPU threads{simd}{ram_str} — smaller quantized models run fastest here.",
+                specs.cpu_threads
+            )
+        }
+        HardwareTier::CpuLight => format!(
+            "Detected: {} CPU threads{ram_str} — ultra-lightweight Base Q5 is recommended for smooth dictation.",
+            specs.cpu_threads
+        ),
+    }
+}
+
+/// Hardware summary banner text for the Models tab (coarse [`HardwareClass`] wrapper).
 pub fn hardware_summary_text(hw: HardwareClass) -> String {
     match hw {
         HardwareClass::Gpu => "On this PC, speech models run on your graphics card.".to_owned(),
@@ -46,9 +84,9 @@ pub fn hardware_summary_text(hw: HardwareClass) -> String {
     }
 }
 
-/// Build Slint `ModelCardItem` rows for all supported Whisper models.
+/// Build Slint `ModelCardItem` rows for all supported Whisper models using real probed PC specs.
 #[allow(clippy::too_many_arguments)]
-pub fn build_model_cards(
+pub fn build_model_cards_for_specs(
     selected_key: &str,
     cached_keys: &[&str],
     downloading_key: Option<&str>,
@@ -56,10 +94,10 @@ pub fn build_model_cards(
     progress: f32,
     download_detail: &str,
     error_key: Option<&str>,
-    hw: HardwareClass,
+    specs: HardwareSpecs,
     lang: &str,
 ) -> Vec<ModelCardItem> {
-    let recommended = recommend_model(hw, lang);
+    let recommended = recommend_model_for_specs(specs, lang);
     MODELS
         .iter()
         .map(|m| {
@@ -126,6 +164,32 @@ pub fn build_model_cards(
             }
         })
         .collect()
+}
+
+/// Build Slint `ModelCardItem` rows for all supported Whisper models.
+#[allow(clippy::too_many_arguments)]
+pub fn build_model_cards(
+    selected_key: &str,
+    cached_keys: &[&str],
+    downloading_key: Option<&str>,
+    loading_key: Option<&str>,
+    progress: f32,
+    download_detail: &str,
+    error_key: Option<&str>,
+    hw: HardwareClass,
+    lang: &str,
+) -> Vec<ModelCardItem> {
+    build_model_cards_for_specs(
+        selected_key,
+        cached_keys,
+        downloading_key,
+        loading_key,
+        progress,
+        download_detail,
+        error_key,
+        HardwareSpecs::from_class(hw),
+        lang,
+    )
 }
 
 /// Split model cards into `(english_optimized, multilingual)` preserving order.
@@ -278,16 +342,25 @@ pub fn format_hotkey_display(hotkey: &str) -> String {
 }
 
 /// Return the warning text when a non-English language is paired with an English-only model.
-pub fn language_warning_text(language: &str, model_size: &str, hw: HardwareClass) -> String {
+pub fn language_warning_text_for_specs(
+    language: &str,
+    model_size: &str,
+    specs: HardwareSpecs,
+) -> String {
     if language == "en" || !is_english_only_model(model_size) {
         return String::new();
     }
     let lang_name = supported_language_name(language).unwrap_or(language);
-    let rec = recommend_model(hw, language);
+    let rec = recommend_model_for_specs(specs, language);
     let rec_label = model_short_name(rec);
     format!(
         "The current speech model only understands English. For {lang_name}, choose {rec_label} in Eqho → Models."
     )
+}
+
+/// Return the warning text when a non-English language is paired with an English-only model.
+pub fn language_warning_text(language: &str, model_size: &str, hw: HardwareClass) -> String {
+    language_warning_text_for_specs(language, model_size, HardwareSpecs::from_class(hw))
 }
 
 /// Status summary title for tray tooltip / window status.
@@ -368,7 +441,7 @@ pub fn build_language_options() -> Vec<LanguageOption> {
 
 /// Build onboarding Step 4 recommended model copy: `(summary, browser_viewable_url)`.
 pub fn onboarding_model_copy(hw: HardwareClass, lang: &str) -> (String, String) {
-    let rec_key = recommend_model(hw, lang);
+    let rec_key = recommend_model_for_specs(HardwareSpecs::from_class(hw), lang);
     onboarding_model_copy_for_key(rec_key)
 }
 
@@ -386,14 +459,14 @@ pub fn onboarding_model_copy_for_key(model_key: &str) -> (String, String) {
     (summary, url)
 }
 
-/// Build 4 curated light-to-heavy model choices for Onboarding Step 4 tailored to language & hardware.
-pub fn build_onboarding_model_options(
-    hw: HardwareClass,
+/// Build 4 curated light-to-heavy model choices for Onboarding Step 4 tailored to language & real PC specs.
+pub fn build_onboarding_model_options_for_specs(
+    specs: HardwareSpecs,
     lang: &str,
     selected_key: &str,
     cached_keys: &[&str],
 ) -> Vec<OnboardingModelOption> {
-    let recommended = recommend_model(hw, lang);
+    let recommended = recommend_model_for_specs(specs, lang);
     let picks: [(&str, &str); 4] = if lang == "en" {
         [
             ("base-q5", "Lightest & fastest — works on any CPU"),
@@ -432,6 +505,21 @@ pub fn build_onboarding_model_options(
             })
         })
         .collect()
+}
+
+/// Build 4 curated light-to-heavy model choices for Onboarding Step 4 tailored to language & hardware.
+pub fn build_onboarding_model_options(
+    hw: HardwareClass,
+    lang: &str,
+    selected_key: &str,
+    cached_keys: &[&str],
+) -> Vec<OnboardingModelOption> {
+    build_onboarding_model_options_for_specs(
+        HardwareSpecs::from_class(hw),
+        lang,
+        selected_key,
+        cached_keys,
+    )
 }
 
 /// Find the dropdown index for a language code (defaults to `0` = English).
@@ -652,11 +740,12 @@ pub fn dashboard_window_title(model_key: &str, is_dictating: bool) -> String {
     }
 }
 
-/// Push `Settings` and hardware metadata onto a live `DashboardWindow`.
-pub fn apply_settings_to_window(
+/// Push `Settings` and real probed PC specs onto a live `DashboardWindow`.
+pub fn apply_settings_to_window_with_specs(
     window: &DashboardWindow,
     settings: &Settings,
-    hw: HardwareClass,
+    specs: HardwareSpecs,
+    gpu_name: Option<&str>,
     is_dark: bool,
 ) {
     window.global::<Theme>().set_dark(is_dark);
@@ -665,7 +754,7 @@ pub fn apply_settings_to_window(
     window.set_language_options(ModelRc::new(VecModel::from(build_language_options())));
     window.set_language_index(language_index_for_code(&settings.language));
     window.set_language_warning(
-        language_warning_text(&settings.language, &settings.model_size, hw).into(),
+        language_warning_text_for_specs(&settings.language, &settings.model_size, specs).into(),
     );
 
     window.set_vad_sensitivity_pct((settings.vad_sensitivity * 100.0).round() as i32);
@@ -678,7 +767,7 @@ pub fn apply_settings_to_window(
     window.set_delivery_mode_index(delivery_mode_index(&settings.delivery_mode));
     window.set_paste_mode_index(if settings.auto_paste { 0 } else { 1 });
 
-    window.set_hardware_summary(hardware_summary_text(hw).into());
+    window.set_hardware_summary(hardware_summary_for_specs(specs, gpu_name).into());
     window.set_engine_backend_index(engine_backend_index(&settings.engine_backend));
     window.set_model_dir_display(settings.resolve_model_dir().display().to_string().into());
 
@@ -708,7 +797,7 @@ pub fn apply_settings_to_window(
 
     window.set_onboarding_active(!settings.onboarding_done);
     window.set_onboarding_duck_mute(settings.volume_duck == "mute");
-    let rec_key = recommend_model(hw, &settings.language);
+    let rec_key = recommend_model_for_specs(specs, &settings.language);
     let selected_key = if settings.onboarding_done {
         settings.model_size.as_str()
     } else {
@@ -720,7 +809,7 @@ pub fn apply_settings_to_window(
     window.set_onboarding_model_summary(model_summary.into());
     window.set_onboarding_model_url(model_url.into());
     window.set_onboarding_model_options(ModelRc::new(VecModel::from(
-        build_onboarding_model_options(hw, &settings.language, selected_key, &[]),
+        build_onboarding_model_options_for_specs(specs, &settings.language, selected_key, &[]),
     )));
     let hk = format_hotkey_display(&settings.hotkey);
     let how = if settings.hotkey_mode == "hold" {
@@ -731,6 +820,23 @@ pub fn apply_settings_to_window(
     window.set_onboarding_try_hint(
         format!("{how} Your words appear where your cursor is. Try it here:").into(),
     );
+}
+
+/// Push `Settings` and hardware metadata onto a live `DashboardWindow`.
+pub fn apply_settings_to_window(
+    window: &DashboardWindow,
+    settings: &Settings,
+    hw: HardwareClass,
+    is_dark: bool,
+) {
+    apply_settings_to_window_with_specs(
+        window,
+        settings,
+        HardwareSpecs::from_class(hw),
+        None,
+        is_dark,
+    );
+    window.set_hardware_summary(hardware_summary_text(hw).into());
 }
 
 #[cfg(test)]
@@ -752,5 +858,88 @@ mod tests {
         assert_eq!(delivery_mode_key(1), "live");
         assert_eq!(delivery_mode_key(-1), "batch");
         assert_eq!(delivery_mode_key(2), "batch");
+    }
+
+    #[test]
+    fn model_card_recommended_badge_tracks_real_pc_specs_globally() {
+        let cases = [
+            (
+                HardwareSpecs {
+                    gpu_vram_mb: 12 * 1024,
+                    cpu_threads: 12,
+                    cpu_fast_simd: true,
+                    available_ram_mb: Some(16 * 1024),
+                },
+                "en",
+                "distil-large-v3",
+            ),
+            (
+                HardwareSpecs {
+                    gpu_vram_mb: 4 * 1024,
+                    cpu_threads: 8,
+                    cpu_fast_simd: true,
+                    available_ram_mb: Some(8 * 1024),
+                },
+                "en",
+                "large-v3-turbo-q5",
+            ),
+            (
+                HardwareSpecs {
+                    gpu_vram_mb: 0,
+                    cpu_threads: 8,
+                    cpu_fast_simd: true,
+                    available_ram_mb: Some(16 * 1024),
+                },
+                "en",
+                "small.en-q5",
+            ),
+            (
+                HardwareSpecs {
+                    gpu_vram_mb: 0,
+                    cpu_threads: 2,
+                    cpu_fast_simd: false,
+                    available_ram_mb: Some(3072),
+                },
+                "en",
+                "base-q5",
+            ),
+        ];
+
+        for (specs, lang, expected_key) in cases {
+            let cards = build_model_cards_for_specs(
+                "small.en-q5",
+                &[],
+                None,
+                None,
+                0.0,
+                "",
+                None,
+                specs,
+                lang,
+            );
+            let rec_cards: Vec<_> = cards
+                .iter()
+                .filter(|c| !c.recommendation.is_empty())
+                .collect();
+            assert_eq!(rec_cards.len(), 1);
+            assert_eq!(rec_cards[0].key.as_str(), expected_key);
+
+            let onboarding = build_onboarding_model_options_for_specs(specs, lang, "", &[]);
+            let rec_onb: Vec<_> = onboarding.iter().filter(|o| o.is_recommended).collect();
+            assert_eq!(rec_onb.len(), 1);
+            assert_eq!(rec_onb[0].key.as_str(), expected_key);
+        }
+
+        let summary = hardware_summary_for_specs(
+            HardwareSpecs {
+                gpu_vram_mb: 0,
+                cpu_threads: 8,
+                cpu_fast_simd: true,
+                available_ram_mb: Some(23 * 1024),
+            },
+            None,
+        );
+        assert!(summary.contains("8 CPU threads"));
+        assert!(summary.contains("23 GB RAM"));
     }
 }

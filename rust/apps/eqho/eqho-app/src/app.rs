@@ -16,7 +16,7 @@ use damt_app::{Acquire, ErrorLog, SingleInstance, SingleInstanceGuard, install_p
 use damt_platform::{Clock, SystemClock};
 use damt_platform::PlatformServices;
 use eqho_core::history::TranscriptHistory;
-use eqho_core::modelpick::HardwareClass;
+use eqho_core::modelpick::{HardwareClass, HardwareSpecs, recommend_model_for_specs};
 use eqho_core::modelstore::{MODELS, whispercpp_model_path};
 use eqho_core::settings::Settings;
 use eqho_core::vad::level_meter;
@@ -26,14 +26,17 @@ use eqho_host::{HostError, ModelHost, ModelHostConfig};
 use eqho_overlay::{
     FlagBitmapProvider, OverlayAction, OverlayActionCallback, OverlayConfig, OverlayHandle,
 };
-use eqho_platform::{AudioBackend, AudioDeviceInfo, AudioStreamHandle, ClipboardService, GpuProbe, MicPrivacyProbe};
+use eqho_platform::{
+    AudioBackend, AudioDeviceInfo, AudioStreamHandle, ClipboardService, GpuProbe, MemoryProbe,
+    MicPrivacyProbe,
+};
 use eqho_ui::{
-    DashboardWindow, EqhoTray, Theme, apply_settings_to_window, blur_snapshot,
-    blur_snapshot_strong, build_history_rows,
-    build_history_rows_with_trash_meta, build_model_cards, build_onboarding_model_options,
-    dashboard_window_title, delivery_mode_index, delivery_mode_key, engine_backend_key,
-    filter_history_entries, format_active_driver_display, history_trash_days_value,
-    language_code_for_index, language_index_for_code, language_warning_text, model_short_name,
+    DashboardWindow, EqhoTray, Theme, apply_settings_to_window_with_specs, blur_snapshot,
+    blur_snapshot_strong, build_history_rows, build_history_rows_with_trash_meta,
+    build_model_cards_for_specs, build_onboarding_model_options_for_specs, dashboard_window_title,
+    delivery_mode_index, delivery_mode_key, engine_backend_key, filter_history_entries,
+    format_active_driver_display, history_trash_days_value, language_code_for_index,
+    language_index_for_code, language_warning_text_for_specs, model_short_name,
     onboarding_model_copy_for_key, overlay_monitor_key, overlay_position_key,
     parse_paste_rules_text, parse_replacements_text, render_flag_rgba, split_model_cards,
     status_summary_title, theme_mode_key, ui_scale_value, volume_duck_key, wordmark_image,
@@ -156,17 +159,32 @@ fn raw_win32_hwnd(window: &slint::Window) -> Option<isize> {
     }
 }
 
-fn detect_hardware_info(platform: &dyn GpuProbe) -> (HardwareClass, Option<String>) {
+fn detect_hardware_specs(
+    platform: &(impl GpuProbe + MemoryProbe),
+) -> (HardwareSpecs, Option<String>) {
     const MIN_VRAM: u64 = 2 * 1024 * 1024 * 1024;
     let best_gpu = platform
         .list_adapters()
         .into_iter()
         .filter(|a| a.dedicated_video_memory_bytes >= MIN_VRAM)
         .max_by_key(|a| a.dedicated_video_memory_bytes);
-    match best_gpu {
-        Some(adapter) => (HardwareClass::Gpu, Some(adapter.name)),
-        None => (HardwareClass::Cpu, None),
-    }
+    let (gpu_vram_mb, gpu_name) = match best_gpu {
+        Some(adapter) => (
+            adapter.dedicated_video_memory_bytes / (1024 * 1024),
+            Some(adapter.name),
+        ),
+        None => (0, None),
+    };
+    let cpu_threads = default_cpu_threads();
+    let cpu_fast_simd = platform.cpu_has_avx2() || cfg!(target_arch = "aarch64");
+    let available_ram_mb = platform.free_memory_mb();
+    let specs = HardwareSpecs {
+        gpu_vram_mb,
+        cpu_threads,
+        cpu_fast_simd,
+        available_ram_mb,
+    };
+    (specs, gpu_name)
 }
 
 fn default_cpu_threads() -> u32 {
@@ -229,7 +247,7 @@ struct AppUiSink {
     snapshot: Arc<Mutex<UiSyncSnapshot>>,
     history: TranscriptHistory,
     settings: Arc<Mutex<Settings>>,
-    hw_class: HardwareClass,
+    hw_specs: HardwareSpecs,
 }
 
 impl AppUiSink {
@@ -285,12 +303,12 @@ impl AppUiSink {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
-        let hw = self.hw_class;
+        let specs = self.hw_specs;
         let _ = slint::invoke_from_event_loop(move || {
             if let Some(dash) = dash_weak.upgrade() {
                 let model_dir = settings.resolve_model_dir();
                 let cached = cached_model_keys(&model_dir);
-                let cards = build_model_cards(
+                let cards = build_model_cards_for_specs(
                     &settings.model_size,
                     &cached,
                     snap.downloading_key.as_deref(),
@@ -298,7 +316,7 @@ impl AppUiSink {
                     snap.download_progress,
                     &snap.download_detail,
                     snap.download_error_key.as_deref(),
-                    hw,
+                    specs,
                     &settings.language,
                 );
                 let (en_cards, multi_cards) = split_model_cards(cards);
@@ -672,11 +690,13 @@ impl UiEventSink for AppUiSink {
             let delivery = updated.delivery_mode.clone();
             let controls_enabled = updated.overlay_controls_enabled;
             let controls_pinned = updated.overlay_controls_pinned;
-            let hw = self.hw_class;
+            let specs = self.hw_specs;
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(dash) = dash_weak.upgrade() {
                     dash.set_language_index(language_index_for_code(&lang));
-                    dash.set_language_warning(language_warning_text(&lang, &model_size, hw).into());
+                    dash.set_language_warning(
+                        language_warning_text_for_specs(&lang, &model_size, specs).into(),
+                    );
                     dash.set_delivery_mode_index(delivery_mode_index(&delivery));
                     dash.set_overlay_controls_enabled(controls_enabled);
                     dash.set_overlay_controls_pinned(controls_pinned);
@@ -701,6 +721,7 @@ struct AppController {
     overlay_preview_timer: slint::Timer,
     platform: Arc<EqhoPlatformImpl>,
     damt_platform: Arc<DamtPlatformImpl>,
+    hw_specs: HardwareSpecs,
     hw_class: HardwareClass,
     gpu_name: Option<String>,
     dashboard: Option<DashboardWindow>,
@@ -920,7 +941,7 @@ impl AppController {
         let snap = self.snapshot.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let model_dir = s.resolve_model_dir();
         let cached = cached_model_keys(&model_dir);
-        let cards = build_model_cards(
+        let cards = build_model_cards_for_specs(
             &s.model_size,
             &cached,
             snap.downloading_key.as_deref(),
@@ -928,7 +949,7 @@ impl AppController {
             snap.download_progress,
             &snap.download_detail,
             snap.download_error_key.as_deref(),
-            self.hw_class,
+            self.hw_specs,
             &s.language,
         );
         let (en_cards, multi_cards) = split_model_cards(cards);
@@ -950,12 +971,13 @@ impl AppController {
             .unwrap_or_else(|| {
                 let cur = dash.get_onboarding_selected_model().to_string();
                 if cur.is_empty() {
-                    eqho_core::modelpick::recommend_model(self.hw_class, &s.language).to_owned()
+                    recommend_model_for_specs(self.hw_specs, &s.language).to_owned()
                 } else {
                     cur
                 }
             });
-        let options = build_onboarding_model_options(self.hw_class, &s.language, &desired, &cached);
+        let options =
+            build_onboarding_model_options_for_specs(self.hw_specs, &s.language, &desired, &cached);
         let active_key = options
             .iter()
             .find(|o| o.is_selected)
@@ -1286,9 +1308,10 @@ fn ensure_dashboard(ctrl: &Rc<RefCell<AppController>>, tab: Option<&str>) {
             let is_dark = c.resolved_is_dark();
             let s = c.settings.lock().unwrap_or_else(|e| e.into_inner()).clone();
             let snap = c.snapshot.lock().unwrap_or_else(|e| e.into_inner()).clone();
-            let hw = c.hw_class;
+            let specs = c.hw_specs;
+            let gpu_name = c.gpu_name.clone();
             let model_dir = s.resolve_model_dir();
-            let rec_key = eqho_core::modelpick::recommend_model(hw, &s.language);
+            let rec_key = recommend_model_for_specs(specs, &s.language);
             let s_cached = whispercpp_model_path(&model_dir, &s.model_size)
                 .metadata()
                 .map(|m| m.is_file() && m.len() > 1_048_576)
@@ -1304,7 +1327,13 @@ fn ensure_dashboard(ctrl: &Rc<RefCell<AppController>>, tab: Option<&str>) {
                 .unwrap_or(false);
             if let Some(dash) = &c.dashboard {
                 dash.set_app_version(env!("CARGO_PKG_VERSION").into());
-                apply_settings_to_window(dash, &s, hw, is_dark);
+                apply_settings_to_window_with_specs(
+                    dash,
+                    &s,
+                    specs,
+                    gpu_name.as_deref(),
+                    is_dark,
+                );
                 dash.set_onboarding_model_cached(initial_cached);
                 dash.set_onboarding_hotkey_ok(c.hotkey_ok);
                 dash.set_onboarding_is_dictating(snap.is_dictating);
@@ -1790,9 +1819,11 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
             c.save_settings(false);
             c.apply_theme_and_overlay();
             if let Some(d) = dash_w.upgrade() {
-                d.set_language_warning(language_warning_text(code, &model_size, c.hw_class).into());
+                d.set_language_warning(
+                    language_warning_text_for_specs(code, &model_size, c.hw_specs).into(),
+                );
             }
-            let rec_key = eqho_core::modelpick::recommend_model(c.hw_class, code);
+            let rec_key = recommend_model_for_specs(c.hw_specs, code);
             c.refresh_onboarding_models(Some(rec_key));
         });
     }
@@ -1905,7 +1936,9 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
             c.save_settings(false);
             c.refresh_models();
             if let Some(d) = dash_w.upgrade() {
-                d.set_language_warning(language_warning_text(&lang, &key, c.hw_class).into());
+                d.set_language_warning(
+                    language_warning_text_for_specs(&lang, &key, c.hw_specs).into(),
+                );
             }
             let coord = c.coordinator.clone();
             let _ = thread::Builder::new()
@@ -2369,7 +2402,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
             let initial_key = if s_cached {
                 s.model_size.clone()
             } else {
-                eqho_core::modelpick::recommend_model(c.hw_class, &s.language).to_owned()
+                recommend_model_for_specs(c.hw_specs, &s.language).to_owned()
             };
             c.refresh_onboarding_models(Some(&initial_key));
             if let Some(d) = dash_w.upgrade() {
@@ -2428,7 +2461,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
                         .unwrap_or_else(|e| e.into_inner())
                         .language
                         .clone();
-                    eqho_core::modelpick::recommend_model(c.hw_class, &lang).to_owned()
+                    recommend_model_for_specs(c.hw_specs, &lang).to_owned()
                 });
             ctrl_w.borrow_mut().start_download(key);
         });
@@ -3178,7 +3211,8 @@ pub fn run_desktop_app(
 
     let platform = Arc::new(EqhoPlatformImpl::default());
     let damt_platform = Arc::new(build_damt_platform(is_isolated, &error_log));
-    let (hw_class, gpu_name) = detect_hardware_info(platform.as_ref());
+    let (hw_specs, gpu_name) = detect_hardware_specs(platform.as_ref());
+    let hw_class = hw_specs.hardware_class();
 
     let is_dark = resolve_theme_is_dark(
         &settings.theme,
@@ -3399,7 +3433,7 @@ pub fn run_desktop_app(
         snapshot: Arc::clone(&snapshot),
         history: TranscriptHistory::with_default_cap(&paths.history_path),
         settings: Arc::clone(&settings_arc),
-        hw_class,
+        hw_specs,
     });
 
     let coordinator = DictationCoordinator::new(
@@ -3475,6 +3509,7 @@ pub fn run_desktop_app(
         overlay_preview_timer: slint::Timer::default(),
         platform,
         damt_platform,
+        hw_specs,
         hw_class,
         gpu_name,
         dashboard: None,

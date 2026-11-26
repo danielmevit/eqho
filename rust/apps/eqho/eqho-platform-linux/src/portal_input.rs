@@ -1,24 +1,31 @@
-//! Persistent Wayland keyboard injection via `org.freedesktop.portal.RemoteDesktop` v2 over
-//! dynamically loaded `libdbus-1.so.3` (zero external CLI tools, zero new Cargo dependencies).
+//! Persistent Wayland keyboard + clipboard portal backend (`org.freedesktop.portal.RemoteDesktop`
+//! v2 + `org.freedesktop.portal.Clipboard` v1) over dynamically loaded `libdbus-1.so.3` (zero
+//! external CLI tools, zero new Cargo dependencies).
 //!
-//! Unlike XWayland `XTest` (which triggers GNOME's "Remote Interaction" popup on every restart,
-//! silently drops keystrokes while the dialog is open, and never reports denial), the
-//! `RemoteDesktop` v2 portal:
-//! - Requests keyboard-only access with `persist_mode = 2` + saved `restore_token`, so the user
-//!   only clicks **Allow** once across app restarts and reboots.
-//! - Waits synchronously for the permission dialog before injecting `Ctrl+V`, so even the very
-//!   first dictation pastes cleanly.
-//! - Returns `PortalOutcome::Denied` when the user cancels, allowing Eqho to keep the text on
-//!   the clipboard and immediately surface the floating Recovery Card.
+//! Runs a single dedicated `eqho-portal-session` background worker thread that owns a private
+//! D-Bus session-bus connection exclusively so it can:
+//! - Request keyboard + clipboard access once (`persist_mode = 2` + saved `restore_token`),
+//!   eliminating repeated GNOME "Remote Interaction" prompts across restarts and reboots.
+//! - Continuously answer `org.freedesktop.portal.Clipboard::SelectionTransfer` signals via
+//!   `SelectionWrite` + `SelectionWriteDone`, bypassing Mutter 50's unfocused XWayland clipboard
+//!   block so native Wayland apps receive clipboard paste cleanly.
+//! - Automatically fall back to direct `RemoteDesktop.NotifyKeyboardKeysym` typing when portal
+//!   clipboard access is not enabled (e.g. if the user didn't toggle "Allow Clipboard Access" or
+//!   the compositor doesn't implement the Clipboard portal), so auto-paste still inserts text
+//!   directly at the cursor.
+//! - Return `PortalOutcome::Denied` when the user cancels permission, allowing Eqho to keep the
+//!   text and immediately surface the floating Recovery Card.
 
 use std::ffi::{CStr, CString, c_char, c_int, c_uint, c_void};
-use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::fs::{self, File, OpenOptions};
+use std::io::{Read, Write};
+use std::os::fd::FromRawFd;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::ptr::null;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -27,6 +34,7 @@ use libloading::Library;
 use crate::pure::{char_to_xkb_keysym, dbus_unique_name_to_portal_sender};
 
 const DBUS_BUS_SESSION: c_int = 0;
+const DBUS_TYPE_BOOLEAN: c_int = b'b' as c_int;
 const DBUS_TYPE_INT32: c_int = b'i' as c_int;
 const DBUS_TYPE_UINT32: c_int = b'u' as c_int;
 const DBUS_TYPE_STRING: c_int = b's' as c_int;
@@ -34,10 +42,12 @@ const DBUS_TYPE_OBJECT_PATH: c_int = b'o' as c_int;
 const DBUS_TYPE_ARRAY: c_int = b'a' as c_int;
 const DBUS_TYPE_VARIANT: c_int = b'v' as c_int;
 const DBUS_TYPE_DICT_ENTRY: c_int = b'e' as c_int;
+const DBUS_TYPE_UNIX_FD: c_int = b'h' as c_int;
 
 const PORTAL_BUS_NAME: &CStr = c"org.freedesktop.portal.Desktop";
 const PORTAL_OBJECT_PATH: &CStr = c"/org/freedesktop/portal/desktop";
 const PORTAL_RD_IFACE: &CStr = c"org.freedesktop.portal.RemoteDesktop";
+const PORTAL_CLIP_IFACE: &CStr = c"org.freedesktop.portal.Clipboard";
 const PORTAL_REQ_IFACE: &CStr = c"org.freedesktop.portal.Request";
 const PORTAL_SESS_IFACE: &CStr = c"org.freedesktop.portal.Session";
 
@@ -48,6 +58,8 @@ const PERSIST_UNTIL_REVOKED: u32 = 2;
 pub(crate) const EVDEV_KEY_BACKSPACE: i32 = 14;
 pub(crate) const EVDEV_KEY_LEFTCTRL: i32 = 29;
 pub(crate) const EVDEV_KEY_V: i32 = 47;
+
+const MAX_CLIPBOARD_READ_BYTES: u64 = 1024 * 1024;
 
 /// Oversized 8-byte-aligned buffer for `DBusError` (actual C struct is 32 B on 64-bit Linux).
 #[repr(C, align(8))]
@@ -119,6 +131,7 @@ unsafe impl Sync for DbusApi {}
 
 static DBUS_API: OnceLock<Option<DbusApi>> = OnceLock::new();
 static TOKEN_SEQ: AtomicU64 = AtomicU64::new(1);
+static PORTAL_CLIPBOARD_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 impl DbusApi {
     fn load() -> Option<&'static Self> {
@@ -179,7 +192,7 @@ impl DbusApi {
 
 #[derive(Debug)]
 pub(crate) enum PortalOutcome {
-    /// Keystrokes were successfully dispatched via `org.freedesktop.portal.RemoteDesktop`.
+    /// Text or keystrokes were successfully delivered via the Wayland desktop portal.
     Injected,
     /// The user denied or cancelled the desktop permission prompt (do NOT fall back to XTest,
     /// which would pop up a second duplicate dialog).
@@ -189,30 +202,54 @@ pub(crate) enum PortalOutcome {
     Unavailable,
 }
 
-struct PortalSession {
+enum PortalCmd {
+    TrySetClipboard {
+        payload: Vec<u8>,
+        ack: mpsc::SyncSender<bool>,
+    },
+    TryReadClipboard {
+        ack: mpsc::SyncSender<Option<String>>,
+    },
+    PasteOrType {
+        text: Option<String>,
+        ack: mpsc::SyncSender<PortalOutcome>,
+    },
+    TypeUnicode {
+        text: String,
+        ack: mpsc::SyncSender<PortalOutcome>,
+    },
+    SendBackspaces {
+        count: usize,
+        ack: mpsc::SyncSender<PortalOutcome>,
+    },
+}
+
+struct PortalClient {
+    tx: mpsc::Sender<PortalCmd>,
+}
+
+static PORTAL_CLIENT: OnceLock<Option<PortalClient>> = OnceLock::new();
+
+fn ensure_portal_client() -> Option<&'static PortalClient> {
+    PORTAL_CLIENT
+        .get_or_init(|| {
+            let api = DbusApi::load()?;
+            let (tx, rx) = mpsc::channel::<PortalCmd>();
+            thread::Builder::new()
+                .name("eqho-portal-session".to_owned())
+                .spawn(move || run_portal_worker(api, rx))
+                .ok()?;
+            Some(PortalClient { tx })
+        })
+        .as_ref()
+}
+
+struct ActivePortalSession {
     conn: *mut c_void,
     session_path: CString,
-}
-
-// SAFETY: Access is serialized behind `PORTAL_STATE`'s `Mutex`, and `conn` is a private
-// `DBusConnection` never shared with any other thread.
-unsafe impl Send for PortalSession {}
-
-struct PortalState {
-    session: Option<PortalSession>,
-    /// Set to `true` if `org.freedesktop.portal.RemoteDesktop` is absent/unsupported in this session.
-    portal_unavailable: bool,
-}
-
-static PORTAL_STATE: OnceLock<Mutex<PortalState>> = OnceLock::new();
-
-fn portal_state() -> &'static Mutex<PortalState> {
-    PORTAL_STATE.get_or_init(|| {
-        Mutex::new(PortalState {
-            session: None,
-            portal_unavailable: false,
-        })
-    })
+    clipboard_enabled: bool,
+    owns_selection: bool,
+    clipboard_bytes: Vec<u8>,
 }
 
 fn next_token(prefix: &str) -> String {
@@ -281,6 +318,7 @@ fn clear_restore_token() {
 enum DictVal<'a> {
     Str(&'a str),
     U32(u32),
+    StrArray(&'a [&'a str]),
 }
 
 unsafe fn append_options_dict(
@@ -383,6 +421,51 @@ unsafe fn append_options_dict(
                             ok = false;
                         }
                     }
+                    DictVal::StrArray(items) => {
+                        if (api.message_iter_open_container)(
+                            entry.as_mut_ptr(),
+                            DBUS_TYPE_VARIANT,
+                            c"as".as_ptr(),
+                            var.as_mut_ptr(),
+                        ) != 0
+                        {
+                            let mut str_arr = RawDbusIter::new();
+                            if (api.message_iter_open_container)(
+                                var.as_mut_ptr(),
+                                DBUS_TYPE_ARRAY,
+                                c"s".as_ptr(),
+                                str_arr.as_mut_ptr(),
+                            ) != 0
+                            {
+                                for item in *items {
+                                    if let Ok(ci) = CString::new(*item) {
+                                        let p = ci.as_ptr();
+                                        if (api.message_iter_append_basic)(
+                                            str_arr.as_mut_ptr(),
+                                            DBUS_TYPE_STRING,
+                                            (&raw const p).cast(),
+                                        ) == 0
+                                        {
+                                            ok = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                                let _ = (api.message_iter_close_container)(
+                                    var.as_mut_ptr(),
+                                    str_arr.as_mut_ptr(),
+                                );
+                            } else {
+                                ok = false;
+                            }
+                            let _ = (api.message_iter_close_container)(
+                                entry.as_mut_ptr(),
+                                var.as_mut_ptr(),
+                            );
+                        } else {
+                            ok = false;
+                        }
+                    }
                 }
             }
             let _ = (api.message_iter_close_container)(arr.as_mut_ptr(), entry.as_mut_ptr());
@@ -401,6 +484,7 @@ struct PortalResponse {
     session_handle: Option<String>,
     restore_token: Option<String>,
     devices: Option<u32>,
+    clipboard_enabled: bool,
 }
 
 unsafe fn parse_portal_response(api: &DbusApi, msg: *mut c_void) -> Option<PortalResponse> {
@@ -419,6 +503,7 @@ unsafe fn parse_portal_response(api: &DbusApi, msg: *mut c_void) -> Option<Porta
         let mut session_handle = None;
         let mut restore_token = None;
         let mut devices = None;
+        let mut clipboard_enabled = false;
 
         if (api.message_iter_next)(iter.as_mut_ptr()) != 0
             && (api.message_iter_get_arg_type)(iter.as_mut_ptr()) == DBUS_TYPE_ARRAY
@@ -464,6 +549,12 @@ unsafe fn parse_portal_response(api: &DbusApi, msg: *mut c_void) -> Option<Porta
                                 (api.message_iter_get_basic)(var.as_mut_ptr(), (&raw mut vu).cast());
                                 devices = Some(vu);
                             }
+                            ("clipboard_enabled", DBUS_TYPE_BOOLEAN) => {
+                                // libdbus `dbus_bool_t` is 32-bit `uint32_t`.
+                                let mut vb: u32 = 0;
+                                (api.message_iter_get_basic)(var.as_mut_ptr(), (&raw mut vb).cast());
+                                clipboard_enabled = vb != 0;
+                            }
                             _ => {}
                         }
                     }
@@ -479,6 +570,7 @@ unsafe fn parse_portal_response(api: &DbusApi, msg: *mut c_void) -> Option<Porta
             session_handle,
             restore_token,
             devices,
+            clipboard_enabled,
         })
     }
 }
@@ -501,6 +593,22 @@ unsafe fn read_reply_object_path(api: &DbusApi, reply: *mut c_void) -> Option<St
         } else {
             Some(CStr::from_ptr(ptr).to_string_lossy().into_owned())
         }
+    }
+}
+
+unsafe fn read_reply_unix_fd(api: &DbusApi, reply: *mut c_void) -> Option<c_int> {
+    // SAFETY: Caller supplies a valid D-Bus method reply returning `(h fd)`.
+    unsafe {
+        let mut iter = RawDbusIter::new();
+        if (api.message_iter_init)(reply, iter.as_mut_ptr()) == 0 {
+            return None;
+        }
+        if (api.message_iter_get_arg_type)(iter.as_mut_ptr()) != DBUS_TYPE_UNIX_FD {
+            return None;
+        }
+        let mut fd: c_int = -1;
+        (api.message_iter_get_basic)(iter.as_mut_ptr(), (&raw mut fd).cast());
+        if fd >= 0 { Some(fd) } else { None }
     }
 }
 
@@ -549,7 +657,8 @@ unsafe fn wait_portal_response(
     }
 }
 
-unsafe fn close_portal_session(api: &DbusApi, session: PortalSession) {
+unsafe fn close_portal_session(api: &DbusApi, session: ActivePortalSession) {
+    PORTAL_CLIPBOARD_ACTIVE.store(false, Ordering::Release);
     // SAFETY: Closes a portal session cleanly on its private D-Bus connection.
     unsafe {
         let msg = (api.message_new_method_call)(
@@ -578,9 +687,344 @@ unsafe fn close_portal_session(api: &DbusApi, session: PortalSession) {
     }
 }
 
+unsafe fn request_portal_clipboard(api: &DbusApi, conn: *mut c_void, session_path: &CStr) {
+    // SAFETY: Best-effort `org.freedesktop.portal.Clipboard.RequestClipboard(session, {})` before
+    // `RemoteDesktop.Start`. Ignored cleanly if the compositor does not expose Clipboard portal.
+    unsafe {
+        let msg = (api.message_new_method_call)(
+            PORTAL_BUS_NAME.as_ptr(),
+            PORTAL_OBJECT_PATH.as_ptr(),
+            PORTAL_CLIP_IFACE.as_ptr(),
+            c"RequestClipboard".as_ptr(),
+        );
+        if msg.is_null() {
+            return;
+        }
+        let mut iter = RawDbusIter::new();
+        (api.message_iter_init_append)(msg, iter.as_mut_ptr());
+        let sess_ptr = session_path.as_ptr();
+        let _ = (api.message_iter_append_basic)(
+            iter.as_mut_ptr(),
+            DBUS_TYPE_OBJECT_PATH,
+            (&raw const sess_ptr).cast(),
+        );
+        let ok_dict = append_options_dict(api, &mut iter, &[]);
+        if ok_dict {
+            let mut err = RawDbusError::new();
+            (api.error_init)(err.as_mut_ptr());
+            let reply =
+                (api.connection_send_with_reply_and_block)(conn, msg, 3_000, err.as_mut_ptr());
+            if !reply.is_null() {
+                (api.message_unref)(reply);
+            }
+            (api.error_free)(err.as_mut_ptr());
+        }
+        (api.message_unref)(msg);
+    }
+}
+
+unsafe fn portal_set_selection(api: &DbusApi, session: &mut ActivePortalSession, payload: Vec<u8>) -> bool {
+    if !session.clipboard_enabled {
+        return false;
+    }
+    session.clipboard_bytes = payload;
+    // SAFETY: Calls `org.freedesktop.portal.Clipboard.SetSelection(session, {mime_types})`.
+    unsafe {
+        let msg = (api.message_new_method_call)(
+            PORTAL_BUS_NAME.as_ptr(),
+            PORTAL_OBJECT_PATH.as_ptr(),
+            PORTAL_CLIP_IFACE.as_ptr(),
+            c"SetSelection".as_ptr(),
+        );
+        if msg.is_null() {
+            return false;
+        }
+        let mut iter = RawDbusIter::new();
+        (api.message_iter_init_append)(msg, iter.as_mut_ptr());
+        let sess_ptr = session.session_path.as_ptr();
+        let _ = (api.message_iter_append_basic)(
+            iter.as_mut_ptr(),
+            DBUS_TYPE_OBJECT_PATH,
+            (&raw const sess_ptr).cast(),
+        );
+        let mimes = ["text/plain;charset=utf-8", "UTF8_STRING", "text/plain"];
+        let ok_dict = append_options_dict(api, &mut iter, &[("mime_types", DictVal::StrArray(&mimes))]);
+        if !ok_dict {
+            (api.message_unref)(msg);
+            return false;
+        }
+        let mut err = RawDbusError::new();
+        (api.error_init)(err.as_mut_ptr());
+        let reply =
+            (api.connection_send_with_reply_and_block)(session.conn, msg, 2_000, err.as_mut_ptr());
+        (api.message_unref)(msg);
+        let ok = !reply.is_null() && (api.error_is_set)(err.as_mut_ptr()) == 0;
+        if !reply.is_null() {
+            (api.message_unref)(reply);
+        }
+        (api.error_free)(err.as_mut_ptr());
+        if ok {
+            session.owns_selection = true;
+        }
+        ok
+    }
+}
+
+unsafe fn portal_read_selection(api: &DbusApi, session: &ActivePortalSession) -> Option<String> {
+    if !session.clipboard_enabled {
+        return None;
+    }
+    // Avoid self-deadlock when our own portal session currently owns the Wayland clipboard.
+    if session.owns_selection {
+        return Some(String::from_utf8_lossy(&session.clipboard_bytes).into_owned());
+    }
+    // SAFETY: Calls `org.freedesktop.portal.Clipboard.SelectionRead(session, mime_type) -> (h fd)`.
+    unsafe {
+        for mime in [c"text/plain;charset=utf-8", c"UTF8_STRING", c"text/plain"] {
+            let msg = (api.message_new_method_call)(
+                PORTAL_BUS_NAME.as_ptr(),
+                PORTAL_OBJECT_PATH.as_ptr(),
+                PORTAL_CLIP_IFACE.as_ptr(),
+                c"SelectionRead".as_ptr(),
+            );
+            if msg.is_null() {
+                return None;
+            }
+            let mut iter = RawDbusIter::new();
+            (api.message_iter_init_append)(msg, iter.as_mut_ptr());
+            let sess_ptr = session.session_path.as_ptr();
+            let mime_ptr = mime.as_ptr();
+            let _ = (api.message_iter_append_basic)(
+                iter.as_mut_ptr(),
+                DBUS_TYPE_OBJECT_PATH,
+                (&raw const sess_ptr).cast(),
+            );
+            let _ = (api.message_iter_append_basic)(
+                iter.as_mut_ptr(),
+                DBUS_TYPE_STRING,
+                (&raw const mime_ptr).cast(),
+            );
+            let mut err = RawDbusError::new();
+            (api.error_init)(err.as_mut_ptr());
+            let reply = (api.connection_send_with_reply_and_block)(
+                session.conn,
+                msg,
+                1_000,
+                err.as_mut_ptr(),
+            );
+            (api.message_unref)(msg);
+            let ok = !reply.is_null() && (api.error_is_set)(err.as_mut_ptr()) == 0;
+            (api.error_free)(err.as_mut_ptr());
+            if !ok {
+                if !reply.is_null() {
+                    (api.message_unref)(reply);
+                }
+                continue;
+            }
+            let fd_opt = read_reply_unix_fd(api, reply);
+            (api.message_unref)(reply);
+            if let Some(fd) = fd_opt {
+                let file = File::from_raw_fd(fd);
+                let mut buf = Vec::new();
+                if file
+                    .take(MAX_CLIPBOARD_READ_BYTES)
+                    .read_to_end(&mut buf)
+                    .is_ok()
+                    && !buf.is_empty()
+                {
+                    return Some(String::from_utf8_lossy(&buf).into_owned());
+                }
+            }
+        }
+        None
+    }
+}
+
+unsafe fn handle_selection_transfer(api: &DbusApi, session: &ActivePortalSession, serial: u32) {
+    // SAFETY: Answers `SelectionTransfer` via `SelectionWrite` -> write UTF-8 -> `SelectionWriteDone`.
+    unsafe {
+        let mut success_val: u32 = 0;
+
+        let write_msg = (api.message_new_method_call)(
+            PORTAL_BUS_NAME.as_ptr(),
+            PORTAL_OBJECT_PATH.as_ptr(),
+            PORTAL_CLIP_IFACE.as_ptr(),
+            c"SelectionWrite".as_ptr(),
+        );
+        if !write_msg.is_null() {
+            let mut iter = RawDbusIter::new();
+            (api.message_iter_init_append)(write_msg, iter.as_mut_ptr());
+            let sess_ptr = session.session_path.as_ptr();
+            let _ = (api.message_iter_append_basic)(
+                iter.as_mut_ptr(),
+                DBUS_TYPE_OBJECT_PATH,
+                (&raw const sess_ptr).cast(),
+            );
+            let _ = (api.message_iter_append_basic)(
+                iter.as_mut_ptr(),
+                DBUS_TYPE_UINT32,
+                (&raw const serial).cast(),
+            );
+            let mut err = RawDbusError::new();
+            (api.error_init)(err.as_mut_ptr());
+            let reply = (api.connection_send_with_reply_and_block)(
+                session.conn,
+                write_msg,
+                1_500,
+                err.as_mut_ptr(),
+            );
+            (api.message_unref)(write_msg);
+            let ok = !reply.is_null() && (api.error_is_set)(err.as_mut_ptr()) == 0;
+            (api.error_free)(err.as_mut_ptr());
+            if ok {
+                let fd_opt = read_reply_unix_fd(api, reply);
+                (api.message_unref)(reply);
+                if let Some(fd) = fd_opt {
+                    let mut file = File::from_raw_fd(fd);
+                    if file.write_all(&session.clipboard_bytes).is_ok() {
+                        success_val = 1;
+                    }
+                    // Dropping `file` closes the pipe FD so the pasting app receives EOF.
+                }
+            } else if !reply.is_null() {
+                (api.message_unref)(reply);
+            }
+        }
+
+        let done_msg = (api.message_new_method_call)(
+            PORTAL_BUS_NAME.as_ptr(),
+            PORTAL_OBJECT_PATH.as_ptr(),
+            PORTAL_CLIP_IFACE.as_ptr(),
+            c"SelectionWriteDone".as_ptr(),
+        );
+        if !done_msg.is_null() {
+            let mut iter = RawDbusIter::new();
+            (api.message_iter_init_append)(done_msg, iter.as_mut_ptr());
+            let sess_ptr = session.session_path.as_ptr();
+            let _ = (api.message_iter_append_basic)(
+                iter.as_mut_ptr(),
+                DBUS_TYPE_OBJECT_PATH,
+                (&raw const sess_ptr).cast(),
+            );
+            let _ = (api.message_iter_append_basic)(
+                iter.as_mut_ptr(),
+                DBUS_TYPE_UINT32,
+                (&raw const serial).cast(),
+            );
+            let _ = (api.message_iter_append_basic)(
+                iter.as_mut_ptr(),
+                DBUS_TYPE_BOOLEAN,
+                (&raw const success_val).cast(),
+            );
+            let mut err = RawDbusError::new();
+            (api.error_init)(err.as_mut_ptr());
+            let reply = (api.connection_send_with_reply_and_block)(
+                session.conn,
+                done_msg,
+                1_500,
+                err.as_mut_ptr(),
+            );
+            (api.message_unref)(done_msg);
+            if !reply.is_null() {
+                (api.message_unref)(reply);
+            }
+            (api.error_free)(err.as_mut_ptr());
+        }
+    }
+}
+
+/// Drain pending `org.freedesktop.portal.Clipboard` signals (`SelectionTransfer` and
+/// `SelectionOwnerChanged`) on the active portal session.
+unsafe fn pump_portal_signals(api: &DbusApi, session: &mut ActivePortalSession, wait_ms: c_int) {
+    // SAFETY: `session.conn` is a valid private `DBusConnection` owned by this worker thread.
+    unsafe {
+        let _ = (api.connection_read_write)(session.conn, wait_ms);
+        loop {
+            let msg = (api.connection_pop_message)(session.conn);
+            if msg.is_null() {
+                break;
+            }
+            if (api.message_is_signal)(msg, PORTAL_CLIP_IFACE.as_ptr(), c"SelectionTransfer".as_ptr())
+                != 0
+            {
+                // Args: (o session_handle, s mime_type, u serial)
+                let mut iter = RawDbusIter::new();
+                if (api.message_iter_init)(msg, iter.as_mut_ptr()) != 0
+                    && (api.message_iter_get_arg_type)(iter.as_mut_ptr()) == DBUS_TYPE_OBJECT_PATH
+                {
+                    let mut sp: *const c_char = null();
+                    (api.message_iter_get_basic)(iter.as_mut_ptr(), (&raw mut sp).cast());
+                    let matches =
+                        !sp.is_null() && CStr::from_ptr(sp) == session.session_path.as_c_str();
+                    if matches
+                        && (api.message_iter_next)(iter.as_mut_ptr()) != 0
+                        && (api.message_iter_next)(iter.as_mut_ptr()) != 0
+                        && (api.message_iter_get_arg_type)(iter.as_mut_ptr()) == DBUS_TYPE_UINT32
+                    {
+                        let mut serial: u32 = 0;
+                        (api.message_iter_get_basic)(iter.as_mut_ptr(), (&raw mut serial).cast());
+                        handle_selection_transfer(api, session, serial);
+                    }
+                }
+            } else if (api.message_is_signal)(
+                msg,
+                PORTAL_CLIP_IFACE.as_ptr(),
+                c"SelectionOwnerChanged".as_ptr(),
+            ) != 0
+            {
+                // Args: (o session_handle, a{sv} options)
+                let mut iter = RawDbusIter::new();
+                if (api.message_iter_init)(msg, iter.as_mut_ptr()) != 0
+                    && (api.message_iter_next)(iter.as_mut_ptr()) != 0
+                    && (api.message_iter_get_arg_type)(iter.as_mut_ptr()) == DBUS_TYPE_ARRAY
+                {
+                    let mut arr = RawDbusIter::new();
+                    (api.message_iter_recurse)(iter.as_mut_ptr(), arr.as_mut_ptr());
+                    while (api.message_iter_get_arg_type)(arr.as_mut_ptr()) == DBUS_TYPE_DICT_ENTRY
+                    {
+                        let mut entry = RawDbusIter::new();
+                        (api.message_iter_recurse)(arr.as_mut_ptr(), entry.as_mut_ptr());
+                        if (api.message_iter_get_arg_type)(entry.as_mut_ptr()) == DBUS_TYPE_STRING {
+                            let mut kp: *const c_char = null();
+                            (api.message_iter_get_basic)(entry.as_mut_ptr(), (&raw mut kp).cast());
+                            let key = if kp.is_null() {
+                                ""
+                            } else {
+                                CStr::from_ptr(kp).to_str().unwrap_or("")
+                            };
+                            if key == "session_is_owner"
+                                && (api.message_iter_next)(entry.as_mut_ptr()) != 0
+                                && (api.message_iter_get_arg_type)(entry.as_mut_ptr())
+                                    == DBUS_TYPE_VARIANT
+                            {
+                                let mut var = RawDbusIter::new();
+                                (api.message_iter_recurse)(entry.as_mut_ptr(), var.as_mut_ptr());
+                                if (api.message_iter_get_arg_type)(var.as_mut_ptr())
+                                    == DBUS_TYPE_BOOLEAN
+                                {
+                                    let mut vb: u32 = 0;
+                                    (api.message_iter_get_basic)(
+                                        var.as_mut_ptr(),
+                                        (&raw mut vb).cast(),
+                                    );
+                                    session.owns_selection = vb != 0;
+                                }
+                            }
+                        }
+                        if (api.message_iter_next)(arr.as_mut_ptr()) == 0 {
+                            break;
+                        }
+                    }
+                }
+            }
+            (api.message_unref)(msg);
+        }
+    }
+}
+
 enum OpenSessionResult {
     Ready {
-        session: PortalSession,
+        session: ActivePortalSession,
         interactive_prompt_shown: bool,
     },
     Denied(String),
@@ -588,8 +1032,8 @@ enum OpenSessionResult {
 }
 
 unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
-    // SAFETY: Performs standard `org.freedesktop.portal.RemoteDesktop` v2 handshake on a private
-    // session-bus connection.
+    // SAFETY: Performs standard `org.freedesktop.portal.RemoteDesktop` v2 +
+    // `org.freedesktop.portal.Clipboard` v1 handshake on a private session-bus connection.
     unsafe {
         let mut err = RawDbusError::new();
         (api.error_init)(err.as_mut_ptr());
@@ -613,13 +1057,16 @@ unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
         }
         let sender = dbus_unique_name_to_portal_sender(&CStr::from_ptr(uniq_ptr).to_string_lossy());
 
-        // Subscribe to portal `Request::Response` signals BEFORE sending any requests so signals
-        // can never be missed in the window between call return and match installation.
-        let mut match_err = RawDbusError::new();
-        (api.error_init)(match_err.as_mut_ptr());
-        let match_rule = c"type='signal',sender='org.freedesktop.portal.Desktop',interface='org.freedesktop.portal.Request',member='Response'";
-        (api.bus_add_match)(conn, match_rule.as_ptr(), match_err.as_mut_ptr());
-        (api.error_free)(match_err.as_mut_ptr());
+        for rule in [
+            c"type='signal',sender='org.freedesktop.portal.Desktop',interface='org.freedesktop.portal.Request',member='Response'",
+            c"type='signal',sender='org.freedesktop.portal.Desktop',interface='org.freedesktop.portal.Clipboard',member='SelectionTransfer'",
+            c"type='signal',sender='org.freedesktop.portal.Desktop',interface='org.freedesktop.portal.Clipboard',member='SelectionOwnerChanged'",
+        ] {
+            let mut merr = RawDbusError::new();
+            (api.error_init)(merr.as_mut_ptr());
+            (api.bus_add_match)(conn, rule.as_ptr(), merr.as_mut_ptr());
+            (api.error_free)(merr.as_mut_ptr());
+        }
 
         // 1. CreateSession
         let cs_token = next_token("cs");
@@ -638,21 +1085,19 @@ unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
         }
         let mut iter = RawDbusIter::new();
         (api.message_iter_init_append)(cs_msg, iter.as_mut_ptr());
-        let ok = append_options_dict(
+        if !append_options_dict(
             api,
             &mut iter,
             &[
                 ("handle_token", DictVal::Str(&cs_token)),
                 ("session_handle_token", DictVal::Str(&sess_token)),
             ],
-        );
-        if !ok {
+        ) {
             (api.message_unref)(cs_msg);
             (api.connection_close)(conn);
             (api.connection_unref)(conn);
             return OpenSessionResult::Unavailable;
         }
-
         let mut call_err = RawDbusError::new();
         (api.error_init)(call_err.as_mut_ptr());
         let cs_reply = (api.connection_send_with_reply_and_block)(
@@ -693,6 +1138,14 @@ unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
             return OpenSessionResult::Unavailable;
         };
 
+        let make_bare = |sp: CString| ActivePortalSession {
+            conn,
+            session_path: sp,
+            clipboard_enabled: false,
+            owns_selection: false,
+            clipboard_bytes: Vec::new(),
+        };
+
         // 2. SelectDevices (KEYBOARD only, persist_mode = 2, optional saved restore_token)
         let saved_token = load_restore_token();
         let had_restore_token = saved_token.is_some();
@@ -705,7 +1158,7 @@ unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
             c"SelectDevices".as_ptr(),
         );
         if sd_msg.is_null() {
-            close_portal_session(api, PortalSession { conn, session_path });
+            close_portal_session(api, make_bare(session_path));
             return OpenSessionResult::Unavailable;
         }
         let mut sd_iter = RawDbusIter::new();
@@ -724,21 +1177,15 @@ unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
         if let Some(tok) = saved_token.as_deref() {
             sd_opts.push(("restore_token", DictVal::Str(tok)));
         }
-        let sd_ok = append_options_dict(api, &mut sd_iter, &sd_opts);
-        if !sd_ok {
+        if !append_options_dict(api, &mut sd_iter, &sd_opts) {
             (api.message_unref)(sd_msg);
-            close_portal_session(api, PortalSession { conn, session_path });
+            close_portal_session(api, make_bare(session_path));
             return OpenSessionResult::Unavailable;
         }
-
         let mut sd_err = RawDbusError::new();
         (api.error_init)(sd_err.as_mut_ptr());
-        let sd_reply = (api.connection_send_with_reply_and_block)(
-            conn,
-            sd_msg,
-            5_000,
-            sd_err.as_mut_ptr(),
-        );
+        let sd_reply =
+            (api.connection_send_with_reply_and_block)(conn, sd_msg, 5_000, sd_err.as_mut_ptr());
         (api.message_unref)(sd_msg);
         let sd_failed = sd_reply.is_null() || (api.error_is_set)(sd_err.as_mut_ptr()) != 0;
         (api.error_free)(sd_err.as_mut_ptr());
@@ -746,7 +1193,7 @@ unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
             if !sd_reply.is_null() {
                 (api.message_unref)(sd_reply);
             }
-            close_portal_session(api, PortalSession { conn, session_path });
+            close_portal_session(api, make_bare(session_path));
             return OpenSessionResult::Unavailable;
         }
         let sd_handle =
@@ -755,15 +1202,18 @@ unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
 
         let Some(sd_resp) = wait_portal_response(api, conn, &sd_handle, Duration::from_secs(5))
         else {
-            close_portal_session(api, PortalSession { conn, session_path });
+            close_portal_session(api, make_bare(session_path));
             return OpenSessionResult::Unavailable;
         };
         if sd_resp.code != 0 {
-            close_portal_session(api, PortalSession { conn, session_path });
+            close_portal_session(api, make_bare(session_path));
             return OpenSessionResult::Unavailable;
         }
 
-        // 3. Start (silent when restore_token is valid; shows one-time GNOME dialog otherwise)
+        // 3. RequestClipboard (attaches native Wayland clipboard to this same RemoteDesktop session)
+        request_portal_clipboard(api, conn, &session_path);
+
+        // 4. Start (silent when restore_token is valid; shows one-time GNOME dialog otherwise)
         let start_t0 = Instant::now();
         let st_token = next_token("st");
         let expected_st_path = format!("/org/freedesktop/portal/desktop/request/{sender}/{st_token}");
@@ -774,7 +1224,7 @@ unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
             c"Start".as_ptr(),
         );
         if st_msg.is_null() {
-            close_portal_session(api, PortalSession { conn, session_path });
+            close_portal_session(api, make_bare(session_path));
             return OpenSessionResult::Unavailable;
         }
         let mut st_iter = RawDbusIter::new();
@@ -791,25 +1241,19 @@ unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
             DBUS_TYPE_STRING,
             (&raw const parent_ptr).cast(),
         );
-        let st_ok = append_options_dict(
+        if !append_options_dict(
             api,
             &mut st_iter,
             &[("handle_token", DictVal::Str(&st_token))],
-        );
-        if !st_ok {
+        ) {
             (api.message_unref)(st_msg);
-            close_portal_session(api, PortalSession { conn, session_path });
+            close_portal_session(api, make_bare(session_path));
             return OpenSessionResult::Unavailable;
         }
-
         let mut st_err = RawDbusError::new();
         (api.error_init)(st_err.as_mut_ptr());
-        let st_reply = (api.connection_send_with_reply_and_block)(
-            conn,
-            st_msg,
-            5_000,
-            st_err.as_mut_ptr(),
-        );
+        let st_reply =
+            (api.connection_send_with_reply_and_block)(conn, st_msg, 5_000, st_err.as_mut_ptr());
         (api.message_unref)(st_msg);
         let st_failed = st_reply.is_null() || (api.error_is_set)(st_err.as_mut_ptr()) != 0;
         (api.error_free)(st_err.as_mut_ptr());
@@ -817,7 +1261,7 @@ unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
             if !st_reply.is_null() {
                 (api.message_unref)(st_reply);
             }
-            close_portal_session(api, PortalSession { conn, session_path });
+            close_portal_session(api, make_bare(session_path));
             return OpenSessionResult::Unavailable;
         }
         let st_handle =
@@ -826,7 +1270,7 @@ unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
 
         let Some(st_resp) = wait_portal_response(api, conn, &st_handle, Duration::from_secs(60))
         else {
-            close_portal_session(api, PortalSession { conn, session_path });
+            close_portal_session(api, make_bare(session_path));
             return OpenSessionResult::Denied(
                 "Remote Interaction permission timed out — allow it once to enable auto-paste."
                     .to_owned(),
@@ -838,7 +1282,7 @@ unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
             if had_restore_token {
                 clear_restore_token();
             }
-            close_portal_session(api, PortalSession { conn, session_path });
+            close_portal_session(api, make_bare(session_path));
             return OpenSessionResult::Denied(
                 "Remote Interaction permission wasn't granted — click Copy or allow Remote Interaction to auto-paste."
                     .to_owned(),
@@ -848,7 +1292,7 @@ unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
         if let Some(devices) = st_resp.devices
             && (devices & DEVICE_KEYBOARD) == 0
         {
-            close_portal_session(api, PortalSession { conn, session_path });
+            close_portal_session(api, make_bare(session_path));
             return OpenSessionResult::Denied(
                 "Keyboard access wasn't enabled in Remote Interaction — click Copy or allow keyboard sharing."
                     .to_owned(),
@@ -859,9 +1303,16 @@ unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
             save_restore_token(new_token);
         }
 
+        PORTAL_CLIPBOARD_ACTIVE.store(st_resp.clipboard_enabled, Ordering::Release);
         let interactive_prompt_shown = !had_restore_token || elapsed >= Duration::from_millis(350);
         OpenSessionResult::Ready {
-            session: PortalSession { conn, session_path },
+            session: ActivePortalSession {
+                conn,
+                session_path,
+                clipboard_enabled: st_resp.clipboard_enabled,
+                owns_selection: false,
+                clipboard_bytes: Vec::new(),
+            },
             interactive_prompt_shown,
         }
     }
@@ -869,7 +1320,7 @@ unsafe fn open_portal_session(api: &DbusApi) -> OpenSessionResult {
 
 unsafe fn notify_keycode(
     api: &DbusApi,
-    session: &PortalSession,
+    session: &ActivePortalSession,
     keycode: i32,
     state: u32,
 ) -> bool {
@@ -921,7 +1372,12 @@ unsafe fn notify_keycode(
     }
 }
 
-unsafe fn notify_keysym(api: &DbusApi, session: &PortalSession, keysym: i32, state: u32) -> bool {
+unsafe fn notify_keysym(
+    api: &DbusApi,
+    session: &ActivePortalSession,
+    keysym: i32,
+    state: u32,
+) -> bool {
     // SAFETY: Sends `NotifyKeyboardKeysym` on an active `RemoteDesktop` portal session.
     unsafe {
         let msg = (api.message_new_method_call)(
@@ -970,48 +1426,76 @@ unsafe fn notify_keysym(api: &DbusApi, session: &PortalSession, keysym: i32, sta
     }
 }
 
-fn with_active_session(
-    op: impl Fn(&DbusApi, &PortalSession) -> bool,
+unsafe fn do_type_keysyms(api: &DbusApi, session: &ActivePortalSession, text: &str) -> bool {
+    // SAFETY: Streams XKB/Unicode keysyms on an active `RemoteDesktop` session.
+    unsafe {
+        for ch in text.chars() {
+            if let Some(ks) = char_to_xkb_keysym(ch)
+                && (!notify_keysym(api, session, ks, 1) || !notify_keysym(api, session, ks, 0))
+            {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+unsafe fn do_ctrl_v_with_pump(api: &DbusApi, session: &mut ActivePortalSession) -> bool {
+    // SAFETY: Emits evdev Ctrl+V while continuously serving any Wayland Clipboard `SelectionTransfer`.
+    unsafe {
+        let ok_down = notify_keycode(api, session, EVDEV_KEY_LEFTCTRL, 1)
+            && notify_keycode(api, session, EVDEV_KEY_V, 1);
+        if ok_down {
+            pump_portal_signals(api, session, 15);
+        }
+        let ok_up = notify_keycode(api, session, EVDEV_KEY_V, 0)
+            && notify_keycode(api, session, EVDEV_KEY_LEFTCTRL, 0);
+        if ok_down && ok_up && session.clipboard_enabled {
+            // Serve the pasting app's clipboard read immediately while focus is on the target app.
+            let deadline = Instant::now() + Duration::from_millis(60);
+            while Instant::now() < deadline {
+                pump_portal_signals(api, session, 5);
+            }
+        }
+        ok_down && ok_up
+    }
+}
+
+unsafe fn run_with_session(
+    api: &DbusApi,
+    slot: &mut Option<ActivePortalSession>,
+    portal_unavailable: &mut bool,
+    op: impl Fn(&DbusApi, &mut ActivePortalSession) -> bool,
 ) -> PortalOutcome {
-    let Some(api) = DbusApi::load() else {
-        return PortalOutcome::Unavailable;
-    };
-    let Ok(mut state) = portal_state().lock() else {
-        return PortalOutcome::Unavailable;
-    };
-    if state.portal_unavailable {
+    if *portal_unavailable {
         return PortalOutcome::Unavailable;
     }
 
-    // Attempt with existing session first; if the session was revoked/closed by the compositor,
-    // discard it and try opening a fresh one once.
-    if let Some(session) = state.session.as_ref() {
-        if op(api, session) {
+    if let Some(sess) = slot.as_mut() {
+        if op(api, sess) {
             return PortalOutcome::Injected;
         }
-        if let Some(stale) = state.session.take() {
-            // SAFETY: Closing dead portal session cleanly.
+        if let Some(stale) = slot.take() {
+            // SAFETY: Closes expired/revoked portal session before retrying once.
             unsafe { close_portal_session(api, stale) };
         }
     }
 
-    // SAFETY: Opens a new persistent `RemoteDesktop` portal session on a private D-Bus connection.
+    // SAFETY: Opens a fresh persistent `RemoteDesktop` + `Clipboard` portal session.
     match unsafe { open_portal_session(api) } {
         OpenSessionResult::Ready {
-            session,
+            mut session,
             interactive_prompt_shown,
         } => {
             if interactive_prompt_shown {
-                // Give GNOME/Mutter a moment to dismiss the modal permission dialog and restore
-                // focus to the user's target editor before delivering the keystrokes.
+                // Give GNOME/Mutter time to dismiss the modal dialog and return focus to the editor.
                 thread::sleep(Duration::from_millis(260));
             }
-            let ok = op(api, &session);
-            if ok {
-                state.session = Some(session);
+            if op(api, &mut session) {
+                *slot = Some(session);
                 PortalOutcome::Injected
             } else {
-                // SAFETY: Closing session that rejected injection.
+                // SAFETY: Closes session that rejected injection.
                 unsafe { close_portal_session(api, session) };
                 PortalOutcome::Denied(
                     "Wayland desktop rejected synthetic keyboard input — click Copy to paste manually."
@@ -1021,60 +1505,207 @@ fn with_active_session(
         }
         OpenSessionResult::Denied(msg) => PortalOutcome::Denied(msg),
         OpenSessionResult::Unavailable => {
-            state.portal_unavailable = true;
+            *portal_unavailable = true;
             PortalOutcome::Unavailable
         }
     }
 }
 
-/// Send `Ctrl+V` through the persistent Wayland `RemoteDesktop` portal.
-pub(crate) fn send_paste_shortcut() -> PortalOutcome {
-    with_active_session(|api, session| {
-        // SAFETY: Valid active `RemoteDesktop` session and evdev keycodes.
-        unsafe {
-            let ok_down = notify_keycode(api, session, EVDEV_KEY_LEFTCTRL, 1)
-                && notify_keycode(api, session, EVDEV_KEY_V, 1);
-            if ok_down {
-                thread::sleep(Duration::from_millis(15));
+fn run_portal_worker(api: &'static DbusApi, rx: mpsc::Receiver<PortalCmd>) {
+    let mut session: Option<ActivePortalSession> = None;
+    let mut portal_unavailable = false;
+
+    loop {
+        let cmd = if let Some(sess) = session.as_mut() {
+            if sess.clipboard_enabled {
+                // SAFETY: Continuously answers `SelectionTransfer` signals while we own clipboard.
+                unsafe { pump_portal_signals(api, sess, 8) };
             }
-            let ok_up = notify_keycode(api, session, EVDEV_KEY_V, 0)
-                && notify_keycode(api, session, EVDEV_KEY_LEFTCTRL, 0);
-            ok_down && ok_up
+            match rx.recv_timeout(Duration::from_millis(8)) {
+                Ok(c) => c,
+                Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        } else {
+            match rx.recv() {
+                Ok(c) => c,
+                Err(_) => break,
+            }
+        };
+
+        match cmd {
+            PortalCmd::TrySetClipboard { payload, ack } => {
+                let ok = if let Some(sess) = session.as_mut() {
+                    // SAFETY: Updates native Wayland clipboard via active `Clipboard` portal session.
+                    unsafe { portal_set_selection(api, sess, payload) }
+                } else {
+                    false
+                };
+                let _ = ack.send(ok);
+            }
+            PortalCmd::TryReadClipboard { ack } => {
+                let res = if let Some(sess) = session.as_ref() {
+                    // SAFETY: Reads native Wayland clipboard via active `Clipboard` portal session.
+                    unsafe { portal_read_selection(api, sess) }
+                } else {
+                    None
+                };
+                let _ = ack.send(res);
+            }
+            PortalCmd::PasteOrType { text, ack } => {
+                // SAFETY: Dispatches native Wayland clipboard+Ctrl+V (when clipboard enabled) or
+                // direct `NotifyKeyboardKeysym` typing (when clipboard switch is off / unavailable).
+                let outcome = unsafe {
+                    run_with_session(api, &mut session, &mut portal_unavailable, |api, sess| {
+                        match text.as_deref() {
+                            Some(payload) if sess.clipboard_enabled => {
+                                if portal_set_selection(api, sess, payload.as_bytes().to_vec()) {
+                                    pump_portal_signals(api, sess, 20);
+                                    do_ctrl_v_with_pump(api, sess)
+                                } else {
+                                    do_type_keysyms(api, sess, payload)
+                                }
+                            }
+                            Some(payload) => do_type_keysyms(api, sess, payload),
+                            None => do_ctrl_v_with_pump(api, sess),
+                        }
+                    })
+                };
+                let _ = ack.send(outcome);
+            }
+            PortalCmd::TypeUnicode { text, ack } => {
+                // SAFETY: Streams Unicode keysyms directly into the focused Wayland window.
+                let outcome = unsafe {
+                    run_with_session(api, &mut session, &mut portal_unavailable, |api, sess| {
+                        do_type_keysyms(api, sess, &text)
+                    })
+                };
+                let _ = ack.send(outcome);
+            }
+            PortalCmd::SendBackspaces { count, ack } => {
+                // SAFETY: Sends Backspace keycodes through the active `RemoteDesktop` session.
+                let outcome = unsafe {
+                    run_with_session(api, &mut session, &mut portal_unavailable, |api, sess| {
+                        for _ in 0..count {
+                            if !notify_keycode(api, sess, EVDEV_KEY_BACKSPACE, 1)
+                                || !notify_keycode(api, sess, EVDEV_KEY_BACKSPACE, 0)
+                            {
+                                return false;
+                            }
+                        }
+                        true
+                    })
+                };
+                let _ = ack.send(outcome);
+            }
         }
-    })
+    }
+
+    if let Some(sess) = session.take() {
+        // SAFETY: Clean session teardown on exit.
+        unsafe { close_portal_session(api, sess) };
+    }
+}
+
+/// Return `true` when an active Wayland `Clipboard` portal session is currently open.
+pub(crate) fn is_portal_clipboard_active() -> bool {
+    PORTAL_CLIPBOARD_ACTIVE.load(Ordering::Acquire)
+}
+
+/// Non-prompting write to the native Wayland clipboard if a `Clipboard` portal session is open.
+pub(crate) fn try_set_clipboard_text(text: &str) -> bool {
+    if !is_portal_clipboard_active() {
+        return false;
+    }
+    let Some(client) = ensure_portal_client() else {
+        return false;
+    };
+    let (ack_tx, ack_rx) = mpsc::sync_channel::<bool>(1);
+    if client
+        .tx
+        .send(PortalCmd::TrySetClipboard {
+            payload: text.as_bytes().to_vec(),
+            ack: ack_tx,
+        })
+        .is_err()
+    {
+        return false;
+    }
+    ack_rx.recv_timeout(Duration::from_secs(2)).unwrap_or(false)
+}
+
+/// Non-prompting read from the native Wayland clipboard if a `Clipboard` portal session is open.
+pub(crate) fn try_read_clipboard_text() -> Option<String> {
+    if !is_portal_clipboard_active() {
+        return None;
+    }
+    let client = ensure_portal_client()?;
+    let (ack_tx, ack_rx) = mpsc::sync_channel::<Option<String>>(1);
+    client
+        .tx
+        .send(PortalCmd::TryReadClipboard { ack: ack_tx })
+        .ok()?;
+    ack_rx.recv_timeout(Duration::from_secs(2)).ok().flatten()
+}
+
+/// Paste `pending_text` via native Wayland `Clipboard` portal + `Ctrl+V` when clipboard access is
+/// granted, or type `pending_text` directly via `NotifyKeyboardKeysym` when clipboard access is
+/// disabled/unavailable.
+pub(crate) fn send_paste_or_type(pending_text: Option<String>) -> PortalOutcome {
+    let Some(client) = ensure_portal_client() else {
+        return PortalOutcome::Unavailable;
+    };
+    let (ack_tx, ack_rx) = mpsc::sync_channel::<PortalOutcome>(1);
+    if client
+        .tx
+        .send(PortalCmd::PasteOrType {
+            text: pending_text,
+            ack: ack_tx,
+        })
+        .is_err()
+    {
+        return PortalOutcome::Unavailable;
+    }
+    ack_rx
+        .recv_timeout(Duration::from_secs(65))
+        .unwrap_or(PortalOutcome::Unavailable)
 }
 
 /// Send `count` Backspace presses through the persistent Wayland `RemoteDesktop` portal.
 pub(crate) fn send_backspaces(count: usize) -> PortalOutcome {
-    with_active_session(|api, session| {
-        // SAFETY: Valid active `RemoteDesktop` session and evdev backspace keycode.
-        unsafe {
-            for _ in 0..count {
-                if !notify_keycode(api, session, EVDEV_KEY_BACKSPACE, 1)
-                    || !notify_keycode(api, session, EVDEV_KEY_BACKSPACE, 0)
-                {
-                    return false;
-                }
-            }
-            true
-        }
-    })
+    let Some(client) = ensure_portal_client() else {
+        return PortalOutcome::Unavailable;
+    };
+    let (ack_tx, ack_rx) = mpsc::sync_channel::<PortalOutcome>(1);
+    if client
+        .tx
+        .send(PortalCmd::SendBackspaces { count, ack: ack_tx })
+        .is_err()
+    {
+        return PortalOutcome::Unavailable;
+    }
+    ack_rx
+        .recv_timeout(Duration::from_secs(65))
+        .unwrap_or(PortalOutcome::Unavailable)
 }
 
-/// Type arbitrary Unicode text via `RemoteDesktop.NotifyKeyboardKeysym` (works even in terminals
-/// when clipboard auto-paste is disabled).
+/// Type arbitrary Unicode text via `RemoteDesktop.NotifyKeyboardKeysym`.
 pub(crate) fn type_unicode_text(text: &str) -> PortalOutcome {
-    with_active_session(|api, session| {
-        // SAFETY: Valid active `RemoteDesktop` session and XKB Unicode keysyms.
-        unsafe {
-            for ch in text.chars() {
-                if let Some(ks) = char_to_xkb_keysym(ch)
-                    && (!notify_keysym(api, session, ks, 1) || !notify_keysym(api, session, ks, 0))
-                {
-                    return false;
-                }
-            }
-            true
-        }
-    })
+    let Some(client) = ensure_portal_client() else {
+        return PortalOutcome::Unavailable;
+    };
+    let (ack_tx, ack_rx) = mpsc::sync_channel::<PortalOutcome>(1);
+    if client
+        .tx
+        .send(PortalCmd::TypeUnicode {
+            text: text.to_owned(),
+            ack: ack_tx,
+        })
+        .is_err()
+    {
+        return PortalOutcome::Unavailable;
+    }
+    ack_rx
+        .recv_timeout(Duration::from_secs(65))
+        .unwrap_or(PortalOutcome::Unavailable)
 }

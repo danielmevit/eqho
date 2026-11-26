@@ -12,11 +12,38 @@ use std::time::{Duration, Instant};
 
 use eqho_platform::{ClipboardService, PlatformError};
 
+use crate::portal_input;
 use crate::pure::is_wayland_session;
 use crate::x11_ffi::{
     CURRENT_TIME, PROP_MODE_REPLACE, SELECTION_CLEAR, SELECTION_NOTIFY, SELECTION_REQUEST,
     X11Api, XA_ATOM, XA_STRING, XEvent, XSelectionEvent,
 };
+
+static PENDING_WAYLAND_PASTE: OnceLock<Mutex<Option<(String, Instant)>>> = OnceLock::new();
+
+fn pending_wayland_paste_slot() -> &'static Mutex<Option<(String, Instant)>> {
+    PENDING_WAYLAND_PASTE.get_or_init(|| Mutex::new(None))
+}
+
+fn store_pending_wayland_paste(text: Option<&str>) {
+    if let Ok(mut guard) = pending_wayland_paste_slot().lock() {
+        *guard = text.map(|t| (t.to_owned(), Instant::now()));
+    }
+}
+
+/// Consume the most recent private dictation text written on Wayland (valid for 5 s) so
+/// `LinuxInputInjector::send_paste_shortcut` can deliver it through
+/// `org.freedesktop.portal.Clipboard` (`Ctrl+V`) or direct `RemoteDesktop.NotifyKeyboardKeysym`
+/// typing without relying on Mutter's blocked unfocused XWayland clipboard bridge.
+pub(crate) fn take_pending_wayland_paste() -> Option<String> {
+    let mut guard = pending_wayland_paste_slot().lock().ok()?;
+    let (text, ts) = guard.take()?;
+    if ts.elapsed() <= Duration::from_secs(5) {
+        Some(text)
+    } else {
+        None
+    }
+}
 
 struct ClipboardSetCmd {
     payload: Vec<u8>,
@@ -370,10 +397,13 @@ impl LinuxClipboardService {
 
 impl ClipboardService for LinuxClipboardService {
     fn get_text(&self) -> Option<String> {
-        if Self::is_wayland()
-            && let Some(t) = Self::run_read("wl-paste", &["--no-newline", "--type", "text/plain"])
-        {
-            return Some(t);
+        if Self::is_wayland() {
+            if let Some(t) = Self::run_read("wl-paste", &["--no-newline", "--type", "text/plain"]) {
+                return Some(t);
+            }
+            if portal_input::is_portal_clipboard_active() {
+                return portal_input::try_read_clipboard_text();
+            }
         }
         Self::run_read("xclip", &["-selection", "clipboard", "-out"])
             .or_else(|| Self::run_read("xsel", &["--clipboard", "--output"]))
@@ -381,11 +411,22 @@ impl ClipboardService for LinuxClipboardService {
             .or_else(x11_get_text)
     }
 
-    fn set_text(&self, text: &str, _private: bool) -> Result<(), PlatformError> {
-        if Self::is_wayland()
-            && Self::run_write("wl-copy", &["--type", "text/plain;charset=utf-8"], text).is_ok()
-        {
-            return Ok(());
+    fn set_text(&self, text: &str, private: bool) -> Result<(), PlatformError> {
+        if Self::is_wayland() {
+            if Self::run_write("wl-copy", &["--type", "text/plain;charset=utf-8"], text).is_ok() {
+                store_pending_wayland_paste(None);
+                return Ok(());
+            }
+            // Stash private dictation text so `send_paste_shortcut` can deliver it via native
+            // Wayland `Clipboard` portal + `Ctrl+V` or `RemoteDesktop.NotifyKeyboardKeysym` even
+            // when Mutter 50 blocks unfocused XWayland `XSetSelectionOwner` from reaching Wayland.
+            store_pending_wayland_paste(if private { Some(text) } else { None });
+            let portal_ok = portal_input::try_set_clipboard_text(text);
+            let x11_res = x11_set_text(text);
+            if portal_ok {
+                return Ok(());
+            }
+            return x11_res;
         }
         if Self::run_write("xclip", &["-selection", "clipboard", "-in"], text).is_ok() {
             return Ok(());
@@ -393,13 +434,9 @@ impl ClipboardService for LinuxClipboardService {
         if Self::run_write("xsel", &["--clipboard", "--input"], text).is_ok() {
             return Ok(());
         }
-        if !Self::is_wayland()
-            && Self::run_write("wl-copy", &["--type", "text/plain;charset=utf-8"], text).is_ok()
-        {
+        if Self::run_write("wl-copy", &["--type", "text/plain;charset=utf-8"], text).is_ok() {
             return Ok(());
         }
-        // Built-in zero-dependency X11 CLIPBOARD selection owner (bridges natively to GNOME
-        // Wayland via Mutter's XWayland clipboard bridge as well as standard X11 desktops).
         x11_set_text(text)
     }
 }

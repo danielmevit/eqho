@@ -28,7 +28,7 @@ pub const MODELS: &[ModelInfo] = &[
     // English-optimized (4 — clean 2x2 grid)
     ModelInfo {
         key: "distil-large-v3",
-        label: "Distil Large v3 (~1.5 GB, English-optimized, recommended)",
+        label: "Distil Large v3 (~1.5 GB, English-optimized)",
         size_mb: 1510,
         ggml_name: "large-v3-turbo",
         ggml_filename: "ggml-large-v3-turbo.bin",

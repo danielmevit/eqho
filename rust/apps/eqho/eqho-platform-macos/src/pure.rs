@@ -161,6 +161,31 @@ fn parse_mac_keycode(token: &str) -> Option<u16> {
     }
 }
 
+/// Convert a Metal device's `recommendedMaxWorkingSetSize` into effective dedicated VRAM bytes.
+///
+/// Apple Silicon unified Metal GPUs (`is_arm64` or `"Apple M..."`) and discrete AMD/NVIDIA GPUs
+/// on Intel Macs keep their full Metal working set, whereas Intel integrated GPUs on x86_64 Macs
+/// (e.g. Intel UHD Graphics 630) share system RAM and report `0` so they are not misclassified as
+/// high-VRAM discrete GPUs.
+#[must_use]
+pub fn metal_effective_vram_bytes(
+    device_name: &str,
+    recommended_working_set: u64,
+    is_arm64: bool,
+) -> u64 {
+    if is_arm64 {
+        return recommended_working_set;
+    }
+    let lower = device_name.to_ascii_lowercase();
+    if lower.contains("apple m") {
+        recommended_working_set
+    } else if lower.contains("intel") {
+        0
+    } else {
+        recommended_working_set
+    }
+}
+
 /// Build a `GpuAdapter` descriptor for Apple Silicon unified Metal GPUs (allocated ~75% of
 /// unified memory as recommended working set by Metal).
 #[must_use]
@@ -211,5 +236,17 @@ mod tests {
         assert_eq!(m3.vendor_id, 0x106B);
         assert!(m3.dedicated_video_memory_bytes > 10 * 1024 * 1024 * 1024);
         assert!(classify_apple_gpu("Intel(R) Core(TM) i7", 16 * 1024 * 1024 * 1024, false).is_none());
+        assert_eq!(
+            metal_effective_vram_bytes("Intel(R) UHD Graphics 630", 4 * 1024 * 1024 * 1024, false),
+            0
+        );
+        assert_eq!(
+            metal_effective_vram_bytes("AMD Radeon Pro 5500M", 8 * 1024 * 1024 * 1024, false),
+            8 * 1024 * 1024 * 1024
+        );
+        assert_eq!(
+            metal_effective_vram_bytes("Apple M2", 6 * 1024 * 1024 * 1024, true),
+            6 * 1024 * 1024 * 1024
+        );
     }
 }
