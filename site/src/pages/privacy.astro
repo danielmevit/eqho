@@ -1,8 +1,10 @@
 ---
 const title = "Privacy Policy | Eqho";
 const description = "Privacy policy for Eqho — 100% offline voice-to-text dictation. Your voice is processed locally on your PC and never uploaded.";
-const home = "/eqho/";
-const updated = "2026-11-25";
+import SiteHeader from '../components/SiteHeader.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+import { SUPPORT_EMAIL } from '../lib/site';
+const updated = "26 November 2026";
 ---
 <!DOCTYPE html>
 <html lang="en">
@@ -40,12 +42,11 @@ const updated = "2026-11-25";
         margin: 0;
         -webkit-font-smoothing: antialiased;
       }
-      main { max-width: 820px; margin: 5rem auto; padding: 0 1.5rem; }
+      main { max-width: 820px; margin: 2.5rem auto 0; padding: 0 clamp(16px, 4vw, 64px); box-sizing: content-box; }
+      .updated { color: var(--color-muted); font-size: 0.9rem; margin: 0 0 1.5rem; }
       a { color: var(--color-blue); text-decoration: none; }
       a:hover { text-decoration: underline; }
-      .top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 3rem; }
-      .logo-img { height: 34px; display: block; }
-      h1 { color: var(--color-heading); font-size: 2.5rem; font-weight: 600; letter-spacing: -0.02em; margin: 2rem 0 0.4rem; }
+      h1 { color: var(--color-heading); font-size: 2.5rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 0.4rem; }
       .lede { color: var(--color-muted); margin: 0 0 2.5rem; font-size: 1.05rem; }
       .card {
         background: var(--color-card-bg);
@@ -72,14 +73,6 @@ const updated = "2026-11-25";
         border-radius: 5px;
         font-size: 0.9em;
       }
-      footer {
-        text-align: center;
-        margin-top: 4rem;
-        padding: 2.5rem 0;
-        border-top: 1px solid var(--color-border);
-        color: var(--color-muted);
-        font-size: 0.9rem;
-      }
       @media (max-width: 620px) {
         h1 { font-size: 2rem; }
         .card { padding: 1.25rem; }
@@ -87,14 +80,8 @@ const updated = "2026-11-25";
     </style>
   </head>
   <body>
+    <SiteHeader />
     <main>
-      <div class="top">
-        <a href={home} aria-label="Eqho home">
-          <img src="https://raw.githubusercontent.com/DanielMevit/eqho/main/logo/logo_horizontal_dark.png" alt="Eqho logo" class="logo-img" />
-        </a>
-        <a href={home}>&larr; Back to home</a>
-      </div>
-
       <h1>Privacy Policy</h1>
       <p class="lede">
         Eqho does not collect, store on any server, sell, or share your personal data or voice recordings.
@@ -120,7 +107,7 @@ const updated = "2026-11-25";
           <li><code>%APPDATA%\Eqho\settings.json</code> — your hotkey, language, theme, overlay, custom vocabulary, and replacement preferences.</li>
           <li><code>%APPDATA%\Eqho\history.jsonl</code> — local transcript history (optional; can be disabled or cleared at any time in Eqho).</li>
           <li><code>%APPDATA%\Eqho\eqho.log</code> — technical diagnostics and crash logs. Your dictated text and audio are never written to log files.</li>
-          <li><code>%APPDATA%\Eqho\license.json</code> — <em>Microsoft Store edition only:</em> locally cached Store trial or purchase status so Eqho continues working while offline.</li>
+          <li><code>%APPDATA%\Eqho\license.json</code> — Microsoft Store edition only: locally cached Store trial or purchase status so Eqho continues working while offline.</li>
           <li><code>%LOCALAPPDATA%\Eqho\models\</code> — local GGML Whisper speech model files that you choose to download.</li>
         </ul>
         <p>Deleting those folders removes all Eqho data from your computer.</p>
@@ -153,13 +140,12 @@ const updated = "2026-11-25";
           This documentation site uses no cookies, no analytics scripts, and no third-party tracking.
         </p>
         <p>
-          Questions about privacy? Reach out via <a href="https://damt.xyz">damt.xyz</a>.
+          Questions about privacy? Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
         </p>
       </section>
 
-      <footer>
-        Last updated {updated} · © 2026 <a href="https://damt.xyz">Daniel Mevit · damt.xyz</a> · <a href={home}>Eqho</a>
-      </footer>
+      <p class="updated">Last updated {updated}</p>
     </main>
+    <SiteFooter />
   </body>
 </html>
