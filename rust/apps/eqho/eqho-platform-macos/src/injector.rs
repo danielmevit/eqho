@@ -116,7 +116,11 @@ impl InputInjector for MacInputInjector {
         if text.is_empty() {
             return Ok(());
         }
-        for part in text.split('\n') {
+        for (idx, part) in text.split('\n').enumerate() {
+            if idx > 0 {
+                Self::post_key(K_VK_RETURN, true, Some(0))?;
+                Self::post_key(K_VK_RETURN, false, Some(0))?;
+            }
             if !part.is_empty() {
                 let utf16: Vec<u16> = part.encode_utf16().collect();
                 // CoreGraphics recommends chunks <= 20 UTF-16 code units per event.
@@ -145,11 +149,6 @@ impl InputInjector for MacInputInjector {
                     }
                 }
             }
-        }
-        let newline_count = text.chars().filter(|&c| c == '\n').count();
-        if newline_count > 0 && text.ends_with('\n') {
-            Self::post_key(K_VK_RETURN, true, Some(0))?;
-            Self::post_key(K_VK_RETURN, false, Some(0))?;
         }
         Ok(())
     }

@@ -314,7 +314,7 @@ fn process_memory_bytes() -> (u64, u64) {
         ru_maxrss: i64,
         _rest: [i64; 13],
     }
-    #[link(name = "System", kind = "framework")]
+    #[link(name = "System")]
     unsafe extern "C" {
         fn getrusage(who: i32, usage: *mut Rusage) -> i32;
     }

@@ -36,7 +36,7 @@ struct VmStatistics64 {
     total_uncompressed_pages_in_compressor: u64,
 }
 
-#[link(name = "System", kind = "framework")]
+#[link(name = "System")]
 unsafe extern "C" {
     fn mach_host_self() -> c_uint;
     fn host_page_size(host: c_uint, page_size: *mut usize) -> c_int;

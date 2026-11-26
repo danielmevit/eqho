@@ -7,7 +7,7 @@ use eqho_platform::{GpuAdapter, GpuProbe};
 
 use crate::pure::classify_apple_gpu;
 
-#[link(name = "System", kind = "framework")]
+#[link(name = "System")]
 unsafe extern "C" {
     fn sysctlbyname(
         name: *const c_char,

@@ -39,7 +39,6 @@ struct NSRect {
     size: NSSize,
 }
 
-const NS_WINDOW_STYLE_BORDERLESS: usize = 0;
 const NS_WINDOW_STYLE_NONACTIVATING_PANEL: usize = 1 << 7;
 const NS_BACKING_STORE_BUFFERED: usize = 2;
 const NS_FLOATING_WINDOW_LEVEL: isize = 3;
@@ -90,7 +89,7 @@ unsafe extern "C" {
     fn objc_msgSend();
 }
 
-#[link(name = "System", kind = "framework")]
+#[link(name = "System")]
 unsafe extern "C" {
     static _dispatch_main_q: c_void;
     fn dispatch_async_f(
@@ -239,7 +238,7 @@ unsafe extern "C" fn apply_frame_on_main_thread(ctx: *mut c_void) {
                     alloc,
                     sel_registerName(c"initWithContentRect:styleMask:backing:defer:".as_ptr()),
                     rect,
-                    NS_WINDOW_STYLE_BORDERLESS | NS_WINDOW_STYLE_NONACTIVATING_PANEL,
+                    NS_WINDOW_STYLE_NONACTIVATING_PANEL,
                     NS_BACKING_STORE_BUFFERED,
                     0,
                 );
@@ -322,7 +321,7 @@ fn dispatch_frame(frame: MainThreadFrame) {
     // SAFETY: Dispatching frame update onto macOS main queue.
     unsafe {
         dispatch_async_f(
-            &_dispatch_main_q as *const c_void,
+            std::ptr::addr_of!(_dispatch_main_q),
             raw.cast(),
             apply_frame_on_main_thread,
         );
