@@ -101,14 +101,14 @@ const updated = "26 November 2026";
       </section>
 
       <section class="card">
-        <h2>Files stored locally on your PC</h2>
+        <h2>Files stored locally on your computer</h2>
         <p>Eqho keeps only your local configuration and downloaded speech models on your own device:</p>
         <ul>
-          <li><code>%APPDATA%\Eqho\settings.json</code> — your hotkey, language, theme, overlay, custom vocabulary, and replacement preferences.</li>
-          <li><code>%APPDATA%\Eqho\history.jsonl</code> — local transcript history (optional; can be disabled or cleared at any time in Eqho).</li>
-          <li><code>%APPDATA%\Eqho\eqho.log</code> — technical diagnostics and crash logs. Your dictated text and audio are never written to log files.</li>
-          <li><code>%APPDATA%\Eqho\license.json</code> — Microsoft Store edition only: locally cached Store trial or purchase status so Eqho continues working while offline.</li>
-          <li><code>%LOCALAPPDATA%\Eqho\models\</code> — local GGML Whisper speech model files that you choose to download.</li>
+          <li><strong>Settings</strong> (<code>%APPDATA%\Eqho\settings.json</code> on Windows · <code>~/.config/Eqho/settings.json</code> on Linux · <code>~/Library/Application Support/Eqho/settings.json</code> on macOS) — your hotkey, language, theme, overlay, custom vocabulary, and replacement preferences.</li>
+          <li><strong>Transcript history</strong> (<code>history.jsonl</code> in your Eqho config folder) — local transcript history (optional; can be disabled or cleared at any time in Eqho).</li>
+          <li><strong>Diagnostic logs</strong> (<code>eqho.log</code> in your Eqho config folder) — technical diagnostics and crash logs. Your dictated text and audio are never written to log files.</li>
+          <li><strong>Store licence cache</strong> (<code>%APPDATA%\Eqho\license.json</code>, Microsoft Store edition only) — locally cached Store trial or purchase status so Eqho continues working while offline.</li>
+          <li><strong>Downloaded speech models</strong> (<code>%LOCALAPPDATA%\Eqho\models\</code> on Windows · <code>~/.cache/Eqho/models/</code> on Linux · <code>~/Library/Caches/Eqho/models/</code> on macOS) — local GGML Whisper speech model files that you choose to download.</li>
         </ul>
         <p>Deleting those folders removes all Eqho data from your computer.</p>
       </section>
@@ -131,6 +131,16 @@ const updated = "26 November 2026";
         <p>
           When inserting dictated text using Clipboard mode, Eqho marks the pasted text as private (excluded from Windows Win+V clipboard history and cloud clipboard sync) and restores your previous clipboard text immediately afterward.
           Eqho reads the active window handle solely to restore focus before inserting your dictation and to apply any per-app paste rules you configure.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Development &amp; generative AI disclosure</h2>
+        <p>
+          Eqho is designed, directed, tested, and maintained by <strong>damt.xyz</strong> with extensive use of generative AI tools for coding, documentation, maintenance, and promotional materials.
+        </p>
+        <p>
+          This applies strictly to how Eqho is developed and marketed. When you run Eqho, no cloud AI or generative language model is called — speech recognition runs locally via <code>whisper.cpp</code> on your own hardware, and text formatting is deterministic.
         </p>
       </section>
 

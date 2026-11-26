@@ -147,12 +147,20 @@ system (docs/ai/TESTING.md: ASR benchmark, end-to-end dictation test, UI walker)
 - [ ] Final QA pass on a clean Windows install (Daniel — see TODO.md)
 - [x] Repo public; since 2026-10-16 one repo — `dev` is public too (Eqho-private archived)
 
-## Phase 8 -- Native Engine (future)
-Migrate off the Python runtime for a lean commercial-grade product.
-- [ ] Replace faster-whisper with **whisper.cpp** (zero Python dependency; Metal on macOS)
-- [ ] Evaluate Tauri (Rust) or C#/WPF for the app shell (replacing tkinter + pystray)
+## Phase 8 -- Native Engine (Rust 0.9.x)
+Migrate off the Python runtime for a lean commercial-grade product across Windows, Linux, and macOS.
+- [x] Replace faster-whisper with **whisper.cpp 1.8.4** (Vulkan GPU + Metal GPU + Accelerate + all-ISA dynamic CPU backends)
+- [x] Native Rust + Slint 1.19 UI + OS-native floating overlays (`Eqho` on Windows x64, Linux x64, macOS arm64 & x64)
+- [x] Transparent generative AI development disclosure in `README.md` and `https://eqho.damt.xyz/privacy/`
 - [ ] Signed binaries, auto-update mechanism
 - [ ] Plugin system for custom post-processing (punctuation cleanup, formatting)
+
+### 0.9.5 — Opt-in Anonymous Product Analytics (PostHog EU)
+Reusable privacy-first analytics foundation in `damt-app` shared across Eqho (Windows, Linux, macOS) and all `damt.xyz` apps:
+- [ ] Lightweight, non-blocking PostHog capture client in `damt-app` targeting **PostHog EU Cloud (`eu.i.posthog.com`)**, build-time `EQHO_POSTHOG_KEY` injection (silent in community source builds), zero blocking on startup/dictation, silent offline drop
+- [ ] **Strictly opt-in by default (`analytics_enabled = false`)** with a clear opt-in checkbox in first-run Onboarding and a toggle in **Settings → General** (rotating/clearing anonymous ID when disabled)
+- [ ] Strictly anonymous usage & health events only (OS/arch, GPU vs CPU backend, selected model ID, session duration bucket, error codes) — **never** microphone audio, dictated transcripts, filenames, window titles, clipboard text, or IP addresses
+- [ ] Synchronized disclosure updates in the exact same release across `README.md`, `https://eqho.damt.xyz/privacy/`, `docs/store/LISTING.md`, and the Microsoft Partner Center Privacy Questionnaire
 
 ### Why whisper.cpp for distribution
 - Pure C/C++, no Python runtime, no 200MB+ PyInstaller bundle
