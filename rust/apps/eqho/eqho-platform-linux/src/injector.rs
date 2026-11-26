@@ -1,8 +1,9 @@
 //! Keyboard paste, backspace, modifier release, and Unicode typing on Linux (X11 XTest + Wayland tools).
 
-use std::ffi::{c_char, c_uint, c_ulong};
+use std::ffi::{c_char, c_uint, c_ulong, c_void};
 use std::process::{Command, Stdio};
 use std::ptr::null;
+use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
@@ -10,6 +11,37 @@ use eqho_platform::{InputInjector, ModifierKey, PlatformError};
 
 use crate::pure::is_wayland_session;
 use crate::x11_ffi::{CURRENT_TIME, X11Api};
+
+/// Persistent X11 display connection used exclusively for `XTestFakeKeyEvent`.
+///
+/// Keeping one connection open across dictations is critical on GNOME/Mutter Wayland: XWayland
+/// grants EIS/Remote-Interaction permission per X11 client connection, so opening and closing a
+/// fresh `Display*` on every dictation would re-trigger the desktop permission popup every time.
+struct PersistentXTestDisplay(*mut c_void);
+
+// SAFETY: Access is serialized through `XTEST_DISPLAY`'s `Mutex`, so only one thread uses the
+// `Display*` at a time.
+unsafe impl Send for PersistentXTestDisplay {}
+
+static XTEST_DISPLAY: OnceLock<Mutex<Option<PersistentXTestDisplay>>> = OnceLock::new();
+
+fn with_xtest_display<R>(
+    api: &'static X11Api,
+    f: impl FnOnce(*mut c_void) -> R,
+) -> Option<R> {
+    let lock = XTEST_DISPLAY.get_or_init(|| Mutex::new(None));
+    let mut guard = lock.lock().ok()?;
+    if guard.is_none() {
+        // SAFETY: Opens a dedicated X11 display connection serialized by `XTEST_DISPLAY`.
+        let dpy = unsafe { (api.open_display)(null()) };
+        if dpy.is_null() {
+            return None;
+        }
+        *guard = Some(PersistentXTestDisplay(dpy));
+    }
+    let dpy = guard.as_ref()?.0;
+    Some(f(dpy))
+}
 
 const XK_SHIFT_L: c_ulong = 0xFFE1;
 const XK_SHIFT_R: c_ulong = 0xFFE2;
@@ -131,12 +163,8 @@ impl InputInjector for LinuxInputInjector {
         let Some(fake) = api.xtest_fake_key_event else {
             return Ok(());
         };
-        // SAFETY: Emitting key-up events only for explicitly held modifiers.
-        unsafe {
-            let dpy = (api.open_display)(null());
-            if dpy.is_null() {
-                return Ok(());
-            }
+        // SAFETY: Emitting key-up events only for explicitly held modifiers on our persistent XTest display.
+        let _ = with_xtest_display(api, |dpy| unsafe {
             for &m in mods {
                 let kc = (api.keysym_to_keycode)(dpy, Self::modifier_keysym(m));
                 if kc != 0 {
@@ -144,8 +172,7 @@ impl InputInjector for LinuxInputInjector {
                 }
             }
             (api.flush)(dpy);
-            (api.close_display)(dpy);
-        }
+        });
         Ok(())
     }
 
@@ -162,23 +189,23 @@ impl InputInjector for LinuxInputInjector {
         if let Some(api) = X11Api::load()
             && let Some(fake) = api.xtest_fake_key_event
         {
-            // SAFETY: Synthetic `Ctrl+V` via X11 XTest.
-            unsafe {
-                let dpy = (api.open_display)(null());
-                if !dpy.is_null() {
-                    let ctrl_kc = (api.keysym_to_keycode)(dpy, XK_CONTROL_L);
-                    let v_kc = (api.keysym_to_keycode)(dpy, u64::from(b'v') as c_ulong);
-                    if ctrl_kc != 0 && v_kc != 0 {
-                        fake(dpy, u32::from(ctrl_kc), 1, CURRENT_TIME);
-                        fake(dpy, u32::from(v_kc), 1, CURRENT_TIME);
-                        fake(dpy, u32::from(v_kc), 0, CURRENT_TIME);
-                        fake(dpy, u32::from(ctrl_kc), 0, CURRENT_TIME);
-                        (api.flush)(dpy);
-                        (api.close_display)(dpy);
-                        return Ok(());
-                    }
-                    (api.close_display)(dpy);
+            // SAFETY: Synthetic `Ctrl+V` via persistent X11 XTest connection.
+            let sent = with_xtest_display(api, |dpy| unsafe {
+                let ctrl_kc = (api.keysym_to_keycode)(dpy, XK_CONTROL_L);
+                let v_kc = (api.keysym_to_keycode)(dpy, u64::from(b'v') as c_ulong);
+                if ctrl_kc != 0 && v_kc != 0 {
+                    fake(dpy, u32::from(ctrl_kc), 1, CURRENT_TIME);
+                    fake(dpy, u32::from(v_kc), 1, CURRENT_TIME);
+                    fake(dpy, u32::from(v_kc), 0, CURRENT_TIME);
+                    fake(dpy, u32::from(ctrl_kc), 0, CURRENT_TIME);
+                    (api.flush)(dpy);
+                    true
+                } else {
+                    false
                 }
+            });
+            if sent == Some(true) {
+                return Ok(());
             }
         }
         if Self::run_ok("xdotool", &["key", "--clearmodifiers", "ctrl+v"]) {
@@ -212,48 +239,46 @@ impl InputInjector for LinuxInputInjector {
         if let Some(api) = X11Api::load()
             && let Some(fake) = api.xtest_fake_key_event
         {
-            // SAFETY: Synthetic ASCII keystrokes via X11 XTest.
-            unsafe {
-                let dpy = (api.open_display)(null());
-                if !dpy.is_null() {
-                    for ch in text.chars() {
-                        let (ks, shift) = match ch {
-                            '\n' | '\r' => (XK_RETURN, false),
-                            '\t' => (XK_TAB, false),
-                            c if c.is_ascii_uppercase() => {
-                                (u64::from(c.to_ascii_lowercase() as u8) as c_ulong, true)
-                            }
-                            '!' => (u64::from(b'1') as c_ulong, true),
-                            '@' => (u64::from(b'2') as c_ulong, true),
-                            '#' => (u64::from(b'3') as c_ulong, true),
-                            '$' => (u64::from(b'4') as c_ulong, true),
-                            '%' => (u64::from(b'5') as c_ulong, true),
-                            '^' => (u64::from(b'6') as c_ulong, true),
-                            '&' => (u64::from(b'7') as c_ulong, true),
-                            '*' => (u64::from(b'8') as c_ulong, true),
-                            '(' => (u64::from(b'9') as c_ulong, true),
-                            ')' => (u64::from(b'0') as c_ulong, true),
-                            '_' => (u64::from(b'-') as c_ulong, true),
-                            '+' => (u64::from(b'=') as c_ulong, true),
-                            '{' => (u64::from(b'[') as c_ulong, true),
-                            '}' => (u64::from(b']') as c_ulong, true),
-                            '|' => (u64::from(b'\\') as c_ulong, true),
-                            ':' => (u64::from(b';') as c_ulong, true),
-                            '"' => (u64::from(b'\'') as c_ulong, true),
-                            '<' => (u64::from(b',') as c_ulong, true),
-                            '>' => (u64::from(b'.') as c_ulong, true),
-                            '?' => (u64::from(b'/') as c_ulong, true),
-                            '~' => (u64::from(b'`') as c_ulong, true),
-                            c if c.is_ascii() => (u64::from(c as u8) as c_ulong, false),
-                            _ => continue,
-                        };
-                        let kc = (api.keysym_to_keycode)(dpy, ks);
-                        Self::xtest_tap_keycode(&api, fake, dpy, kc, shift);
-                    }
-                    (api.flush)(dpy);
-                    (api.close_display)(dpy);
-                    return Ok(());
+            // SAFETY: Synthetic ASCII keystrokes via persistent X11 XTest connection.
+            let typed = with_xtest_display(api, |dpy| unsafe {
+                for ch in text.chars() {
+                    let (ks, shift) = match ch {
+                        '\n' | '\r' => (XK_RETURN, false),
+                        '\t' => (XK_TAB, false),
+                        c if c.is_ascii_uppercase() => {
+                            (u64::from(c.to_ascii_lowercase() as u8) as c_ulong, true)
+                        }
+                        '!' => (u64::from(b'1') as c_ulong, true),
+                        '@' => (u64::from(b'2') as c_ulong, true),
+                        '#' => (u64::from(b'3') as c_ulong, true),
+                        '$' => (u64::from(b'4') as c_ulong, true),
+                        '%' => (u64::from(b'5') as c_ulong, true),
+                        '^' => (u64::from(b'6') as c_ulong, true),
+                        '&' => (u64::from(b'7') as c_ulong, true),
+                        '*' => (u64::from(b'8') as c_ulong, true),
+                        '(' => (u64::from(b'9') as c_ulong, true),
+                        ')' => (u64::from(b'0') as c_ulong, true),
+                        '_' => (u64::from(b'-') as c_ulong, true),
+                        '+' => (u64::from(b'=') as c_ulong, true),
+                        '{' => (u64::from(b'[') as c_ulong, true),
+                        '}' => (u64::from(b']') as c_ulong, true),
+                        '|' => (u64::from(b'\\') as c_ulong, true),
+                        ':' => (u64::from(b';') as c_ulong, true),
+                        '"' => (u64::from(b'\'') as c_ulong, true),
+                        '<' => (u64::from(b',') as c_ulong, true),
+                        '>' => (u64::from(b'.') as c_ulong, true),
+                        '?' => (u64::from(b'/') as c_ulong, true),
+                        '~' => (u64::from(b'`') as c_ulong, true),
+                        c if c.is_ascii() => (u64::from(c as u8) as c_ulong, false),
+                        _ => continue,
+                    };
+                    let kc = (api.keysym_to_keycode)(dpy, ks);
+                    Self::xtest_tap_keycode(api, fake, dpy, kc, shift);
                 }
+                (api.flush)(dpy);
+            });
+            if typed.is_some() {
+                return Ok(());
             }
         }
         if Self::run_ok("xdotool", &["type", "--clearmodifiers", "--delay", "2", "--", text]) {
@@ -282,19 +307,17 @@ impl InputInjector for LinuxInputInjector {
         if let Some(api) = X11Api::load()
             && let Some(fake) = api.xtest_fake_key_event
         {
-            // SAFETY: Sending Backspace keystrokes via X11 XTest.
-            unsafe {
-                let dpy = (api.open_display)(null());
-                if !dpy.is_null() {
-                    let kc = (api.keysym_to_keycode)(dpy, XK_BACKSPACE);
-                    for _ in 0..count {
-                        Self::xtest_tap_keycode(&api, fake, dpy, kc, false);
-                    }
-                    (api.flush)(dpy);
-                    (api.close_display)(dpy);
-                    thread::sleep(Duration::from_millis(5));
-                    return Ok(());
+            // SAFETY: Sending Backspace keystrokes via persistent X11 XTest connection.
+            let sent = with_xtest_display(api, |dpy| unsafe {
+                let kc = (api.keysym_to_keycode)(dpy, XK_BACKSPACE);
+                for _ in 0..count {
+                    Self::xtest_tap_keycode(api, fake, dpy, kc, false);
                 }
+                (api.flush)(dpy);
+            });
+            if sent.is_some() {
+                thread::sleep(Duration::from_millis(5));
+                return Ok(());
             }
         }
         Err(PlatformError("could not send Backspace keystrokes".to_owned()))

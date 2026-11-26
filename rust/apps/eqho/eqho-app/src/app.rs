@@ -2955,6 +2955,130 @@ fn vk_to_hotkey_name(vk: i32) -> Option<&'static str> {
     }
 }
 
+/// Send a toggle-dictation IPC command to an already-running Eqho instance (Linux/macOS
+/// desktop-shortcut helper for Wayland compositors where `XGrabKey` cannot intercept native
+/// Wayland windows).
+pub fn send_toggle_ipc() -> ExitCode {
+    #[cfg(unix)]
+    {
+        let paths = resolve_runtime_paths();
+        match unix_ipc::send_command(&paths.config_dir, "toggle") {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(err) => {
+                eprintln!("Eqho is not running ({err}). Start Eqho first.");
+                ExitCode::from(1)
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        eprintln!("--toggle is supported on Linux and macOS.");
+        ExitCode::from(1)
+    }
+}
+
+#[cfg(unix)]
+mod unix_ipc {
+    use std::io::{BufRead, BufReader, Write};
+    use std::os::unix::net::{UnixListener, UnixStream};
+    use std::path::{Path, PathBuf};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::thread::{self, JoinHandle};
+    use std::time::Duration;
+
+    fn fnv1a_64(bytes: &[u8]) -> u64 {
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for &b in bytes {
+            h ^= u64::from(b);
+            h = h.wrapping_mul(0x0100_0000_01b3);
+        }
+        h
+    }
+
+    pub fn socket_path(config_dir: &Path) -> PathBuf {
+        let hash = fnv1a_64(config_dir.to_string_lossy().as_bytes());
+        let base = std::env::var_os("XDG_RUNTIME_DIR")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .filter(|p| p.is_dir())
+            .unwrap_or_else(std::env::temp_dir);
+        base.join(format!("eqho-{hash:016x}.sock"))
+    }
+
+    pub fn send_command(config_dir: &Path, command: &str) -> Result<(), String> {
+        let path = socket_path(config_dir);
+        let mut stream = UnixStream::connect(&path).map_err(|e| e.to_string())?;
+        let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+        writeln!(stream, "{command}").map_err(|e| e.to_string())?;
+        stream.flush().map_err(|e| e.to_string())
+    }
+
+    pub struct UnixIpcServer {
+        path: PathBuf,
+        stop: Arc<AtomicBool>,
+        thread: Option<JoinHandle<()>>,
+    }
+
+    impl UnixIpcServer {
+        pub fn start<F>(config_dir: &Path, on_command: F) -> Option<Self>
+        where
+            F: Fn(&str) + Send + 'static,
+        {
+            let path = socket_path(config_dir);
+            if path.exists() {
+                let _ = std::fs::remove_file(&path);
+            }
+            let listener = UnixListener::bind(&path).ok()?;
+            listener.set_nonblocking(true).ok()?;
+
+            let stop = Arc::new(AtomicBool::new(false));
+            let stop_bg = Arc::clone(&stop);
+            let handle = thread::Builder::new()
+                .name("eqho-unix-ipc".to_owned())
+                .spawn(move || {
+                    while !stop_bg.load(Ordering::Acquire) {
+                        match listener.accept() {
+                            Ok((stream, _)) => {
+                                let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+                                let mut reader = BufReader::new(stream);
+                                let mut line = String::new();
+                                if reader.read_line(&mut line).is_ok() {
+                                    let cmd = line.trim();
+                                    if !cmd.is_empty() {
+                                        on_command(cmd);
+                                    }
+                                }
+                            }
+                            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                                thread::sleep(Duration::from_millis(40));
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                })
+                .ok()?;
+
+            Some(Self {
+                path,
+                stop,
+                thread: Some(handle),
+            })
+        }
+    }
+
+    impl Drop for UnixIpcServer {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::Release);
+            if let Some(handle) = self.thread.take() {
+                let _ = handle.join();
+            }
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+}
+
 /// Start the full Eqho desktop tray application.
 pub fn run_desktop_app(
     open_dashboard: bool,
@@ -2979,19 +3103,6 @@ pub fn run_desktop_app(
     #[cfg(not(feature = "store"))]
     let _ = honoured_demo_license;
 
-    let instance_id = if is_isolated {
-        format!("{SINGLE_INSTANCE_ID}.demo.{}", std::process::id())
-    } else {
-        SINGLE_INSTANCE_ID.to_owned()
-    };
-    let mut guard: SingleInstanceGuard = match SingleInstance::acquire(&instance_id) {
-        Acquire::First(g) => g,
-        Acquire::AlreadyRunning => {
-            println!("Eqho is already running.");
-            return ExitCode::SUCCESS;
-        }
-    };
-
     let (paths, temp_demo_dir) = if is_isolated {
         let dir = std::env::temp_dir().join(format!("eqho-demo-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
@@ -3008,6 +3119,38 @@ pub fn run_desktop_app(
     let cleanup_demo_dir = |dir: &Option<PathBuf>| {
         if let Some(d) = dir {
             let _ = std::fs::remove_dir_all(d);
+        }
+    };
+
+    let instance_id = if is_isolated {
+        format!("{SINGLE_INSTANCE_ID}.demo.{}", std::process::id())
+    } else {
+        SINGLE_INSTANCE_ID.to_owned()
+    };
+    let acquire_res = {
+        #[cfg(unix)]
+        {
+            if !is_isolated && std::env::var_os("EQHO_CONFIG_DIR").is_some() {
+                SingleInstance::acquire_in_dir(&paths.config_dir, &instance_id)
+            } else {
+                SingleInstance::acquire(&instance_id)
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            SingleInstance::acquire(&instance_id)
+        }
+    };
+    let mut guard: SingleInstanceGuard = match acquire_res {
+        Acquire::First(g) => g,
+        Acquire::AlreadyRunning => {
+            #[cfg(unix)]
+            if !is_isolated {
+                let _ = unix_ipc::send_command(&paths.config_dir, "show");
+            }
+            cleanup_demo_dir(&temp_demo_dir);
+            println!("Eqho is already running.");
+            return ExitCode::SUCCESS;
         }
     };
 
@@ -3403,7 +3546,7 @@ pub fn run_desktop_app(
         });
     }
 
-    // Listen for second-instance signal to surface the dashboard.
+    // Listen for second-instance signal to surface the dashboard (and Unix `--toggle` / `show` IPC).
     {
         let dash_w = Arc::clone(&ctrl.borrow().dash_weak);
         let tray_w = tray.as_weak();
@@ -3423,6 +3566,38 @@ pub fn run_desktop_app(
             });
         });
     }
+    #[cfg(unix)]
+    let _unix_ipc = if !is_isolated {
+        let dash_w = Arc::clone(&ctrl.borrow().dash_weak);
+        let tray_w = tray.as_weak();
+        let coord = coordinator.clone();
+        unix_ipc::UnixIpcServer::start(&ctrl.borrow().config_dir, move |cmd| match cmd {
+            "toggle" => {
+                let c = coord.clone();
+                let _ = thread::Builder::new()
+                    .name("eqho-ipc-toggle".into())
+                    .spawn(move || c.toggle());
+            }
+            "show" => {
+                let dash_w = Arc::clone(&dash_w);
+                let tray_w = tray_w.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(weak) = dash_w.lock().unwrap_or_else(|e| e.into_inner()).as_ref()
+                        && let Some(d) = weak.upgrade()
+                    {
+                        let _ = d.show();
+                        return;
+                    }
+                    if let Some(t) = tray_w.upgrade() {
+                        t.invoke_open_dashboard();
+                    }
+                });
+            }
+            _ => {}
+        })
+    } else {
+        None
+    };
 
     // Lazy dashboard: only create at startup if onboarding is incomplete, --open-dashboard was
     // passed, or this is an isolated --demo-dashboard run.

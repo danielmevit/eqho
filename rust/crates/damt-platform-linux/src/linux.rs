@@ -4,6 +4,7 @@ use std::ffi::{c_char, c_int, c_uint, c_ulong, c_void};
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 
 use damt_platform::{
     ActiveScreenProvider, AppThemeProvider, AutostartService, MotionPreference, Notifier,
@@ -262,6 +263,98 @@ struct XrrMonitorInfo {
     outputs: *mut c_ulong,
 }
 
+type XOpenDisplayFn = unsafe extern "C" fn(*const c_char) -> *mut c_void;
+type XCloseDisplayFn = unsafe extern "C" fn(*mut c_void) -> c_int;
+type XDefaultScreenFn = unsafe extern "C" fn(*mut c_void) -> c_int;
+type XDefaultRootWindowFn = unsafe extern "C" fn(*mut c_void) -> c_ulong;
+type XDisplayWidthFn = unsafe extern "C" fn(*mut c_void, c_int) -> c_int;
+type XDisplayHeightFn = unsafe extern "C" fn(*mut c_void, c_int) -> c_int;
+type XQueryPointerFn = unsafe extern "C" fn(
+    *mut c_void,
+    c_ulong,
+    *mut c_ulong,
+    *mut c_ulong,
+    *mut c_int,
+    *mut c_int,
+    *mut c_int,
+    *mut c_int,
+    *mut c_uint,
+) -> c_int;
+type XrrGetMonitorsFn =
+    unsafe extern "C" fn(*mut c_void, c_ulong, c_int, *mut c_int) -> *mut XrrMonitorInfo;
+type XrrFreeMonitorsFn = unsafe extern "C" fn(*mut XrrMonitorInfo);
+
+/// Process-lifetime handle to `libX11.so.6` and optional `libXrandr.so.2`.
+///
+/// Keeping both libraries loaded for the process lifetime is mandatory: `XRRGetMonitors`
+/// registers an Xlib extension close-display callback (`XRRCloseDisplay`) on the `Display`.
+/// Dropping/`dlclose`-ing `libXrandr.so.2` before `XCloseDisplay` causes an immediate SIGSEGV.
+struct X11ScreenApi {
+    _x11: Library,
+    _xrr: Option<Library>,
+    open_display: XOpenDisplayFn,
+    close_display: XCloseDisplayFn,
+    default_screen: XDefaultScreenFn,
+    default_root_window: XDefaultRootWindowFn,
+    display_width: XDisplayWidthFn,
+    display_height: XDisplayHeightFn,
+    query_pointer: XQueryPointerFn,
+    xrr_get_monitors: Option<XrrGetMonitorsFn>,
+    xrr_free_monitors: Option<XrrFreeMonitorsFn>,
+}
+
+// SAFETY: `X11ScreenApi` holds immutable function pointers and process-lifetime library handles;
+// callers open a dedicated `Display*` per call and never share a `Display*` across threads.
+unsafe impl Send for X11ScreenApi {}
+unsafe impl Sync for X11ScreenApi {}
+
+static X11_SCREEN_API: OnceLock<Option<X11ScreenApi>> = OnceLock::new();
+
+fn load_x11_screen_api() -> Option<&'static X11ScreenApi> {
+    X11_SCREEN_API
+        .get_or_init(|| {
+            // SAFETY: Dynamic lookup of standard Xlib / XRandR entry points on Linux.
+            unsafe {
+                let x11 = Library::new("libX11.so.6").ok()?;
+                let open_display = *x11.get::<XOpenDisplayFn>(b"XOpenDisplay\0").ok()?;
+                let close_display = *x11.get::<XCloseDisplayFn>(b"XCloseDisplay\0").ok()?;
+                let default_screen = *x11.get::<XDefaultScreenFn>(b"XDefaultScreen\0").ok()?;
+                let default_root_window =
+                    *x11.get::<XDefaultRootWindowFn>(b"XDefaultRootWindow\0").ok()?;
+                let display_width = *x11.get::<XDisplayWidthFn>(b"XDisplayWidth\0").ok()?;
+                let display_height = *x11.get::<XDisplayHeightFn>(b"XDisplayHeight\0").ok()?;
+                let query_pointer = *x11.get::<XQueryPointerFn>(b"XQueryPointer\0").ok()?;
+
+                let xrr = Library::new("libXrandr.so.2").ok();
+                let (xrr_get_monitors, xrr_free_monitors) = match xrr.as_ref() {
+                    Some(lib) => match (
+                        lib.get::<XrrGetMonitorsFn>(b"XRRGetMonitors\0"),
+                        lib.get::<XrrFreeMonitorsFn>(b"XRRFreeMonitors\0"),
+                    ) {
+                        (Ok(get_m), Ok(free_m)) => (Some(*get_m), Some(*free_m)),
+                        _ => (None, None),
+                    },
+                    None => (None, None),
+                };
+
+                Some(X11ScreenApi {
+                    _x11: x11,
+                    _xrr: xrr,
+                    open_display,
+                    close_display,
+                    default_screen,
+                    default_root_window,
+                    display_width,
+                    display_height,
+                    query_pointer,
+                    xrr_get_monitors,
+                    xrr_free_monitors,
+                })
+            }
+        })
+        .as_ref()
+}
+
 impl ActiveScreenProvider for LinuxActiveScreen {
     fn is_supported(&self) -> bool {
         std::env::var_os("DISPLAY").is_some()
@@ -269,45 +362,15 @@ impl ActiveScreenProvider for LinuxActiveScreen {
 
     fn active_screen_bounds(&self) -> Option<ScreenRect> {
         std::env::var_os("DISPLAY")?;
-        // SAFETY: Dynamic lookup of standard Xlib / XRandR entry points on Linux.
+        let api = load_x11_screen_api()?;
+        // SAFETY: Dedicated short-lived X11 display connection using cached Xlib/XRandR entry points.
         unsafe {
-            let x11 = Library::new("libX11.so.6").ok()?;
-            type XOpenDisplay = unsafe extern "C" fn(*const c_char) -> *mut c_void;
-            type XCloseDisplay = unsafe extern "C" fn(*mut c_void) -> c_int;
-            type XDefaultScreen = unsafe extern "C" fn(*mut c_void) -> c_int;
-            type XDefaultRootWindow = unsafe extern "C" fn(*mut c_void) -> c_ulong;
-            type XDisplayWidth = unsafe extern "C" fn(*mut c_void, c_int) -> c_int;
-            type XDisplayHeight = unsafe extern "C" fn(*mut c_void, c_int) -> c_int;
-            type XQueryPointer = unsafe extern "C" fn(
-                *mut c_void,
-                c_ulong,
-                *mut c_ulong,
-                *mut c_ulong,
-                *mut c_int,
-                *mut c_int,
-                *mut c_int,
-                *mut c_int,
-                *mut c_uint,
-            ) -> c_int;
-
-            let open: libloading::Symbol<'_, XOpenDisplay> = x11.get(b"XOpenDisplay\0").ok()?;
-            let close: libloading::Symbol<'_, XCloseDisplay> = x11.get(b"XCloseDisplay\0").ok()?;
-            let def_scr: libloading::Symbol<'_, XDefaultScreen> =
-                x11.get(b"XDefaultScreen\0").ok()?;
-            let def_root: libloading::Symbol<'_, XDefaultRootWindow> =
-                x11.get(b"XDefaultRootWindow\0").ok()?;
-            let disp_w: libloading::Symbol<'_, XDisplayWidth> = x11.get(b"XDisplayWidth\0").ok()?;
-            let disp_h: libloading::Symbol<'_, XDisplayHeight> =
-                x11.get(b"XDisplayHeight\0").ok()?;
-            let query_ptr: libloading::Symbol<'_, XQueryPointer> =
-                x11.get(b"XQueryPointer\0").ok()?;
-
-            let dpy = open(std::ptr::null());
+            let dpy = (api.open_display)(std::ptr::null());
             if dpy.is_null() {
                 return None;
             }
-            let screen = def_scr(dpy);
-            let root = def_root(dpy);
+            let screen = (api.default_screen)(dpy);
+            let root = (api.default_root_window)(dpy);
             let mut root_ret: c_ulong = 0;
             let mut child_ret: c_ulong = 0;
             let mut rx: c_int = 0;
@@ -315,7 +378,7 @@ impl ActiveScreenProvider for LinuxActiveScreen {
             let mut wx: c_int = 0;
             let mut wy: c_int = 0;
             let mut mask: c_uint = 0;
-            let _ = query_ptr(
+            let _ = (api.query_pointer)(
                 dpy,
                 root,
                 &mut root_ret,
@@ -328,55 +391,45 @@ impl ActiveScreenProvider for LinuxActiveScreen {
             );
 
             let mut chosen: Option<ScreenRect> = None;
-            if let Ok(xrr) = Library::new("libXrandr.so.2") {
-                type XrrGetMonitors = unsafe extern "C" fn(
-                    *mut c_void,
-                    c_ulong,
-                    c_int,
-                    *mut c_int,
-                ) -> *mut XrrMonitorInfo;
-                type XrrFreeMonitors = unsafe extern "C" fn(*mut XrrMonitorInfo);
-                if let (Ok(get_mons), Ok(free_mons)) = (
-                    xrr.get::<XrrGetMonitors>(b"XRRGetMonitors\0"),
-                    xrr.get::<XrrFreeMonitors>(b"XRRFreeMonitors\0"),
-                ) {
-                    let mut n: c_int = 0;
-                    let ptr = get_mons(dpy, root, 1, &mut n);
-                    if !ptr.is_null() && n > 0 {
-                        let slice = std::slice::from_raw_parts(ptr, n as usize);
-                        let hit = slice
-                            .iter()
-                            .find(|m| {
-                                rx >= m.x
-                                    && rx < m.x + m.width
-                                    && ry >= m.y
-                                    && ry < m.y + m.height
-                            })
-                            .or_else(|| slice.iter().find(|m| m.primary != 0))
-                            .or_else(|| slice.first());
-                        if let Some(m) = hit
-                            && m.width > 0
-                            && m.height > 0
-                        {
-                            chosen = Some(ScreenRect {
-                                x: m.x,
-                                y: m.y,
-                                width: m.width,
-                                height: m.height,
-                            });
-                        }
-                        free_mons(ptr);
+            if let (Some(get_mons), Some(free_mons)) =
+                (api.xrr_get_monitors, api.xrr_free_monitors)
+            {
+                let mut n: c_int = 0;
+                let ptr = get_mons(dpy, root, 1, &mut n);
+                if !ptr.is_null() && n > 0 {
+                    let slice = std::slice::from_raw_parts(ptr, n as usize);
+                    let hit = slice
+                        .iter()
+                        .find(|m| {
+                            rx >= m.x
+                                && rx < m.x + m.width
+                                && ry >= m.y
+                                && ry < m.y + m.height
+                        })
+                        .or_else(|| slice.iter().find(|m| m.primary != 0))
+                        .or_else(|| slice.first());
+                    if let Some(m) = hit
+                        && m.width > 0
+                        && m.height > 0
+                    {
+                        chosen = Some(ScreenRect {
+                            x: m.x,
+                            y: m.y,
+                            width: m.width,
+                            height: m.height,
+                        });
                     }
+                    free_mons(ptr);
                 }
             }
 
             let fallback = ScreenRect {
                 x: 0,
                 y: 0,
-                width: disp_w(dpy, screen),
-                height: disp_h(dpy, screen),
+                width: (api.display_width)(dpy, screen),
+                height: (api.display_height)(dpy, screen),
             };
-            close(dpy);
+            (api.close_display)(dpy);
             chosen.or(if fallback.width > 0 && fallback.height > 0 {
                 Some(fallback)
             } else {

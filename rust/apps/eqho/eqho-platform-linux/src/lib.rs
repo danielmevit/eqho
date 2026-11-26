@@ -10,9 +10,9 @@
 pub mod pure;
 
 pub use pure::{
-    LinuxHotkeyModifiers, ParsedLinuxHotkey, is_software_vulkan_device, is_wayland_session,
-    parse_hotkey_combo, parse_pactl_sources, parse_pactl_volume, parse_proc_meminfo_available_mb,
-    parse_wpctl_volume,
+    LinuxHotkeyModifiers, ParsedLinuxHotkey, is_monitor_source, is_software_vulkan_device,
+    is_wayland_session, parse_hotkey_combo, parse_pactl_sources, parse_pactl_volume,
+    parse_proc_meminfo_available_mb, parse_wpctl_volume,
 };
 
 #[cfg(target_os = "linux")]

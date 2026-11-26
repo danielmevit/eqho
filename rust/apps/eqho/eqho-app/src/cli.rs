@@ -25,6 +25,8 @@ pub enum CliCommand {
         cycles: usize,
         dll_dir: Option<PathBuf>,
     },
+    /// Toggle dictation on an already-running Eqho instance (Linux/macOS desktop shortcut helper).
+    Toggle,
     /// Start the normal desktop tray application.
     Desktop {
         open_dashboard: bool,
@@ -60,6 +62,7 @@ OPTIONS:
       --model-dir <dir>     Model cache directory override for --e2e-wav
       --gpu <true|false>    Force GPU on/off for --e2e-wav
     --soak <cycles>         Run <cycles> rapid overlay/UI soak iterations
+    --toggle                Toggle dictation in a running Eqho instance (Wayland shortcut helper)
     --model-host            Internal: run out-of-process whisper.cpp worker loop
     -h, --help              Print help information
     -V, --version           Print version information
@@ -84,6 +87,7 @@ where
     let mut is_help = false;
     let mut is_version = false;
     let mut is_smoke = false;
+    let mut is_toggle = false;
     let mut e2e_wav: Option<PathBuf> = None;
     let mut soak_cycles: Option<usize> = None;
     let mut open_dashboard = false;
@@ -107,6 +111,9 @@ where
             }
             "--smoke" => {
                 is_smoke = true;
+            }
+            "--toggle" => {
+                is_toggle = true;
             }
             "--open-dashboard" => {
                 open_dashboard = true;
@@ -219,6 +226,9 @@ where
     }
     if is_smoke {
         return Ok(CliCommand::Smoke { dll_dir });
+    }
+    if is_toggle {
+        return Ok(CliCommand::Toggle);
     }
     if let Some(wav_path) = e2e_wav {
         return Ok(CliCommand::E2eWav {
@@ -359,5 +369,6 @@ mod tests {
         assert_eq!(parse_args(["-h"]).unwrap(), CliCommand::Help);
         assert_eq!(parse_args(["--version"]).unwrap(), CliCommand::Version);
         assert_eq!(parse_args(["-V"]).unwrap(), CliCommand::Version);
+        assert_eq!(parse_args(["--toggle"]).unwrap(), CliCommand::Toggle);
     }
 }

@@ -3,10 +3,10 @@
 //! Works transparently on both PipeWire (`pipewire-pulse`) and PulseAudio with zero build-time
 //! C library dependencies and automatic hardware resampling straight to `16000 Hz mono f32`.
 
-use std::ffi::{CString, c_char, c_int, c_uint, c_void};
+use std::ffi::{CStr, CString, c_char, c_int, c_uint, c_void};
 use std::process::{Command, Stdio};
 use std::ptr::null;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 
@@ -15,7 +15,7 @@ use eqho_platform::{
 };
 use libloading::Library;
 
-use crate::pure::parse_pactl_sources;
+use crate::pure::{is_monitor_source, parse_pactl_sources};
 
 const TARGET_SAMPLE_RATE: u32 = 16_000;
 const BLOCK_SAMPLES: usize = 800; // 50 ms at 16 kHz
@@ -108,12 +108,250 @@ impl Drop for LinuxAudioStream {
     }
 }
 
+const PA_CONTEXT_READY: c_int = 4;
+const PA_CONTEXT_FAILED: c_int = 5;
+const PA_CONTEXT_TERMINATED: c_int = 6;
+const PA_OPERATION_RUNNING: c_int = 0;
+
+#[repr(C)]
+struct PaServerInfo {
+    user_name: *const c_char,
+    host_name: *const c_char,
+    server_version: *const c_char,
+    server_name: *const c_char,
+    sample_spec: PaSampleSpec,
+    default_sink_name: *const c_char,
+    default_source_name: *const c_char,
+}
+
+#[repr(C)]
+struct PaSourceInfoHeader {
+    name: *const c_char,
+    index: u32,
+    description: *const c_char,
+}
+
+type PaServerInfoCb =
+    unsafe extern "C" fn(*mut c_void, *const PaServerInfo, *mut c_void);
+type PaSourceInfoCb =
+    unsafe extern "C" fn(*mut c_void, *const PaSourceInfoHeader, c_int, *mut c_void);
+
+struct PulseIntrospectApi {
+    _lib: Library,
+    pa_mainloop_new: unsafe extern "C" fn() -> *mut c_void,
+    pa_mainloop_get_api: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
+    pa_mainloop_iterate: unsafe extern "C" fn(*mut c_void, c_int, *mut c_int) -> c_int,
+    pa_mainloop_free: unsafe extern "C" fn(*mut c_void),
+    pa_context_new: unsafe extern "C" fn(*mut c_void, *const c_char) -> *mut c_void,
+    pa_context_connect:
+        unsafe extern "C" fn(*mut c_void, *const c_char, c_int, *const c_void) -> c_int,
+    pa_context_get_state: unsafe extern "C" fn(*mut c_void) -> c_int,
+    pa_context_disconnect: unsafe extern "C" fn(*mut c_void),
+    pa_context_unref: unsafe extern "C" fn(*mut c_void),
+    pa_context_get_server_info:
+        unsafe extern "C" fn(*mut c_void, PaServerInfoCb, *mut c_void) -> *mut c_void,
+    pa_context_get_source_info_list:
+        unsafe extern "C" fn(*mut c_void, PaSourceInfoCb, *mut c_void) -> *mut c_void,
+    pa_operation_get_state: unsafe extern "C" fn(*mut c_void) -> c_int,
+    pa_operation_unref: unsafe extern "C" fn(*mut c_void),
+}
+
+// SAFETY: `PulseIntrospectApi` holds immutable function pointers and a process-lifetime library handle.
+unsafe impl Send for PulseIntrospectApi {}
+unsafe impl Sync for PulseIntrospectApi {}
+
+static PULSE_INTROSPECT_API: OnceLock<Option<PulseIntrospectApi>> = OnceLock::new();
+
+impl PulseIntrospectApi {
+    fn load() -> Option<&'static Self> {
+        PULSE_INTROSPECT_API
+            .get_or_init(|| {
+                // SAFETY: Standard PulseAudio client API (`libpulse.so.0`, backed by PipeWire or PulseAudio).
+                unsafe {
+                    let lib = Library::new("libpulse.so.0").ok()?;
+                    Some(Self {
+                        pa_mainloop_new: *lib.get(b"pa_mainloop_new\0").ok()?,
+                        pa_mainloop_get_api: *lib.get(b"pa_mainloop_get_api\0").ok()?,
+                        pa_mainloop_iterate: *lib.get(b"pa_mainloop_iterate\0").ok()?,
+                        pa_mainloop_free: *lib.get(b"pa_mainloop_free\0").ok()?,
+                        pa_context_new: *lib.get(b"pa_context_new\0").ok()?,
+                        pa_context_connect: *lib.get(b"pa_context_connect\0").ok()?,
+                        pa_context_get_state: *lib.get(b"pa_context_get_state\0").ok()?,
+                        pa_context_disconnect: *lib.get(b"pa_context_disconnect\0").ok()?,
+                        pa_context_unref: *lib.get(b"pa_context_unref\0").ok()?,
+                        pa_context_get_server_info: *lib
+                            .get(b"pa_context_get_server_info\0")
+                            .ok()?,
+                        pa_context_get_source_info_list: *lib
+                            .get(b"pa_context_get_source_info_list\0")
+                            .ok()?,
+                        pa_operation_get_state: *lib.get(b"pa_operation_get_state\0").ok()?,
+                        pa_operation_unref: *lib.get(b"pa_operation_unref\0").ok()?,
+                        _lib: lib,
+                    })
+                }
+            })
+            .as_ref()
+    }
+}
+
+unsafe extern "C" fn on_pa_server_info(
+    _ctx: *mut c_void,
+    info: *const PaServerInfo,
+    userdata: *mut c_void,
+) {
+    if info.is_null() || userdata.is_null() {
+        return;
+    }
+    // SAFETY: `info` is valid for the duration of the callback and `userdata` points to our `Option<String>`.
+    unsafe {
+        let name_ptr = (*info).default_source_name;
+        if !name_ptr.is_null() {
+            let name = CStr::from_ptr(name_ptr).to_string_lossy().trim().to_owned();
+            if !name.is_empty() {
+                let slot = &mut *userdata.cast::<Option<String>>();
+                *slot = Some(name);
+            }
+        }
+    }
+}
+
+unsafe extern "C" fn on_pa_source_info(
+    _ctx: *mut c_void,
+    info: *const PaSourceInfoHeader,
+    eol: c_int,
+    userdata: *mut c_void,
+) {
+    if eol != 0 || info.is_null() || userdata.is_null() {
+        return;
+    }
+    // SAFETY: `info` is valid while `eol == 0` and `userdata` points to our `Vec<(String, String)>`.
+    unsafe {
+        let raw_name = if (*info).name.is_null() {
+            String::new()
+        } else {
+            CStr::from_ptr((*info).name).to_string_lossy().trim().to_owned()
+        };
+        if raw_name.is_empty() {
+            return;
+        }
+        let desc = if (*info).description.is_null() {
+            raw_name.clone()
+        } else {
+            let d = CStr::from_ptr((*info).description)
+                .to_string_lossy()
+                .trim()
+                .to_owned();
+            if d.is_empty() { raw_name.clone() } else { d }
+        };
+        if !is_monitor_source(&raw_name, &desc) {
+            let list = &mut *userdata.cast::<Vec<(String, String)>>();
+            list.push((raw_name, desc));
+        }
+    }
+}
+
+type PulseSourceList = (Vec<(String, String)>, Option<String>);
+
 /// PipeWire / PulseAudio audio capture & playback backend.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct LinuxAudioBackend;
 
 impl LinuxAudioBackend {
+    fn enumerate_sources_via_libpulse() -> Option<PulseSourceList> {
+        let api = PulseIntrospectApi::load()?;
+        // SAFETY: Dedicated single-threaded PulseAudio mainloop created, iterated, and destroyed in this call.
+        unsafe {
+            let ml = (api.pa_mainloop_new)();
+            if ml.is_null() {
+                return None;
+            }
+            let ml_api = (api.pa_mainloop_get_api)(ml);
+            let ctx = (api.pa_context_new)(ml_api, c"Eqho".as_ptr());
+            if ctx.is_null() {
+                (api.pa_mainloop_free)(ml);
+                return None;
+            }
+            if (api.pa_context_connect)(ctx, null(), 0, null()) < 0 {
+                (api.pa_context_unref)(ctx);
+                (api.pa_mainloop_free)(ml);
+                return None;
+            }
+
+            let mut retval: c_int = 0;
+            let mut ready = false;
+            for _ in 0..500 {
+                let st = (api.pa_context_get_state)(ctx);
+                if st == PA_CONTEXT_READY {
+                    ready = true;
+                    break;
+                }
+                if st == PA_CONTEXT_FAILED || st == PA_CONTEXT_TERMINATED {
+                    break;
+                }
+                if (api.pa_mainloop_iterate)(ml, 1, &mut retval) < 0 {
+                    break;
+                }
+            }
+            if !ready {
+                (api.pa_context_disconnect)(ctx);
+                (api.pa_context_unref)(ctx);
+                (api.pa_mainloop_free)(ml);
+                return None;
+            }
+
+            let mut default_name: Option<String> = None;
+            let op_srv = (api.pa_context_get_server_info)(
+                ctx,
+                on_pa_server_info,
+                (&raw mut default_name).cast(),
+            );
+            if !op_srv.is_null() {
+                for _ in 0..500 {
+                    if (api.pa_operation_get_state)(op_srv) != PA_OPERATION_RUNNING {
+                        break;
+                    }
+                    if (api.pa_mainloop_iterate)(ml, 1, &mut retval) < 0 {
+                        break;
+                    }
+                }
+                (api.pa_operation_unref)(op_srv);
+            }
+
+            let mut sources: Vec<(String, String)> = Vec::new();
+            let op_src = (api.pa_context_get_source_info_list)(
+                ctx,
+                on_pa_source_info,
+                (&raw mut sources).cast(),
+            );
+            if !op_src.is_null() {
+                for _ in 0..500 {
+                    if (api.pa_operation_get_state)(op_src) != PA_OPERATION_RUNNING {
+                        break;
+                    }
+                    if (api.pa_mainloop_iterate)(ml, 1, &mut retval) < 0 {
+                        break;
+                    }
+                }
+                (api.pa_operation_unref)(op_src);
+            }
+
+            (api.pa_context_disconnect)(ctx);
+            (api.pa_context_unref)(ctx);
+            (api.pa_mainloop_free)(ml);
+            Some((sources, default_name))
+        }
+    }
+
     fn enumerate_sources() -> (Vec<(String, String)>, Option<String>) {
+        // Primary: native `libpulse.so.0` introspection (works on PipeWire & PulseAudio without `pactl`).
+        if let Some((sources, default_name)) = Self::enumerate_sources_via_libpulse()
+            && !sources.is_empty()
+        {
+            return (sources, default_name);
+        }
+
+        // Fallback: `pactl` CLI when available.
         let default_name = Command::new("pactl")
             .arg("get-default-source")
             .stdin(Stdio::null())

@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use eqho_platform::{FocusTracker, WindowHandle};
 
+use crate::pure::is_wayland_session;
 use crate::x11_ffi::{CLIENT_MESSAGE, CURRENT_TIME, X11Api, XClientMessageEvent, XEvent};
 
 const SUBSTRUCTURE_REDIRECT_MASK: c_long = 1 << 20;
@@ -17,6 +18,12 @@ const SUBSTRUCTURE_NOTIFY_MASK: c_long = 1 << 19;
 pub struct LinuxFocusTracker;
 
 impl LinuxFocusTracker {
+    fn is_wayland() -> bool {
+        let wl = std::env::var("WAYLAND_DISPLAY").ok();
+        let st = std::env::var("XDG_SESSION_TYPE").ok();
+        is_wayland_session(wl.as_deref(), st.as_deref())
+    }
+
     unsafe fn read_u32_prop(
         api: &X11Api,
         dpy: *mut std::ffi::c_void,
@@ -66,6 +73,12 @@ impl LinuxFocusTracker {
 
 impl FocusTracker for LinuxFocusTracker {
     fn get_foreground_window(&self) -> WindowHandle {
+        // On Wayland, XWayland's `_NET_ACTIVE_WINDOW` points to Mutter's hidden 1x1 dummy focus
+        // proxy window rather than the user's native Wayland editor. Return `NONE` so injection
+        // skips bogus EWMH focus-restore loops.
+        if Self::is_wayland() {
+            return WindowHandle::NONE;
+        }
         let Some(api) = X11Api::load() else {
             return WindowHandle::NONE;
         };
@@ -78,7 +91,7 @@ impl FocusTracker for LinuxFocusTracker {
             let root = (api.default_root_window)(dpy);
             let atom = (api.intern_atom)(dpy, c"_NET_ACTIVE_WINDOW".as_ptr(), 1);
             let handle = if atom != 0 {
-                Self::read_u32_prop(&api, dpy, root, atom)
+                Self::read_u32_prop(api, dpy, root, atom)
                     .map(|id| WindowHandle(id as usize))
                     .unwrap_or(WindowHandle::NONE)
             } else {
@@ -151,7 +164,7 @@ impl FocusTracker for LinuxFocusTracker {
             }
             let atom = (api.intern_atom)(dpy, c"_NET_WM_PID".as_ptr(), 1);
             let pid = if atom != 0 {
-                Self::read_u32_prop(&api, dpy, window.0 as c_ulong, atom)
+                Self::read_u32_prop(api, dpy, window.0 as c_ulong, atom)
             } else {
                 None
             };

@@ -67,6 +67,10 @@ fn main() -> ExitCode {
             attach_parent_console();
             run_soak_cli(cycles, dll_dir)
         }
+        Ok(CliCommand::Toggle) => {
+            attach_parent_console();
+            eqho_app::app::send_toggle_ipc()
+        }
         Ok(CliCommand::Desktop {
             open_dashboard,
             tab,

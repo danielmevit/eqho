@@ -501,7 +501,19 @@ fn download_https_to_file(
     }
     let _ = parse_https_url(url)?;
 
-    let tmp_path = target.with_extension("bin.tmp");
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let tmp_name = format!(
+        "{}.tmp.{}",
+        target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("model.bin"),
+        std::process::id()
+    );
+    let tmp_path = target.with_file_name(tmp_name);
     if tmp_path.exists() {
         let _ = std::fs::remove_file(&tmp_path);
     }
@@ -706,6 +718,36 @@ mod tests {
             download_https_to_file("http://example.invalid/model.bin", &target, &cancel, &mut |_, _| {})
                 .unwrap_err();
         assert!(matches!(err, HostError::InvalidUrl(_)), "unexpected error: {err:?}");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn non_windows_creates_missing_parent_directory_before_download() {
+        let tmp = std::env::temp_dir().join(format!("eqho_dl_mkdir_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let nested_parent = tmp.join("whispercpp");
+        let target = nested_parent.join("ggml-tiny.bin");
+        let cancel = AtomicBool::new(false);
+        // Cancel inside the very first progress callback so no network download runs, while still
+        // verifying `create_dir_all(target.parent())` ran before probing/spawning curl.
+        let err = download_https_to_file(
+            "https://example.invalid/ggml-tiny.bin",
+            &target,
+            &cancel,
+            &mut |_, _| {
+                cancel.store(true, Ordering::Release);
+            },
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, HostError::DownloadCancelled),
+            "expected DownloadCancelled, got: {err:?}"
+        );
+        assert!(
+            nested_parent.is_dir(),
+            "parent directory must be created before curl runs"
+        );
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

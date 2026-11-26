@@ -11,9 +11,9 @@ use crate::pure::{parse_pactl_volume, parse_wpctl_volume};
 pub struct LinuxVolumeControl;
 
 impl LinuxVolumeControl {
-    fn has_tool(bin: &str) -> bool {
+    fn has_tool(bin: &str, probe_arg: &str) -> bool {
         Command::new(bin)
-            .arg("--version")
+            .arg(probe_arg)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -24,7 +24,8 @@ impl LinuxVolumeControl {
 
 impl VolumeControl for LinuxVolumeControl {
     fn is_supported(&self) -> bool {
-        Self::has_tool("wpctl") || Self::has_tool("pactl")
+        // WirePlumber's `wpctl` does not support `--version` (exits non-zero); `--help` exits 0.
+        Self::has_tool("wpctl", "--help") || Self::has_tool("pactl", "--version")
     }
 
     fn get_volume(&self) -> Option<f32> {
@@ -94,5 +95,20 @@ impl VolumeControl for LinuxVolumeControl {
             .stderr(Stdio::null())
             .status()
             .is_ok_and(|s| s.success())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn volume_control_detects_wpctl_or_pactl_when_installed() {
+        let ctrl = LinuxVolumeControl;
+        if LinuxVolumeControl::has_tool("wpctl", "--help")
+            || LinuxVolumeControl::has_tool("pactl", "--version")
+        {
+            assert!(ctrl.is_supported());
+        }
     }
 }

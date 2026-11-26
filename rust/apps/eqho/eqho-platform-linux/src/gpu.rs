@@ -2,11 +2,24 @@
 
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::ptr::{null, null_mut};
+use std::sync::OnceLock;
 
 use eqho_platform::{GpuAdapter, GpuProbe};
 use libloading::Library;
 
 use crate::pure::is_software_vulkan_device;
+
+static VULKAN_LIB: OnceLock<Option<Library>> = OnceLock::new();
+
+fn load_vulkan_lib() -> Option<&'static Library> {
+    VULKAN_LIB
+        .get_or_init(|| {
+            // SAFETY: Keep `libvulkan.so.1` loaded for process lifetime so Mesa/ICD destructor
+            // hooks are never unmapped unexpectedly on `dlclose`.
+            unsafe { Library::new("libvulkan.so.1").ok() }
+        })
+        .as_ref()
+}
 
 const VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO: u32 = 1;
 const VK_MEMORY_HEAP_DEVICE_LOCAL_BIT: u32 = 1;
@@ -65,7 +78,7 @@ pub struct LinuxGpuProbe;
 
 impl GpuProbe for LinuxGpuProbe {
     fn list_adapters(&self) -> Vec<GpuAdapter> {
-        let Ok(vk) = (unsafe { Library::new("libvulkan.so.1") }) else {
+        let Some(vk) = load_vulkan_lib() else {
             return Vec::new();
         };
 

@@ -195,6 +195,12 @@ pub fn parse_pactl_volume(output: &str) -> Option<f32> {
     None
 }
 
+/// Return `true` when a PulseAudio / PipeWire source is an output loopback monitor rather than a microphone.
+#[must_use]
+pub fn is_monitor_source(name: &str, description: &str) -> bool {
+    name.ends_with(".monitor") || description.to_ascii_lowercase().starts_with("monitor of ")
+}
+
 /// Parse `pactl list sources` output into `(pulse_source_name, friendly_description)` pairs,
 /// automatically excluding `.monitor` output-loopback sources so users only see real microphones.
 #[must_use]
@@ -208,7 +214,7 @@ pub fn parse_pactl_sources(output: &str) -> Vec<(String, String)> {
                  desc: &mut Option<String>| {
         if let Some(n) = name.take() {
             let d = desc.take().unwrap_or_else(|| n.clone());
-            if !n.ends_with(".monitor") && !d.to_ascii_lowercase().starts_with("monitor of ") {
+            if !is_monitor_source(&n, &d) {
                 out.push((n, d));
             }
         } else {
