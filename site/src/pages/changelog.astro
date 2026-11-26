@@ -1,7 +1,8 @@
 ---
 const title = "Changelog | Eqho";
-const description = "Version history for Eqho — the free, offline voice-to-text dictation app. Every release, what changed, and when.";
-const home = "/eqho/";
+import SiteHeader from '../components/SiteHeader.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+const description = "Version history for Eqho, the offline voice-to-text dictation app for Windows. Every release, what changed, and when.";
 
 // Newest first. Add new releases at the top.
 const releases = [
@@ -9,7 +10,7 @@ const releases = [
   { v: "0.9.3", d: "2026-11-25", notes: `Cohesive polish release: unified the richer obsidian-charcoal dark palette (#121215 → #17171B → #202026) across the entire dashboard, added a real Gaussian-blurred live dashboard backdrop behind the Settings modal, switched to GatherOS-style active-only TopBar tab icons and concentric rounded-square icon buttons across model cards and utility controls (with crisp 1.5px blue outlines on all downloaded models), aligned Settings modal titles flush with cards below, fixed rectangular DWM blur bleed behind the pill-shaped underbar with native Win11 8px Acrylic clipping on rectangular floating panels, and updated the Windows installer to open the dashboard automatically after setup.` },
   { v: "0.9.2", d: "2026-11-25", notes: `UI elevation and reliability release: unified Phosphor Icons (MIT) across the entire dashboard, GatherOS-inspired floating 3-tab top bar with smaller wordmark and utility icons, centered tabbed Settings modal popup (Appearance, Dictation, Overlay, System, Data & Trash, Store License, About), interactive 4-step bottom-left section guide cards, compact dark hover tooltip pills on all icon-only controls, sleek 9px rounded buttons and dropdowns, darkest-to-lightest dark-mode card depth with a calm grayish-white active model outline, Windows 11 Acrylic frosted blur behind the live transcript box with crisp regular-weight language popup text, fixed cached models falsely showing Downloading when selected, and automatic background tray close during Windows installer upgrades.` },
   { v: "0.9.1", d: "2026-11-25", notes: `Dashboard and overlay polish pass: pinned quick-settings left column on General with exact Mic Sensitivity percentage, compact Inference Engine + Storage top row and clean icon-led model states on Models, uniform fixed-height buttons, History Trash bin with inline delete confirmations and configurable retention (7–90 days or Never), yellow-outlined failed-paste History rows, per-row Copy state feedback, redesigned 3-line Recovery banner plus a floating frosted-glass failed-paste card right at the pill position, compact single-row Appearance and balanced Settings layout with live active GPU/CPU Engine readout and clickable damt.xyz link, pure-vector HiDPI wordmark, thinner header icons, Light-mode blue-gradient sliders, sleeker under-pill bar with subtle frosted blur and more solid pill visibility, and snappier 250 ms Live dictation cadence.` },
-  { v: "0.9.0", d: "2026-11-24", notes: `Rebuilt from the ground up in Rust + Slint 1.19 around whisper.cpp 1.8.4. The Windows installer drops from ~250 MB to ~14 MB (with zero VC++ Redistributable required), idle tray memory drops to ~3.4 MB, startup takes ~38 ms, and Vulkan transcription runs in ~0.25 s on an RTX 3060 (42× real-time) across NVIDIA, AMD, and Intel graphics cards. Adds the Deep Navy Blend dark theme, crisp vector SVG flags for all 99 languages, hover-reveal or pinnable under-pill controls (silent cancel, searchable 99-language menu with recent chips, Batch and Live delivery modes), clean-PC multi-threaded CPU inference (~0.7–1.5 s on a 10 s clip with tiny / base-q5) with 4 compact Q5 models (from 60 MB), 24/32-bit studio mic support, and an optional Microsoft Store MSIX edition with a 15-day free trial (direct downloads remain 100% free and open source).` },
+  { v: "0.9.0", d: "2026-11-24", notes: `Rebuilt from the ground up in Rust + Slint 1.19 around whisper.cpp 1.8.4. The Windows installer drops from ~250 MB to ~14 MB (with zero VC++ Redistributable required), idle tray memory drops to ~3.4 MB, startup takes ~38 ms, and Vulkan transcription runs in ~0.25 s on an RTX 3060 (42× real-time) across NVIDIA, AMD, and Intel graphics cards. Adds the Deep Navy Blend dark theme, crisp vector SVG flags for all 99 languages, hover-reveal or pinnable under-pill controls (silent cancel, searchable 99-language menu with recent chips, Batch and Live delivery modes), clean-PC multi-threaded CPU inference (~0.7–1.5 s on a 10 s clip with tiny / base-q5) with 4 compact Q5 models (from 60 MB), 24/32-bit studio mic support, and an optional Microsoft Store MSIX edition with a 15-day free trial.` },
   { v: "0.8.11", d: "2026-10-17", notes: `The dictation pill moves with your voice, like water — soft swells while you speak, calm in pauses — and you can set its size and how see-through the pill and the text box are. Dictations now stay out of Windows clipboard history (and that removes the last rare case of a dictation typing nothing). Calmer, even spacing in the dashboard, and choosing a model highlights it right away.` },
   { v: "0.8.10", d: "2026-10-17", notes: `First launch and speed on every PC. A short first-time setup asks for your language and microphone and downloads nothing until you agree. Eqho now picks a speech model that suits your PC — a small, fast one when there is no graphics card (about 3 seconds per sentence on an older laptop instead of 14). Dictations no longer go missing now and then, the window fits your screen at any scaling, tabs open instantly, a failed download can be retried, and Eqho warns you when the PC is short on memory.` },
   { v: "0.8.9", d: "2026-10-16", notes: `Reliability and slow PCs. On PCs without a graphics card Eqho no longer loses your last sentence — it shows "Writing it down…" and types the text when it is ready. The Windows downloads now include a second engine for AMD and Intel graphics cards; laptops with only built-in graphics use the processor, which is faster there. Opening Eqho again shows its window, microphone problems are explained in plain words, sound always comes back after a dictation, settings are saved safely, and dashboard texts no longer get cut off. Your dictated text is no longer written to the log.` },
@@ -94,12 +95,10 @@ const releases = [
         margin: 0;
         -webkit-font-smoothing: antialiased;
       }
-      main { max-width: 820px; margin: 5rem auto; padding: 0 1.5rem; }
+      main { max-width: 820px; margin: 2.5rem auto 0; padding: 0 clamp(16px, 4vw, 64px); box-sizing: content-box; }
       a { color: var(--color-blue); text-decoration: none; }
       a:hover { text-decoration: underline; }
-      .top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 3rem; }
-      .logo-img { height: 34px; display: block; }
-      h1 { color: var(--color-heading); font-size: 2.5rem; font-weight: 600; letter-spacing: -0.02em; margin: 2rem 0 0.25rem; }
+      h1 { color: var(--color-heading); font-size: 2.5rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 0.25rem; }
       .lede { color: var(--color-muted); margin: 0 0 3rem; }
       .release { padding: 1.75rem 0; border-top: 1px solid var(--color-border); display: grid; grid-template-columns: 130px 1fr; gap: 1.5rem; }
       .release:first-of-type { border-top: none; }
@@ -107,7 +106,6 @@ const releases = [
       .rel-v { color: var(--color-blue); font-weight: 600; font-size: 1.15rem; }
       .rel-d { color: var(--color-muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
       .rel-notes { margin: 0; }
-      footer { text-align: center; margin-top: 5rem; padding: 3rem 0; border-top: 1px solid var(--color-border); color: var(--color-muted); font-size: 0.9rem; }
       @media (max-width: 620px) {
         .release { grid-template-columns: 1fr; gap: 0.4rem; }
         h1 { font-size: 2rem; }
@@ -115,14 +113,8 @@ const releases = [
     </style>
   </head>
   <body>
+    <SiteHeader />
     <main>
-      <div class="top">
-        <a href={home} aria-label="Eqho home">
-          <img src="https://raw.githubusercontent.com/DanielMevit/eqho/main/logo/logo_horizontal_dark.png" alt="Eqho logo" class="logo-img" />
-        </a>
-        <a href={home}>&larr; Back to home</a>
-      </div>
-
       <h1>Changelog</h1>
       <p class="lede">Every Eqho release, what changed, and when. Newest first. Full details live in <a href="https://github.com/DanielMevit/eqho/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
 
@@ -137,8 +129,6 @@ const releases = [
       ))}
     </main>
 
-    <footer>
-      <p><a href={home}>Home</a> · <a href="/eqho/privacy/">Privacy</a> · <a href="https://github.com/DanielMevit/eqho/releases">Releases</a> · <a href="https://github.com/DanielMevit/eqho">GitHub</a></p>
-    </footer>
+    <SiteFooter />
   </body>
 </html>
