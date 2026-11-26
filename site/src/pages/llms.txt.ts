@@ -6,7 +6,7 @@ const body = `# Eqho
 
 > Offline voice-to-text dictation for Windows that types directly into any focused window using local OpenAI Whisper models.
 
-- Site: https://danielmevit.github.io/eqho/
+- Site: https://eqho.damt.xyz/
 - Get it: Microsoft Store (publisher page until the listing is live), ${STORE_URL}
 - Price: a one-time purchase after a 15-day free trial. No subscription, no word limits, no ads.
 - Source code: ${REPO_URL} (AGPL-3.0)
