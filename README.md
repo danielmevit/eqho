@@ -113,6 +113,12 @@ For the technically curious (the [website](https://eqho.damt.xyz/) stays non-tec
 - **Packaging:** Inno Setup 6 LZMA2 installer (~14 MB), portable `.zip` (~29 MB), `winget`, and Microsoft Store `.msix` pipeline (`packaging/windows/AppxManifest.xml`, pure-ASCII `build_msix.ps1`, `generate_assets.py` + 48 PNG assets, compile-time `EQHO_STORE_ID` override)
 - **Zero telemetry:** the app never phones home; the only network requests are user-initiated GGML model downloads from Hugging Face (and Store license checks in `--features store` MSIX builds)
 
+## Development & AI disclosure
+
+Eqho is designed, directed, tested on real hardware, and maintained by **Daniel Mitev ([damt.xyz](https://damt.xyz))**. Generative AI tools are used extensively as development assistants across this project — including application code, tests, documentation, maintenance, packaging/CI automation, and promotional materials (such as store graphics and marketing copy).
+
+This applies only to how Eqho is built and documented. At **runtime**, Eqho does not connect to any cloud AI or generative LLM: speech recognition runs strictly locally via `whisper.cpp` on your own GPU or CPU, and text cleanup is 100% deterministic.
+
 ## License
 
 Eqho is licensed under the [GNU AGPL-3.0](LICENSE): free to use, study, and modify — if you redistribute it or a derivative (including as a network service), you must keep the copyright and attribution notices and release your version under the same license. © [Daniel Mevit](https://github.com/danielmevit).
