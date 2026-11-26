@@ -1,10 +1,16 @@
-//! Global X11 hotkey listener (`XGrabKey`) supporting Toggle and Hold-to-Talk modes.
+//! Global Linux hotkey listener:
+//! - On GNOME Wayland: automatically registers & maintains a native GNOME Custom Shortcut
+//!   (`org.gnome.settings-daemon.plugins.media-keys`) invoking `<current_exe> --toggle` so
+//!   `Alt+Q` works globally across every Wayland and XWayland app out of the box with zero
+//!   manual Ubuntu Settings configuration, and cleans up on unregister/quit.
+//! - On X11 (and non-GNOME Wayland with XWayland): native `XGrabKey` supporting both Toggle
+//!   and Hold-to-Talk modes (with CapsLock & NumLock permutations).
 
 use std::ffi::{c_int, c_uint, c_ulong, c_void};
+use std::process::{Command, Stdio};
 use std::ptr::null;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -13,18 +19,115 @@ use eqho_platform::{
     PlatformError,
 };
 
-use crate::pure::parse_hotkey_combo;
+use crate::pure::{
+    add_gsettings_keybinding_path, build_gnome_toggle_command, hotkey_to_gtk_accelerator,
+    is_wayland_session, parse_hotkey_combo, remove_gsettings_keybinding_path,
+};
 use crate::x11_ffi::{
     GRAB_MODE_ASYNC, KEY_PRESS, KEY_RELEASE, LOCK_MASK, MOD2_MASK, X11Api, XEvent,
 };
 
 const TOGGLE_DEBOUNCE: Duration = Duration::from_millis(400);
+const GNOME_MEDIA_KEYS_SCHEMA: &str = "org.gnome.settings-daemon.plugins.media-keys";
+const GNOME_CUSTOM_BINDING_SCHEMA: &str =
+    "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding";
+const GNOME_EQHO_SLOT: &str =
+    "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/eqho/";
 
 static X11_GRAB_ERROR: AtomicBool = AtomicBool::new(false);
+static GNOME_SHORTCUT_GEN: AtomicU64 = AtomicU64::new(0);
+static GNOME_SHORTCUT_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn gnome_lock() -> &'static Mutex<()> {
+    GNOME_SHORTCUT_LOCK.get_or_init(|| Mutex::new(()))
+}
 
 unsafe extern "C" fn grab_error_handler(_dpy: *mut c_void, _err: *mut c_void) -> c_int {
     X11_GRAB_ERROR.store(true, Ordering::Release);
     0
+}
+
+fn is_wayland() -> bool {
+    let wl = std::env::var("WAYLAND_DISPLAY").ok();
+    let st = std::env::var("XDG_SESSION_TYPE").ok();
+    is_wayland_session(wl.as_deref(), st.as_deref())
+}
+
+fn gsettings_get_custom_keybindings() -> Option<String> {
+    let out = Command::new("gsettings")
+        .args(["get", GNOME_MEDIA_KEYS_SCHEMA, "custom-keybindings"])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&out.stdout).trim().to_owned())
+}
+
+fn gsettings_set(schema: &str, key: &str, value: &str) -> bool {
+    Command::new("gsettings")
+        .args(["set", schema, key, value])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+struct GnomeWaylandRegistration {
+    gen_id: u64,
+}
+
+impl HotkeyRegistration for GnomeWaylandRegistration {}
+
+impl Drop for GnomeWaylandRegistration {
+    fn drop(&mut self) {
+        let _guard = gnome_lock().lock().unwrap_or_else(|e| e.into_inner());
+        // Only remove the GNOME shortcut if no newer registration has superseded us (guards
+        // against `*hotkey_reg = Some(new_reg)` dropping the old registration after setting new).
+        if GNOME_SHORTCUT_GEN.load(Ordering::Acquire) != self.gen_id {
+            return;
+        }
+        if let Some(current) = gsettings_get_custom_keybindings() {
+            let updated = remove_gsettings_keybinding_path(&current, GNOME_EQHO_SLOT);
+            let _ = gsettings_set(GNOME_MEDIA_KEYS_SCHEMA, "custom-keybindings", &updated);
+        }
+    }
+}
+
+fn try_register_gnome_wayland(spec: &HotkeySpec) -> Option<Result<Box<dyn HotkeyRegistration>, PlatformError>> {
+    if !is_wayland() {
+        return None;
+    }
+    let current = gsettings_get_custom_keybindings()?;
+    let accel = match hotkey_to_gtk_accelerator(&spec.raw) {
+        Ok(a) => a,
+        Err(err) => return Some(Err(err)),
+    };
+    let exe = match std::env::current_exe() {
+        Ok(p) => p.to_string_lossy().into_owned(),
+        Err(_) => return None,
+    };
+    let cfg_env = std::env::var("EQHO_CONFIG_DIR").ok();
+    let cmd = build_gnome_toggle_command(&exe, cfg_env.as_deref());
+    let binding_schema = format!("{GNOME_CUSTOM_BINDING_SCHEMA}:{GNOME_EQHO_SLOT}");
+
+    let _guard = gnome_lock().lock().unwrap_or_else(|e| e.into_inner());
+    let updated_list = add_gsettings_keybinding_path(&current, GNOME_EQHO_SLOT);
+
+    let ok = gsettings_set(&binding_schema, "name", "Eqho Dictation")
+        && gsettings_set(&binding_schema, "command", &cmd)
+        && gsettings_set(&binding_schema, "binding", &accel)
+        && gsettings_set(GNOME_MEDIA_KEYS_SCHEMA, "custom-keybindings", &updated_list);
+
+    if ok {
+        let gen_id = GNOME_SHORTCUT_GEN.fetch_add(1, Ordering::AcqRel) + 1;
+        Some(Ok(Box::new(GnomeWaylandRegistration { gen_id })))
+    } else {
+        None
+    }
 }
 
 struct LinuxHotkeyRegistration {
@@ -43,7 +146,7 @@ impl Drop for LinuxHotkeyRegistration {
     }
 }
 
-/// X11 global hotkey service via `XGrabKey` (handles CapsLock & NumLock permutations cleanly).
+/// Global Linux hotkey service (automatic GNOME Wayland `gsettings` shortcut + X11 `XGrabKey`).
 #[derive(Debug, Default, Clone, Copy)]
 pub struct LinuxHotkeyService;
 
@@ -53,6 +156,13 @@ impl HotkeyService for LinuxHotkeyService {
         spec: &HotkeySpec,
         callback: HotkeyCallback,
     ) -> Result<Box<dyn HotkeyRegistration>, PlatformError> {
+        // On GNOME Wayland, XWayland's `XGrabKey` cannot intercept keystrokes while native
+        // Wayland windows have focus. Automatically register a GNOME Custom Shortcut pointing at
+        // `<current_exe> --toggle` so the hotkey works globally out of the box.
+        if let Some(gnome_res) = try_register_gnome_wayland(spec) {
+            return gnome_res;
+        }
+
         let parsed = parse_hotkey_combo(&spec.raw)?;
         let mode = spec.mode;
 

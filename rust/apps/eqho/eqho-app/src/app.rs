@@ -3412,6 +3412,41 @@ pub fn run_desktop_app(
     );
     let _ = coord_slot.set(coordinator.clone());
 
+    // Start the Unix IPC listener BEFORE registering global hotkeys so GNOME Wayland custom
+    // shortcuts (`<exe> --toggle`) can reach the socket the instant registration finishes.
+    #[cfg(unix)]
+    let _unix_ipc = if !is_isolated {
+        let dash_w = Arc::clone(&dash_weak);
+        let tray_w = tray.as_weak();
+        let coord = coordinator.clone();
+        unix_ipc::UnixIpcServer::start(&paths.config_dir, move |cmd| match cmd {
+            "toggle" => {
+                let c = coord.clone();
+                let _ = thread::Builder::new()
+                    .name("eqho-ipc-toggle".into())
+                    .spawn(move || c.toggle());
+            }
+            "show" => {
+                let dash_w = Arc::clone(&dash_w);
+                let tray_w = tray_w.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(weak) = dash_w.lock().unwrap_or_else(|e| e.into_inner()).as_ref()
+                        && let Some(d) = weak.upgrade()
+                    {
+                        let _ = d.show();
+                        return;
+                    }
+                    if let Some(t) = tray_w.upgrade() {
+                        t.invoke_open_dashboard();
+                    }
+                });
+            }
+            _ => {}
+        })
+    } else {
+        None
+    };
+
     let hotkey_ok = if is_isolated {
         true
     } else {
@@ -3546,7 +3581,7 @@ pub fn run_desktop_app(
         });
     }
 
-    // Listen for second-instance signal to surface the dashboard (and Unix `--toggle` / `show` IPC).
+    // Listen for second-instance signal to surface the dashboard.
     {
         let dash_w = Arc::clone(&ctrl.borrow().dash_weak);
         let tray_w = tray.as_weak();
@@ -3566,38 +3601,6 @@ pub fn run_desktop_app(
             });
         });
     }
-    #[cfg(unix)]
-    let _unix_ipc = if !is_isolated {
-        let dash_w = Arc::clone(&ctrl.borrow().dash_weak);
-        let tray_w = tray.as_weak();
-        let coord = coordinator.clone();
-        unix_ipc::UnixIpcServer::start(&ctrl.borrow().config_dir, move |cmd| match cmd {
-            "toggle" => {
-                let c = coord.clone();
-                let _ = thread::Builder::new()
-                    .name("eqho-ipc-toggle".into())
-                    .spawn(move || c.toggle());
-            }
-            "show" => {
-                let dash_w = Arc::clone(&dash_w);
-                let tray_w = tray_w.clone();
-                let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(weak) = dash_w.lock().unwrap_or_else(|e| e.into_inner()).as_ref()
-                        && let Some(d) = weak.upgrade()
-                    {
-                        let _ = d.show();
-                        return;
-                    }
-                    if let Some(t) = tray_w.upgrade() {
-                        t.invoke_open_dashboard();
-                    }
-                });
-            }
-            _ => {}
-        })
-    } else {
-        None
-    };
 
     // Lazy dashboard: only create at startup if onboarding is incomplete, --open-dashboard was
     // passed, or this is an isolated --demo-dashboard run.

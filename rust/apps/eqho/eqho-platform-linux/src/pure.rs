@@ -124,6 +124,159 @@ fn parse_x11_keysym(token: &str) -> Option<u32> {
     }
 }
 
+/// Convert a parsed Linux hotkey into a GTK/GNOME GSettings accelerator string
+/// (e.g. `"alt+q"` → `"<Alt>q"`, `"ctrl+shift+f9"` → `"<Control><Shift>F9"`).
+pub fn hotkey_to_gtk_accelerator(raw: &str) -> Result<String, PlatformError> {
+    let parsed = parse_hotkey_combo(raw)?;
+    let key_name = x11_keysym_to_gdk_name(parsed.keysym).ok_or_else(|| {
+        PlatformError(format!(
+            "unsupported key for GNOME accelerator in hotkey {raw:?}"
+        ))
+    })?;
+    let mut out = String::new();
+    if parsed.modifiers.ctrl {
+        out.push_str("<Control>");
+    }
+    if parsed.modifiers.alt {
+        out.push_str("<Alt>");
+    }
+    if parsed.modifiers.shift {
+        out.push_str("<Shift>");
+    }
+    if parsed.modifiers.super_key {
+        out.push_str("<Super>");
+    }
+    out.push_str(&key_name);
+    Ok(out)
+}
+
+fn x11_keysym_to_gdk_name(keysym: u32) -> Option<String> {
+    if (u32::from(b'a')..=u32::from(b'z')).contains(&keysym)
+        || (u32::from(b'0')..=u32::from(b'9')).contains(&keysym)
+    {
+        return char::from_u32(keysym).map(|c| c.to_string());
+    }
+    if (0xFFBE..=0xFFD5).contains(&keysym) {
+        return Some(format!("F{}", keysym - 0xFFBE + 1));
+    }
+    let name = match keysym {
+        0x0020 => "space",
+        0xFF0D => "Return",
+        0xFF1B => "Escape",
+        0xFF09 => "Tab",
+        0xFF08 => "BackSpace",
+        0xFFFF => "Delete",
+        0xFF63 => "Insert",
+        0xFF50 => "Home",
+        0xFF57 => "End",
+        0xFF55 => "Page_Up",
+        0xFF56 => "Page_Down",
+        0xFF51 => "Left",
+        0xFF52 => "Up",
+        0xFF53 => "Right",
+        0xFF54 => "Down",
+        0x002D => "minus",
+        0x003D => "equal",
+        0x002C => "comma",
+        0x002E => "period",
+        0x002F => "slash",
+        0x003B => "semicolon",
+        0x0060 => "grave",
+        _ => return None,
+    };
+    Some(name.to_owned())
+}
+
+/// Parse a `gsettings get` string array (`@as []` or `['a', 'b']`) into owned strings.
+#[must_use]
+pub fn parse_gsettings_string_array(raw: &str) -> Vec<String> {
+    let trimmed = raw.trim();
+    let Some(start) = trimmed.find('[') else {
+        return Vec::new();
+    };
+    let Some(end) = trimmed.rfind(']') else {
+        return Vec::new();
+    };
+    if end <= start + 1 {
+        return Vec::new();
+    }
+    let inner = &trimmed[start + 1..end];
+    let mut out = Vec::new();
+    let mut chars = inner.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\'' || ch == '"' {
+            let quote = ch;
+            let mut item = String::new();
+            while let Some(c) = chars.next() {
+                if c == '\\'
+                    && let Some(next_c) = chars.next()
+                {
+                    item.push(next_c);
+                } else if c == quote {
+                    break;
+                } else {
+                    item.push(c);
+                }
+            }
+            if !item.is_empty() {
+                out.push(item);
+            }
+        }
+    }
+    out
+}
+
+/// Format a list of strings as a `gsettings set` GVariant string array (`@as []` or `['a', 'b']`).
+#[must_use]
+pub fn format_gsettings_string_array(items: &[String]) -> String {
+    if items.is_empty() {
+        return "@as []".to_owned();
+    }
+    let quoted: Vec<String> = items
+        .iter()
+        .map(|s| format!("'{}'", s.replace('\\', "\\\\").replace('\'', "\\'")))
+        .collect();
+    format!("[{}]", quoted.join(", "))
+}
+
+/// Return a GVariant string array ensuring `slot_path` is included once while preserving all
+/// existing user custom keybindings.
+#[must_use]
+pub fn add_gsettings_keybinding_path(current_raw: &str, slot_path: &str) -> String {
+    let mut items = parse_gsettings_string_array(current_raw);
+    if !items.iter().any(|s| s == slot_path) {
+        items.push(slot_path.to_owned());
+    }
+    format_gsettings_string_array(&items)
+}
+
+/// Return a GVariant string array with `slot_path` removed, preserving all other keybindings.
+#[must_use]
+pub fn remove_gsettings_keybinding_path(current_raw: &str, slot_path: &str) -> String {
+    let items: Vec<String> = parse_gsettings_string_array(current_raw)
+        .into_iter()
+        .filter(|s| s != slot_path)
+        .collect();
+    format_gsettings_string_array(&items)
+}
+
+/// Format a `g_shell_parse_argv`-safe command string invoking `<exe> --toggle` (preserving
+/// `EQHO_CONFIG_DIR` when set for isolated profiles).
+#[must_use]
+pub fn build_gnome_toggle_command(exe_path: &str, config_dir_env: Option<&str>) -> String {
+    fn single_quote(s: &str) -> String {
+        format!("'{}'", s.replace('\'', "'\\''"))
+    }
+    match config_dir_env.filter(|v| !v.trim().is_empty()) {
+        Some(cfg) => format!(
+            "/usr/bin/env {} {} --toggle",
+            single_quote(&format!("EQHO_CONFIG_DIR={cfg}")),
+            single_quote(exe_path),
+        ),
+        None => format!("{} --toggle", single_quote(exe_path)),
+    }
+}
+
 /// Parse available physical RAM in MiB from Linux `/proc/meminfo`.
 #[must_use]
 pub fn parse_proc_meminfo_available_mb(contents: &str) -> Option<u64> {
@@ -315,6 +468,45 @@ Source #1
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].0, "alsa_input.usb-Blue_Yeti-00.mono-fallback");
         assert_eq!(list[0].1, "Blue Yeti Stereo Microphone");
+    }
+
+    #[test]
+    fn formats_gnome_gtk_accelerators_and_keybinding_arrays() {
+        assert_eq!(hotkey_to_gtk_accelerator("alt+q").unwrap(), "<Alt>q");
+        assert_eq!(
+            hotkey_to_gtk_accelerator("ctrl+shift+space").unwrap(),
+            "<Control><Shift>space"
+        );
+        assert_eq!(
+            hotkey_to_gtk_accelerator("win+f9").unwrap(),
+            "<Super>F9"
+        );
+        assert_eq!(hotkey_to_gtk_accelerator("f8").unwrap(), "F8");
+        assert!(hotkey_to_gtk_accelerator("").is_err());
+
+        let slot = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/eqho/";
+        let added = add_gsettings_keybinding_path("@as []", slot);
+        assert_eq!(added, format!("['{slot}']"));
+        // Idempotent when already present.
+        assert_eq!(add_gsettings_keybinding_path(&added, slot), added);
+
+        let with_other = format!(
+            "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/', '{slot}']"
+        );
+        assert_eq!(
+            remove_gsettings_keybinding_path(&with_other, slot),
+            "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/']"
+        );
+        assert_eq!(remove_gsettings_keybinding_path(&added, slot), "@as []");
+
+        assert_eq!(
+            build_gnome_toggle_command("/home/dan/My Apps/Eqho", None),
+            "'/home/dan/My Apps/Eqho' --toggle"
+        );
+        assert_eq!(
+            build_gnome_toggle_command("/tmp/Eqho", Some("/tmp/cfg dir")),
+            "/usr/bin/env 'EQHO_CONFIG_DIR=/tmp/cfg dir' '/tmp/Eqho' --toggle"
+        );
     }
 
     #[test]

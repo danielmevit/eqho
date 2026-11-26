@@ -10,9 +10,11 @@
 pub mod pure;
 
 pub use pure::{
-    LinuxHotkeyModifiers, ParsedLinuxHotkey, is_monitor_source, is_software_vulkan_device,
-    is_wayland_session, parse_hotkey_combo, parse_pactl_sources, parse_pactl_volume,
-    parse_proc_meminfo_available_mb, parse_wpctl_volume,
+    LinuxHotkeyModifiers, ParsedLinuxHotkey, add_gsettings_keybinding_path,
+    build_gnome_toggle_command, format_gsettings_string_array, hotkey_to_gtk_accelerator,
+    is_monitor_source, is_software_vulkan_device, is_wayland_session,
+    parse_gsettings_string_array, parse_hotkey_combo, parse_pactl_sources, parse_pactl_volume,
+    parse_proc_meminfo_available_mb, parse_wpctl_volume, remove_gsettings_keybinding_path,
 };
 
 #[cfg(target_os = "linux")]
