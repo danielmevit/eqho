@@ -18,7 +18,7 @@ const body = `# Eqho
 * Language & UI: Rust 1.95 + Slint 1.19 (\`renderer-software\`) + native Win32 per-pixel alpha overlay (\`Eqho.exe\`, static CRT, ~3.4 MB idle RAM, ~38 ms startup)
 * Engine: OpenAI Whisper via out-of-process \`whisper.cpp 1.8.4\` (\`--model-host\` child process)
 * Hardware Acceleration: Cross-vendor Vulkan GPU (NVIDIA, AMD, Intel — no CUDA Toolkit required) plus clean-PC multi-threaded CPU inference (\`GGML_OPENMP=OFF\`, multi-ISA dispatch) and compact Q5 quantized GGML models
-* Environments: 64-bit Windows 10/11 (primary, native Rust ${VERSION}; no 32-bit build); legacy Python 0.8.x builds remain available for Linux X11 and macOS
+* Environments: 64-bit Windows 10/11 (primary, native Rust ${VERSION}; no 32-bit build); a macOS version is in development; legacy Python 0.8.x builds remain available for Linux X11 and macOS
 
 ## Key Features & Differentiators
 * **Universal Dictation:** Types into any focused application (Word, browsers, Slack, IDEs) via private clipboard paste or simulated Unicode typing, with per-app paste rules and focus verification.
