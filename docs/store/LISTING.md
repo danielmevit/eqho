@@ -1,6 +1,6 @@
 # Microsoft Store Listing — Eqho (Ready to Paste)
 
-Field-by-field Partner Center copy for Eqho 0.9.4. Calm, warm, concrete, factual tone.
+Field-by-field Partner Center copy for Eqho 0.9.5. Calm, warm, concrete, factual tone.
 **Owner rule:** No GitHub repository URLs and no competitor names anywhere in the listing.
 
 ---
@@ -41,7 +41,7 @@ Thoughtful details for daily use:
 
 Good to know:
 • Powered by local on-device Whisper AI speech recognition (whisper.cpp); Eqho transcribes what you say without rewriting or inventing content
-• No account, no ads, no tracking — network access is used only when you download a speech model or when Windows checks your Store licence
+• No account, no ads, no mandatory tracking — network access is used only when you download a speech model, when Windows checks your Store licence, or if you explicitly opt in to anonymous usage analytics (off by default; voice and text are never sent)
 • Try it free for 15 days, then buy it once — no subscription
 
 ---
@@ -67,16 +67,16 @@ Calm, 100% offline voice-to-text dictation for Windows. Press Alt+Q, speak, and 
 - Lightweight native app (~3.4 MB idle RAM in the system tray)
 - Deep Navy dark mode, light mode, and automatic Windows theme following
 - Guided 6-step first-run setup with live microphone test
-- No account, no cloud uploads, no ads, no telemetry
+- No account, no cloud uploads, no ads (optional opt-in anonymous analytics, off by default)
 - Try free for 15 days, then buy once (no subscription)
 
 ---
 
-## What's New in This Version (0.9.4)
-- Live Overlay Preview on Screen: tune pill size, transparency, position, and live transcript styling directly on your desktop in real time from Settings → Overlay
-- Streamlined Models & Settings: clean active-model blue accenting, animated model download states with inline progress, one-click Engine shortcut (Auto · GPU · CPU), and separate Engine & Driver diagnostics in About
-- Crisp pure-vector header wordmark, unified tray & window monogram icon, frosted interactive 4-step section guide cards, and obsidian-charcoal dark theme with blurred Settings modal backdrop
-- More reliable global hotkey activation (including live Alt+Q testing inside first-run Setup Step 6) and Windows 11 Acrylic frosted overlay polish
+## What's New in This Version (0.9.5)
+- Smart PC-spec model recommendations: Eqho probes your dedicated GPU VRAM, CPU thread count, SIMD support, and available RAM to recommend the fastest local model for your exact PC (including laptops without a discrete GPU)
+- Smarter first-run defaults: Live Text Preview starts ON for discrete GPU setups (real-time streaming) and OFF for CPU-only laptops (always customizable in Settings → Overlay)
+- Optional opt-in anonymous usage analytics (off by default, hosted on PostHog EU with IP storage disabled — voice audio and dictated text never leave your computer)
+- Live Overlay Preview on Screen, pure-vector Eqho header wordmark, unified monogram icon, interactive 4-step guide, and improved global Alt+Q activation including Setup Step 6
 
 ---
 
@@ -96,9 +96,12 @@ voice to text · offline dictation · speech to text · voice typing · local wh
 ---
 
 ## Privacy Questionnaire Summary
-- Eqho collects no personal data, sends no telemetry, and never uploads microphone audio or transcripts.
-- All speech recognition runs locally on the user's device.
-- Network requests occur only when the user explicitly downloads an offline Whisper GGML speech model (HTTPS from Hugging Face) or when Windows checks the Store trial/purchase licence via `Windows.Services.Store.StoreContext`.
+- Eqho never collects personal data, never creates user accounts, and never uploads microphone audio, transcripts, custom vocabulary, or clipboard contents.
+- All speech recognition runs 100% locally on the user's device.
+- Network requests occur only when:
+  1. The user explicitly downloads an offline Whisper GGML speech model (HTTPS from Hugging Face).
+  2. Windows checks the Store trial/purchase licence via `Windows.Services.Store.StoreContext`.
+  3. The user explicitly opts in (off by default) to **Share Anonymous Usage Analytics** — sending anonymous feature/hardware diagnostics (app version, OS/arch, hardware tier, selected model ID, engine/delivery mode) to PostHog EU Cloud (`eu.i.posthog.com`) with person profiles and IP storage disabled.
 - Privacy Policy URL: `https://eqho.damt.xyz/privacy/`
 
 ---

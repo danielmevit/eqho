@@ -250,6 +250,12 @@ pub struct Settings {
     pub overlay_controls_enabled: bool,
     pub overlay_controls_pinned: bool,
     pub recent_languages: Vec<String>,
+    /// Strictly opt-in anonymous product analytics (PostHog EU). Defaults to `false`.
+    #[serde(default)]
+    pub analytics_enabled: bool,
+    /// Random local UUID v4 used only when `analytics_enabled` is `true` (cleared when disabled).
+    #[serde(default)]
+    pub analytics_distinct_id: String,
 }
 
 impl Default for Settings {
@@ -294,6 +300,8 @@ impl Default for Settings {
             overlay_controls_enabled: true,
             overlay_controls_pinned: false,
             recent_languages: Vec::new(),
+            analytics_enabled: false,
+            analytics_distinct_id: String::new(),
         }
     }
 }
@@ -479,9 +487,25 @@ impl Settings {
         if let Some(v) = obj.get("history_trash_days") {
             s.history_trash_days = coerce_i32(v, s.history_trash_days);
         }
+        if let Some(v) = obj.get("analytics_enabled") {
+            s.analytics_enabled = coerce_bool(v, s.analytics_enabled);
+        }
+        if let Some(v) = obj.get("analytics_distinct_id") {
+            s.analytics_distinct_id = coerce_string(v, &s.analytics_distinct_id);
+        }
 
         s.clamp_ranges();
         s
+    }
+
+    /// Apply hardware-aware first-launch defaults before a persisted `settings.json` exists.
+    ///
+    /// Sets `overlay_show_text` (`Live Text Preview`) to `true` on discrete GPU / Apple Silicon
+    /// systems (where mid-sentence partials stream in real time) and `false` on CPU-only PCs
+    /// (where partials are skipped). Must NOT be called when an existing `settings.json` was
+    /// loaded so an explicit user toggle is always respected.
+    pub fn apply_first_run_hardware_defaults(&mut self, specs: crate::modelpick::HardwareSpecs) {
+        self.overlay_show_text = specs.hardware_class() == crate::modelpick::HardwareClass::Gpu;
     }
 
     /// Normalize a dictation delivery mode string (`"live"` -> `"live"`,
@@ -1110,6 +1134,47 @@ mod tests {
         let loaded = Settings::load_from_path(&path);
         assert_eq!(loaded, s);
 
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn first_run_hardware_defaults_toggle_live_text_by_gpu_vs_cpu_and_analytics_defaults_off() {
+        let mut gpu_settings = Settings::default();
+        assert!(!gpu_settings.analytics_enabled);
+        assert!(gpu_settings.analytics_distinct_id.is_empty());
+
+        gpu_settings.apply_first_run_hardware_defaults(crate::modelpick::HardwareSpecs {
+            gpu_vram_mb: 8 * 1024,
+            cpu_threads: 12,
+            cpu_fast_simd: true,
+            available_ram_mb: Some(16 * 1024),
+        });
+        assert!(gpu_settings.overlay_show_text);
+
+        let mut cpu_settings = Settings::default();
+        cpu_settings.apply_first_run_hardware_defaults(crate::modelpick::HardwareSpecs {
+            gpu_vram_mb: 0,
+            cpu_threads: 8,
+            cpu_fast_simd: true,
+            available_ram_mb: Some(16 * 1024),
+        });
+        assert!(!cpu_settings.overlay_show_text);
+
+        // Existing persisted settings with explicit opt-in or live-text preference round-trip intact.
+        let dir = temp_dir("v095_defaults");
+        let path = dir.join("settings.json");
+        cpu_settings.overlay_show_text = true;
+        cpu_settings.analytics_enabled = true;
+        cpu_settings.analytics_distinct_id = "550e8400-e29b-41d4-a716-446655440000".to_owned();
+        cpu_settings.save_to_path(&path).unwrap();
+
+        let reloaded = Settings::load_from_path(&path);
+        assert!(reloaded.overlay_show_text);
+        assert!(reloaded.analytics_enabled);
+        assert_eq!(
+            reloaded.analytics_distinct_id,
+            "550e8400-e29b-41d4-a716-446655440000"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 

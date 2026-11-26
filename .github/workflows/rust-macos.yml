@@ -25,6 +25,7 @@ jobs:
       CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: always
       WHISPER_CPP_TAG: v1.8.4
+      EQHO_POSTHOG_KEY: ${{ secrets.EQHO_POSTHOG_KEY }}
 
     steps:
       - uses: actions/checkout@v4

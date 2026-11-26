@@ -9,11 +9,16 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+mod analytics;
 mod error_log;
 mod paths;
 mod pure;
 mod single_instance;
 
+pub use analytics::{
+    AnalyticsClient, AnalyticsConfig, AnalyticsProp, DEFAULT_POSTHOG_EU_HOST,
+    build_capture_payload, generate_anonymous_id, parse_https_capture_target,
+};
 pub use error_log::{ErrorLog, install_panic_hook};
 pub use paths::{AppDataPaths, data_directory, ensure_data_directory};
 pub use single_instance::{Acquire, SingleInstance, SingleInstanceGuard};

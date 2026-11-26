@@ -89,6 +89,8 @@ export component SettingsModal inherits Rectangle {
     in-out property <int> volume-duck-index: 0;
     in-out property <int> history-trash-days-index: 2;
     in-out property <bool> start-with-windows: false;
+    in property <string> autostart-label: "Start at login";
+    in-out property <bool> analytics-enabled: false;
     in property <string> model-dir-display: "";
 
     in-out property <bool> overlay-preview-active: true;
@@ -104,7 +106,7 @@ export component SettingsModal inherits Rectangle {
     in-out property <int> overlay-panel-see-through-pct: 22;
     in-out property <int> overlay-font-size: 14;
 
-    in property <string> app-version: "0.9.4";
+    in property <string> app-version: "0.9.5";
     in property <string> active-engine-display: "whisper.cpp 1.8.4";
     in property <string> active-driver-display: "Vulkan";
     in property <bool> store-build: false;
@@ -128,6 +130,7 @@ export component SettingsModal inherits Rectangle {
     callback open-trash();
     callback open-model-folder();
     callback start-with-windows-toggled(bool);
+    callback analytics-enabled-toggled(bool);
     callback overlay-enabled-toggled(bool);
     callback overlay-show-text-toggled(bool);
     callback overlay-show-level-toggled(bool);
@@ -368,7 +371,7 @@ export component SettingsModal inherits Rectangle {
                         if root.active-section == "appearance" : SettingsGroup {
                             StackedSettingRow {
                                 label: "Theme";
-                                help: "Light, dark, or follow Windows";
+                                help: "Light, dark, or follow system";
                                 TabList {
                                     items: ["Light", "Dark", "System"];
                                     selected <=> root.theme-mode-index;
@@ -501,7 +504,7 @@ export component SettingsModal inherits Rectangle {
                                 Rectangle { height: 1px; background: Theme.border-subtle; }
                                 CompactRow {
                                     label: "Live Text Preview";
-                                    help: "Show live words above the pill while speaking";
+                                    help: "Real-time on GPU; updates after pauses on CPU.";
                                     Toggle {
                                         checked <=> root.overlay-show-text;
                                         accessible-name: "Live Text Preview";
@@ -634,11 +637,11 @@ export component SettingsModal inherits Rectangle {
                                 }
                                 Rectangle { height: 1px; background: Theme.border-subtle; }
                                 CompactRow {
-                                    label: "Start with Windows";
+                                    label: root.autostart-label;
                                     help: "Launch Eqho automatically when you sign in";
                                     Toggle {
                                         checked <=> root.start-with-windows;
-                                        accessible-name: "Start with Windows";
+                                        accessible-name: root.autostart-label;
                                         toggled(v) => { root.start-with-windows-toggled(v); }
                                     }
                                 }
@@ -707,6 +710,18 @@ export component SettingsModal inherits Rectangle {
                                     font-size: Theme.font-size-xs;
                                     color: Theme.text-subtle;
                                     wrap: word-wrap;
+                                }
+                            }
+
+                            SettingsGroup {
+                                CompactRow {
+                                    label: "Share Anonymous Usage Analytics";
+                                    help: "Optional anonymous stats (PostHog EU) to help improve Eqho. Voice audio and dictated text are never sent.";
+                                    Toggle {
+                                        checked <=> root.analytics-enabled;
+                                        accessible-name: "Share Anonymous Usage Analytics";
+                                        toggled(v) => { root.analytics-enabled-toggled(v); }
+                                    }
                                 }
                             }
                         }

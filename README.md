@@ -22,12 +22,16 @@
 
 ## Install
 
-**Windows 10/11 (64-bit, recommended):**
-- **GitHub Releases (free, open source):** grab `Eqho-Setup-0.9.0-win-x64.exe` (~14 MB, per-user, no admin prompt, zero VC++ Redistributable required) from [Releases](https://github.com/danielmevit/eqho/releases) → double-click → done. Prefer no installer? Use `Eqho-portable-0.9.0-win-x64.zip` (~29 MB).
+**Windows 10/11 (64-bit):**
+- **GitHub Releases (free, open source):** grab `Eqho-Setup-0.9.5-win-x64.exe` (~14 MB, per-user, no admin prompt, zero VC++ Redistributable required) from [Releases](https://github.com/danielmevit/eqho/releases) → double-click → done. Prefer no installer? Use `Eqho-portable-0.9.5-win-x64.zip` (~29 MB).
 - **winget:** `winget install eqho`
 - **Microsoft Store (optional):** signed MSIX Store package with automatic updates and a **15-day free trial** (same local dictation engine, built with `--features store`).
 
-**Linux / macOS:** legacy Python 0.8.x builds (`.AppImage`, `.tar.gz`, `.dmg`) remain available on [Releases](https://github.com/danielmevit/eqho/releases) (see [platform notes](#platform-notes)); the Rust port targets Windows x64 first.
+**Linux x64 (free, open source — native Rust 0.9.5):**
+- Grab `Eqho-0.9.5-linux-x64.AppImage`, `Eqho-0.9.5-linux-x64.deb` (Ubuntu/Debian/Mint), or `Eqho-0.9.5-linux-x64.tar.gz` from [Releases](https://github.com/danielmevit/eqho/releases) — bundles `whisper.cpp 1.8.4` with Vulkan GPU + 14 dynamic CPU ISA backends, PipeWire/PulseAudio mic capture, and X11 + GNOME Wayland support.
+
+**macOS (Apple Silicon & Intel — native Rust 0.9.5):**
+- Grab `Eqho-0.9.5-macos-arm64.dmg` (M1/M2/M3/M4: Metal GPU + Apple Accelerate + NEON) or `Eqho-0.9.5-macos-x64.dmg` (Intel: Metal + Accelerate + dynamic CPU ISA) from [Releases](https://github.com/danielmevit/eqho/releases). First launch of ad-hoc signed builds: right-click `Eqho.app` → **Open**, then grant Microphone & Accessibility permissions.
 
 **Build from source (Windows x64, Rust 1.95+):**
 
@@ -86,7 +90,7 @@ Anything beyond English needs a **multilingual** model (`large-v3-turbo`, `large
 
 ## FAQ
 
-**Is my audio uploaded anywhere?** No. Speech recognition runs 100% locally via `whisper.cpp` on your GPU or CPU. The only network call is downloading the GGML speech model you select.
+**Is my audio uploaded anywhere?** No. Speech recognition runs 100% locally via `whisper.cpp` on your GPU or CPU. Network access is only used when you download a speech model (and, only if you explicitly opt in during setup or in Settings → Data & Trash, to send strictly anonymous usage stats to PostHog EU — never audio or dictated text).
 
 **Does it cost anything?** Direct downloads from GitHub Releases, `winget`, and source builds are 100% free and open source under AGPL-3.0 with no trial, no word limits, and zero licensing code compiled in. If you prefer Microsoft Store delivery with automatic updates (or want to support Eqho), an optional paid Store edition includes a 15-day free trial.
 
@@ -111,13 +115,13 @@ For the technically curious (the [website](https://eqho.damt.xyz/) stays non-tec
 - **Deterministic text pipeline (`eqho-core/src/textproc.rs`):** language-aware casing/spacing cleanup, opt-in voice commands, literal user replacements — never rephrases your words (no LLM touches your transcript)
 - **Overlay (`eqho-overlay`):** native Win32 per-pixel alpha layered windows (`UpdateLayeredWindow` + `WS_EX_NOACTIVATE` / `MA_NOACTIVATE`) rendering the breathing iridescent pill, hover-reveal/pinnable under-pill action strip, searchable 99-language menu with dynamic recent chips, and upward-growing live preview panel without stealing focus
 - **Packaging:** Inno Setup 6 LZMA2 installer (~14 MB), portable `.zip` (~29 MB), `winget`, and Microsoft Store `.msix` pipeline (`packaging/windows/AppxManifest.xml`, pure-ASCII `build_msix.ps1`, `generate_assets.py` + 48 PNG assets, compile-time `EQHO_STORE_ID` override)
-- **Zero telemetry:** the app never phones home; the only network requests are user-initiated GGML model downloads from Hugging Face (and Store license checks in `--features store` MSIX builds)
+- **Privacy & opt-in analytics:** off by default (`analytics_enabled: false`) and completely inert in community source builds without a build-time key. Official releases offer an explicit opt-in toggle sending strictly anonymous feature/hardware metadata to **PostHog EU (`eu.i.posthog.com`)** with `$process_person_profile: false` and `$ip: null` — voice audio, transcripts, filenames, window titles, and clipboard data are never transmitted.
 
 ## Development & AI disclosure
 
-Eqho is designed, directed, tested on real hardware, and maintained by **Daniel Mitev ([damt.xyz](https://damt.xyz))**. Generative AI tools are used extensively as development assistants across this project — including application code, tests, documentation, maintenance, packaging/CI automation, and promotional materials (such as store graphics and marketing copy).
+Eqho is designed, directed, tested on real hardware, and maintained by **Daniel Mitev ([damt.xyz](https://damt.xyz))** with extensive use of generative AI tools from start to finish — including application code, tests, documentation, packaging and CI automation, the website, store listing and marketing materials, and ongoing maintenance. Throughout, a real person steers the work and decides what is released.
 
-This applies only to how Eqho is built and documented. At **runtime**, Eqho does not connect to any cloud AI or generative LLM: speech recognition runs strictly locally via `whisper.cpp` on your own GPU or CPU, and text cleanup is 100% deterministic.
+This applies only to how Eqho is built and marketed. At **runtime**, Eqho does not connect to any cloud AI or generative LLM: speech recognition runs strictly locally via `whisper.cpp` on your own GPU or CPU, and text cleanup is 100% deterministic.
 
 ## License
 

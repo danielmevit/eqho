@@ -155,12 +155,14 @@ Migrate off the Python runtime for a lean commercial-grade product across Window
 - [ ] Signed binaries, auto-update mechanism
 - [ ] Plugin system for custom post-processing (punctuation cleanup, formatting)
 
-### 0.9.5 — Opt-in Anonymous Product Analytics (PostHog EU)
+### 0.9.5 — Opt-in Anonymous Product Analytics (PostHog EU) & Global Polish
 Reusable privacy-first analytics foundation in `damt-app` shared across Eqho (Windows, Linux, macOS) and all `damt.xyz` apps:
-- [ ] Lightweight, non-blocking PostHog capture client in `damt-app` targeting **PostHog EU Cloud (`eu.i.posthog.com`)**, build-time `EQHO_POSTHOG_KEY` injection (silent in community source builds), zero blocking on startup/dictation, silent offline drop
-- [ ] **Strictly opt-in by default (`analytics_enabled = false`)** with a clear opt-in checkbox in first-run Onboarding and a toggle in **Settings → General** (rotating/clearing anonymous ID when disabled)
-- [ ] Strictly anonymous usage & health events only (OS/arch, GPU vs CPU backend, selected model ID, session duration bucket, error codes) — **never** microphone audio, dictated transcripts, filenames, window titles, clipboard text, or IP addresses
-- [ ] Synchronized disclosure updates in the exact same release across `README.md`, `https://eqho.damt.xyz/privacy/`, `docs/store/LISTING.md`, and the Microsoft Partner Center Privacy Questionnaire
+- [x] Lightweight, non-blocking PostHog capture client in `damt-app` targeting **PostHog EU Cloud (`eu.i.posthog.com`)**, build-time `EQHO_POSTHOG_KEY` injection (silent in community source builds), zero blocking on startup/dictation, silent offline drop
+- [x] **Strictly opt-in by default (`analytics_enabled = false`)** with a clear opt-in checkbox in first-run Onboarding and a toggle in **Settings → Data & Trash** (rotating/clearing anonymous ID when disabled)
+- [x] Strictly anonymous usage & health events only (OS/arch, hardware tier, selected model ID, delivery/engine mode) — **never** microphone audio, dictated transcripts, filenames, window titles, clipboard text, or IP addresses
+- [x] Synchronized disclosure updates in the exact same release across `README.md`, `https://eqho.damt.xyz/privacy/`, `docs/store/LISTING.md`, and the Microsoft Partner Center Privacy Questionnaire
+- [x] **Hardware-aware default for `Show live text` (global: Windows, macOS, Linux):** Default `overlay_show_text` to **ON** on discrete GPU / Apple Silicon setups and **OFF** on CPU-only PCs on first launch; always respect the user's explicit toggle in `Settings → Overlay` with subtitle (*"Real-time on GPU; updates after pauses on CPU."*).
+- [x] Linux `.deb` package generation (`Eqho-0.9.5-linux-x64.deb`) in `packaging/linux/build-rust.sh` & CI, plus cross-platform `"Start at login"` / `"Open system settings"` labels.
 
 ### Why whisper.cpp for distribution
 - Pure C/C++, no Python runtime, no 200MB+ PyInstaller bundle
@@ -170,9 +172,7 @@ Reusable privacy-first analytics foundation in `damt-app` shared across Eqho (Wi
 - Current faster-whisper stack is ideal for development velocity; whisper.cpp is for shipping
 
 ## Stretch Goals / Backlog
-### 0.9.5 — next beta polish (planned, global cross-platform)
-- [ ] **Hardware-aware default for `Show live text` (global: Windows, macOS, Linux):** Default `overlay_show_text` to **ON** on discrete GPU / Apple Silicon setups and **OFF** on CPU-only PCs on first launch; always respect the user's explicit toggle in `Settings → Overlay` and add a short subtitle (*"Real-time on GPU; updates after pauses on CPU."*). See `docs/ai/DECISIONS.md`.
-- [ ] Linux desktop polish: `.deb` / `.desktop` integration (`GlobalShortcuts` Hold-to-Talk portal) and OS-neutral labels on Linux/macOS (`"Start with Windows"` → `"Start at login"`).
+- [ ] Linux Wayland `GlobalShortcuts` Hold-to-Talk portal (beyond GNOME `gsettings` Toggle hotkey).
 
 - [x] Text cleanup — Tier 1 deterministic auto-format (v0.7.0)
 - [x] Model-switch reliability — subprocess model host, seamless (Option B, v0.8.0). Pluggable backend.

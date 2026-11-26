@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
 PackageIdentifier: damt.Eqho
-PackageVersion: 0.9.4
+PackageVersion: 0.9.5
 InstallerLocale: en-US
 Platform:
 - Windows.Desktop
@@ -10,7 +10,7 @@ Scope: user
 UpgradeBehavior: install
 Installers:
 - Architecture: x64
-  InstallerUrl: https://github.com/danielmevit/eqho/releases/download/v0.9.4/Eqho-Setup-0.9.4-win-x64.exe
+  InstallerUrl: https://github.com/danielmevit/eqho/releases/download/v0.9.5/Eqho-Setup-0.9.5-win-x64.exe
   InstallerSha256: 10791623B10E28583F88059B411E913C14ECFEA1057707E9FE1138C6C9DBB1DC
   ProductCode: '{7C21F6E3-9B4A-4D2E-8F0C-5A6B3D91C4E7}_is1'
 ManifestType: installer

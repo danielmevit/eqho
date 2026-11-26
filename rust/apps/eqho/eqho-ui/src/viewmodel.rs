@@ -780,6 +780,11 @@ pub fn apply_settings_to_window_with_specs(
     window.set_paste_rules_text(format_paste_rules_text(&settings.paste_rules).into());
     window.set_volume_duck_index(volume_duck_index(&settings.volume_duck));
     window.set_start_with_windows(settings.start_with_windows);
+    #[cfg(windows)]
+    window.set_autostart_label("Start with Windows".into());
+    #[cfg(not(windows))]
+    window.set_autostart_label("Start at login".into());
+    window.set_analytics_enabled(settings.analytics_enabled);
 
     window.set_overlay_enabled(settings.overlay_enabled);
     window.set_overlay_show_text(settings.overlay_show_text);

@@ -223,6 +223,10 @@ export component OnboardingView inherits Rectangle {
     in-out property <int> bg-download-pct: 0;
     in-out property <string> bg-download-detail: "";
 
+    // Step 1: Strictly opt-in anonymous product analytics (PostHog EU)
+    in-out property <bool> analytics-enabled: false;
+    callback analytics-enabled-toggled(bool);
+
     // Step 5: Audio ducking choice (exclusive — one always checked)
     in-out property <bool> duck-mute: false;
 
@@ -299,6 +303,15 @@ export component OnboardingView inherits Rectangle {
                         font-size: Theme.font-size-base;
                         color: Theme.text-muted;
                         wrap: word-wrap;
+                    }
+                    SoundOptionCard {
+                        title: "Share anonymous usage analytics (optional)";
+                        subtitle: "Off by default. Sends anonymous feature and hardware stats to PostHog EU to help improve Eqho — voice audio and dictated text are never sent.";
+                        checked: root.analytics-enabled;
+                        clicked => {
+                            root.analytics-enabled = !root.analytics-enabled;
+                            root.analytics-enabled-toggled(root.analytics-enabled);
+                        }
                     }
                 }
 
@@ -383,7 +396,7 @@ export component OnboardingView inherits Rectangle {
                             spacing: Theme.space-8;
                             alignment: start;
                             Button {
-                                text: "Open Windows settings";
+                                text: "Open system settings";
                                 kind: ButtonKind.outline;
                                 clicked => { root.open-mic-settings(); }
                             }

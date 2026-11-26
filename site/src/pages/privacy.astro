@@ -115,13 +115,16 @@ const updated = "26 November 2026";
 
       <section class="card">
         <h2>Network activity</h2>
-        <p>Eqho contains no telemetry, no analytics, no ads, and no user accounts. Network requests occur only in two explicit cases:</p>
+        <p>Eqho contains no ads, no user accounts, and no mandatory tracking. Network requests occur only in these explicit cases:</p>
         <ul>
           <li>
             <strong>Downloading a speech model you choose:</strong> When you download a Whisper model during first-run setup or in the Models tab, Eqho fetches the selected GGML model file over HTTPS from Hugging Face. Once downloaded, dictation works completely offline.
           </li>
           <li>
             <strong>Microsoft Store licence checks (Store edition only):</strong> The Microsoft Store edition uses the built-in Windows <code>Windows.Services.Store.StoreContext</code> API to check your 15-day free trial or purchase status through the Microsoft Store.
+          </li>
+          <li>
+            <strong>Optional anonymous usage analytics (opt-in only, off by default):</strong> Only if you explicitly turn on <em>Share Anonymous Usage Analytics</em> during setup or in <strong>Settings → Data &amp; Trash</strong>, Eqho sends anonymous product and hardware events (such as app version, OS/architecture, hardware tier, selected model name, and engine/delivery mode) to <strong>PostHog EU Cloud</strong> (<code>eu.i.posthog.com</code>) using a random local UUID with person profiles and IP storage disabled (<code>$process_person_profile: false</code>, <code>$ip: null</code>). Microphone audio, dictated transcripts, custom vocabulary, window titles, filenames, and clipboard contents are never sent. Turning the toggle off stops all analytics immediately and deletes the local anonymous ID.
           </li>
         </ul>
       </section>

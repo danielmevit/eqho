@@ -118,6 +118,65 @@ else
   echo "[info] appimagetool not found — skipping AppImage (tar.gz built cleanly)"
 fi
 
+# Native .deb package (Ubuntu / Debian / Linux Mint) when dpkg-deb is available
+if command -v dpkg-deb >/dev/null 2>&1; then
+  DEB_ARCH="$([[ "$ARCH" == "x86_64" ]] && echo "amd64" || echo "$ARCH")"
+  DEB_STAGE="$OUT_DIR/_deb_stage"
+  rm -rf "$DEB_STAGE"
+  mkdir -p \
+    "$DEB_STAGE/DEBIAN" \
+    "$DEB_STAGE/usr/bin" \
+    "$DEB_STAGE/usr/lib/eqho/lib" \
+    "$DEB_STAGE/usr/share/applications" \
+    "$DEB_STAGE/usr/share/icons/hicolor/64x64/apps" \
+    "$DEB_STAGE/usr/share/doc/eqho"
+
+  cp "$BUNDLE_DIR/Eqho" "$DEB_STAGE/usr/lib/eqho/Eqho"
+  chmod 755 "$DEB_STAGE/usr/lib/eqho/Eqho"
+  if [[ "$HAS_WHISPER_LIBS" -eq 1 ]]; then
+    cp -a "$BUNDLE_DIR/lib"/* "$DEB_STAGE/usr/lib/eqho/lib/"
+  fi
+  cat > "$DEB_STAGE/usr/bin/eqho" <<'WRAPPER'
+#!/usr/bin/env bash
+export EQHO_WHISPER_DLL_DIR="/usr/lib/eqho/lib"
+export LD_LIBRARY_PATH="/usr/lib/eqho/lib:${LD_LIBRARY_PATH:-}"
+exec /usr/lib/eqho/Eqho "$@"
+WRAPPER
+  chmod 755 "$DEB_STAGE/usr/bin/eqho"
+
+  sed 's|^Exec=Eqho|Exec=/usr/bin/eqho|' "$ROOT/packaging/linux/eqho.desktop" \
+    > "$DEB_STAGE/usr/share/applications/eqho.desktop"
+  cp "$ROOT/assets/logo_64_dark.png" "$DEB_STAGE/usr/share/icons/hicolor/64x64/apps/eqho.png"
+  cp "$ROOT/LICENSE" "$DEB_STAGE/usr/share/doc/eqho/LICENSE"
+  cp "$ROOT/THIRD_PARTY_NOTICES.txt" "$DEB_STAGE/usr/share/doc/eqho/THIRD_PARTY_NOTICES.txt"
+
+  INSTALLED_KB="$(du -sk "$DEB_STAGE/usr" | awk '{print $1}')"
+  cat > "$DEB_STAGE/DEBIAN/control" <<CONTROL
+Package: eqho
+Version: ${VERSION}
+Section: utils
+Priority: optional
+Architecture: ${DEB_ARCH}
+Installed-Size: ${INSTALLED_KB}
+Maintainer: Daniel Mitev <support@damt.xyz>
+Homepage: https://eqho.damt.xyz/
+Depends: libc6, libfontconfig1, libfreetype6, libpulse0, libxkbcommon0, libxkbcommon-x11-0
+Recommends: libvulkan1, xclip, wl-clipboard, wtype
+Description: Calm, 100% offline local voice-to-text dictation
+ Press a hotkey, speak, and your words appear in any focused app.
+ Runs locally via whisper.cpp with Vulkan GPU and multi-ISA CPU support.
+CONTROL
+
+  DEB_PATH="$OUT_DIR/${BUNDLE_NAME}.deb"
+  rm -f "$DEB_PATH"
+  dpkg-deb --root-owner-group --build "$DEB_STAGE" "$DEB_PATH"
+  rm -rf "$DEB_STAGE"
+  echo "[ok] Debian package: $DEB_PATH"
+  ARTIFACTS+=("$DEB_PATH")
+else
+  echo "[info] dpkg-deb not found — skipping .deb package"
+fi
+
 SUMS_PATH="$OUT_DIR/SHA256SUMS-${VERSION}-linux-${ARCH_LABEL}.txt"
 (cd "$OUT_DIR" && sha256sum "${ARTIFACTS[@]##*/}") > "$SUMS_PATH"
 echo "[ok] Checksums: $SUMS_PATH"

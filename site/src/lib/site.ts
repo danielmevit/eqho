@@ -5,4 +5,4 @@ export const REPO_URL = 'https://github.com/danielmevit/eqho';
 export const RELEASES_URL = `${REPO_URL}/releases`;
 export const LEGACY_URL = `${REPO_URL}/releases/tag/v0.8.10`;
 export const SUPPORT_EMAIL = 'support@damt.xyz';
-export const VERSION = '0.9.4';
+export const VERSION = '0.9.5';

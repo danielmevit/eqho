@@ -21,6 +21,7 @@ jobs:
       CARGO_TERM_COLOR: always
       WHISPER_CPP_TAG: v1.8.4
       VULKAN_SDK_VERSION: 1.4.304.0
+      EQHO_POSTHOG_KEY: ${{ secrets.EQHO_POSTHOG_KEY }}
 
     steps:
       - uses: actions/checkout@v4

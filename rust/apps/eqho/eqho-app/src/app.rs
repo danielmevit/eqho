@@ -11,12 +11,15 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use damt_app::{Acquire, ErrorLog, SingleInstance, SingleInstanceGuard, install_panic_hook};
+use damt_app::{
+    Acquire, AnalyticsClient, AnalyticsConfig, AnalyticsProp, DEFAULT_POSTHOG_EU_HOST, ErrorLog,
+    SingleInstance, SingleInstanceGuard, generate_anonymous_id, install_panic_hook,
+};
 #[cfg(feature = "store")]
 use damt_platform::{Clock, SystemClock};
 use damt_platform::PlatformServices;
 use eqho_core::history::TranscriptHistory;
-use eqho_core::modelpick::{HardwareClass, HardwareSpecs, recommend_model_for_specs};
+use eqho_core::modelpick::{HardwareClass, HardwareSpecs, HardwareTier, recommend_model_for_specs};
 use eqho_core::modelstore::{MODELS, whispercpp_model_path};
 use eqho_core::settings::Settings;
 use eqho_core::vad::level_meter;
@@ -187,6 +190,39 @@ fn detect_hardware_specs(
     (specs, gpu_name)
 }
 
+fn hardware_tier_tag(specs: HardwareSpecs) -> &'static str {
+    match specs.tier() {
+        HardwareTier::GpuHigh => "gpu_high",
+        HardwareTier::GpuMid => "gpu_mid",
+        HardwareTier::GpuEntry => "gpu_entry",
+        HardwareTier::CpuFast => "cpu_fast",
+        HardwareTier::CpuLight => "cpu_light",
+    }
+}
+
+fn build_analytics_client(settings: &Settings, is_isolated: bool) -> AnalyticsClient {
+    if is_isolated {
+        return AnalyticsClient::disabled();
+    }
+    let api_key = option_env!("EQHO_POSTHOG_KEY").or(option_env!("DAMT_POSTHOG_KEY"));
+    let edition = if cfg!(feature = "store") {
+        "store"
+    } else {
+        "direct"
+    };
+    let mut cfg = AnalyticsConfig::new(api_key, "eqho", env!("CARGO_PKG_VERSION"), edition);
+    if let Some(host) = option_env!("EQHO_POSTHOG_HOST").or(option_env!("DAMT_POSTHOG_HOST"))
+        && !host.trim().is_empty()
+    {
+        cfg.host = host.trim().to_owned();
+    } else {
+        cfg.host = DEFAULT_POSTHOG_EU_HOST.to_owned();
+    }
+    cfg.enabled = settings.analytics_enabled;
+    cfg.distinct_id = settings.analytics_distinct_id.clone();
+    AnalyticsClient::new(cfg)
+}
+
 fn default_cpu_threads() -> u32 {
     std::thread::available_parallelism()
         .map(|n| n.get() as u32)
@@ -248,6 +284,7 @@ struct AppUiSink {
     history: TranscriptHistory,
     settings: Arc<Mutex<Settings>>,
     hw_specs: HardwareSpecs,
+    analytics: AnalyticsClient,
 }
 
 impl AppUiSink {
@@ -629,6 +666,29 @@ impl UiEventSink for AppUiSink {
             text,
             Some("✓ Dictation worked! Try another sentence or click Finish."),
         );
+        // Never inspect or transmit dictated text — strictly anonymous metadata only.
+        let (model, delivery_mode, engine_backend, language) = {
+            let s = self.settings.lock().unwrap_or_else(|e| e.into_inner());
+            (
+                s.model_size.clone(),
+                s.delivery_mode.clone(),
+                s.engine_backend.clone(),
+                s.language.clone(),
+            )
+        };
+        self.analytics.capture(
+            "dictation_completed",
+            &[
+                ("model", AnalyticsProp::from(model)),
+                ("delivery_mode", AnalyticsProp::from(delivery_mode)),
+                ("engine_backend", AnalyticsProp::from(engine_backend)),
+                ("language", AnalyticsProp::from(language)),
+                (
+                    "hardware_tier",
+                    AnalyticsProp::from(hardware_tier_tag(self.hw_specs)),
+                ),
+            ],
+        );
     }
 
     fn on_history_changed(&self) {
@@ -735,6 +795,7 @@ struct AppController {
     download_cancel: Option<Arc<AtomicBool>>,
     error_log: ErrorLog,
     ui_sink: Arc<AppUiSink>,
+    analytics: AnalyticsClient,
     #[cfg(feature = "store")]
     license_state: LicenseState,
     #[cfg(feature = "store")]
@@ -1211,6 +1272,8 @@ impl AppController {
         let settings_arc = Arc::clone(&self.settings);
         let settings_path = self.settings_path.clone();
         let coordinator = self.coordinator.clone();
+        let analytics = self.analytics.clone();
+        let hw_tier = hardware_tier_tag(self.hw_specs);
 
         let _ = thread::Builder::new()
             .name("eqho-model-download".into())
@@ -1230,6 +1293,13 @@ impl AppController {
                         ui.clear_cancelled_download(&model_key);
                     }
                     Ok(_) => {
+                        analytics.capture(
+                            "model_downloaded",
+                            &[
+                                ("model", AnalyticsProp::from(model_key.as_str())),
+                                ("hardware_tier", AnalyticsProp::from(hw_tier)),
+                            ],
+                        );
                         // CRITICAL: Drop `settings_arc` lock BEFORE calling into `coordinator`
                         // or `ui` so `on_model_progress -> refresh_models_in_dash` can never
                         // re-entrantly deadlock on `settings_arc`!
@@ -2257,6 +2327,36 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     }
     {
         let ctrl_w = Rc::clone(ctrl);
+        dash.on_analytics_enabled_toggled(move |enabled| {
+            let c = ctrl_w.borrow();
+            let distinct_id = {
+                let mut s = c.settings.lock().unwrap_or_else(|e| e.into_inner());
+                s.analytics_enabled = enabled;
+                if enabled {
+                    if s.analytics_distinct_id.trim().is_empty() {
+                        s.analytics_distinct_id = generate_anonymous_id();
+                    }
+                    Some(s.analytics_distinct_id.clone())
+                } else {
+                    s.analytics_distinct_id.clear();
+                    None
+                }
+            };
+            c.analytics.set_enabled(enabled, distinct_id.as_deref());
+            c.save_settings(false);
+            if enabled {
+                c.analytics.capture(
+                    "analytics_opted_in",
+                    &[(
+                        "hardware_tier",
+                        AnalyticsProp::from(hardware_tier_tag(c.hw_specs)),
+                    )],
+                );
+            }
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
         dash.on_overlay_enabled_toggled(move |v| {
             let c = ctrl_w.borrow();
             c.settings
@@ -2581,15 +2681,34 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     let finish_onboarding = {
         let ctrl_w = Rc::clone(ctrl);
         let dash_w = dash.as_weak();
-        move || {
+        move |skipped: bool| {
             let mut c = ctrl_w.borrow_mut();
             c.stop_mic_test();
-            let (model_size, model_dir, show_tour) = {
+            let (model_size, model_dir, show_tour, language, volume_duck) = {
                 let mut s = c.settings.lock().unwrap_or_else(|e| e.into_inner());
                 s.onboarding_done = true;
-                (s.model_size.clone(), s.resolve_model_dir(), !s.tour_done)
+                (
+                    s.model_size.clone(),
+                    s.resolve_model_dir(),
+                    !s.tour_done,
+                    s.language.clone(),
+                    s.volume_duck.clone(),
+                )
             };
             c.save_settings(false);
+            c.analytics.capture(
+                "onboarding_completed",
+                &[
+                    ("skipped", AnalyticsProp::from(skipped)),
+                    ("language", AnalyticsProp::from(language)),
+                    ("model", AnalyticsProp::from(model_size.as_str())),
+                    ("volume_duck", AnalyticsProp::from(volume_duck)),
+                    (
+                        "hardware_tier",
+                        AnalyticsProp::from(hardware_tier_tag(c.hw_specs)),
+                    ),
+                ],
+            );
             if let Some(d) = dash_w.upgrade() {
                 d.set_onboarding_active(false);
                 if show_tour {
@@ -2610,11 +2729,11 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     };
     {
         let finish_a = finish_onboarding.clone();
-        dash.on_onboarding_skip(finish_a);
+        dash.on_onboarding_skip(move || finish_a(true));
     }
     {
         let finish_b = finish_onboarding;
-        dash.on_onboarding_finish(finish_b);
+        dash.on_onboarding_finish(move || finish_b(false));
     }
 }
 
@@ -3200,6 +3319,7 @@ pub fn run_desktop_app(
         return ExitCode::from(1);
     }
 
+    let is_first_run = !paths.settings_path.exists();
     let mut settings = Settings::load_from_path(&paths.settings_path);
     if is_isolated {
         settings.onboarding_done = true;
@@ -3213,6 +3333,31 @@ pub fn run_desktop_app(
     let damt_platform = Arc::new(build_damt_platform(is_isolated, &error_log));
     let (hw_specs, gpu_name) = detect_hardware_specs(platform.as_ref());
     let hw_class = hw_specs.hardware_class();
+    if is_first_run {
+        settings.apply_first_run_hardware_defaults(hw_specs);
+    }
+    let analytics = build_analytics_client(&settings, is_isolated);
+    analytics.capture(
+        "app_started",
+        &[
+            (
+                "hardware_tier",
+                AnalyticsProp::from(hardware_tier_tag(hw_specs)),
+            ),
+            (
+                "engine_backend",
+                AnalyticsProp::from(settings.engine_backend.as_str()),
+            ),
+            (
+                "delivery_mode",
+                AnalyticsProp::from(settings.delivery_mode.as_str()),
+            ),
+            (
+                "overlay_show_text",
+                AnalyticsProp::from(settings.overlay_show_text),
+            ),
+        ],
+    );
 
     let is_dark = resolve_theme_is_dark(
         &settings.theme,
@@ -3434,6 +3579,7 @@ pub fn run_desktop_app(
         history: TranscriptHistory::with_default_cap(&paths.history_path),
         settings: Arc::clone(&settings_arc),
         hw_specs,
+        analytics: analytics.clone(),
     });
 
     let coordinator = DictationCoordinator::new(
@@ -3523,6 +3669,7 @@ pub fn run_desktop_app(
         download_cancel: None,
         error_log: error_log.clone(),
         ui_sink,
+        analytics,
         #[cfg(feature = "store")]
         license_state: LicenseState::Unknown,
         #[cfg(feature = "store")]

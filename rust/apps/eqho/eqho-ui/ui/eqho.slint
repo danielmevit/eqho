@@ -144,6 +144,8 @@ export component DashboardWindow inherits Window {
     in-out property <int> volume-duck-index: 0;
     in-out property <int> history-trash-days-index: 2;
     in-out property <bool> start-with-windows: false;
+    in property <string> autostart-label: "Start at login";
+    in-out property <bool> analytics-enabled: false;
     in-out property <bool> overlay-enabled: true;
     in-out property <bool> overlay-show-text: true;
     in-out property <bool> overlay-show-level: true;
@@ -155,7 +157,7 @@ export component DashboardWindow inherits Window {
     in-out property <int> overlay-see-through-pct: 5;
     in-out property <int> overlay-panel-see-through-pct: 22;
     in-out property <int> overlay-font-size: 14;
-    in property <string> app-version: "0.9.4";
+    in property <string> app-version: "0.9.5";
     in-out property <string> active-engine-display: "whisper.cpp 1.8.4";
     in-out property <string> active-driver-display: "Vulkan";
 
@@ -169,6 +171,7 @@ export component DashboardWindow inherits Window {
     callback history-trash-days-selected(int);
     callback open-trash();
     callback start-with-windows-toggled(bool);
+    callback analytics-enabled-toggled(bool);
     callback overlay-enabled-toggled(bool);
     callback overlay-show-text-toggled(bool);
     callback overlay-show-level-toggled(bool);
@@ -258,6 +261,7 @@ export component DashboardWindow inherits Window {
         bg-download-pct <=> root.bg-download-pct;
         bg-download-detail <=> root.bg-download-detail;
         duck-mute <=> root.onboarding-duck-mute;
+        analytics-enabled <=> root.analytics-enabled;
         try-hint <=> root.onboarding-try-hint;
         try-text <=> root.onboarding-try-text;
 
@@ -272,6 +276,7 @@ export component DashboardWindow inherits Window {
         open-url(u) => { root.open-url(u); }
         copy-text(t) => { root.copy-text(t); }
         sound-chosen(m) => { root.onboarding-sound-chosen(m); }
+        analytics-enabled-toggled(v) => { root.analytics-enabled-toggled(v); }
         toggle-test-dictation => { root.onboarding-toggle-test(); }
         try-box-hotkey-pressed(c, a, s, m, t) => { root.onboarding-try-hotkey(c, a, s, m, t) }
         go-to-step(s) => { root.onboarding-go-to-step(s); }
@@ -445,6 +450,8 @@ export component DashboardWindow inherits Window {
         volume-duck-index <=> root.volume-duck-index;
         history-trash-days-index <=> root.history-trash-days-index;
         start-with-windows <=> root.start-with-windows;
+        autostart-label: root.autostart-label;
+        analytics-enabled <=> root.analytics-enabled;
         model-dir-display: root.model-dir-display;
         overlay-preview-active <=> root.overlay-preview-active;
         overlay-enabled <=> root.overlay-enabled;
@@ -482,6 +489,7 @@ export component DashboardWindow inherits Window {
         open-trash => { root.open-trash(); }
         open-model-folder => { root.open-model-folder(); }
         start-with-windows-toggled(b) => { root.start-with-windows-toggled(b); }
+        analytics-enabled-toggled(b) => { root.analytics-enabled-toggled(b); }
         overlay-enabled-toggled(b) => { root.overlay-enabled-toggled(b); }
         overlay-show-text-toggled(b) => { root.overlay-show-text-toggled(b); }
         overlay-show-level-toggled(b) => { root.overlay-show-level-toggled(b); }
