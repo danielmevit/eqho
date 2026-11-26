@@ -196,14 +196,39 @@ fn check_hardware_probes(platform: &dyn EqhoPlatform) -> SmokeCheck {
     }
 }
 
+fn dll_dir_has_whisper(dir: &std::path::Path) -> bool {
+    #[cfg(windows)]
+    const NAMES: &[&str] = &["whisper.dll"];
+    #[cfg(target_os = "macos")]
+    const NAMES: &[&str] = &["libwhisper.dylib", "libwhisper.1.dylib"];
+    #[cfg(all(unix, not(target_os = "macos")))]
+    const NAMES: &[&str] = &["libwhisper.so", "libwhisper.so.1"];
+    NAMES.iter().any(|n| dir.join(n).is_file())
+}
+
 fn check_live_model_host(cfg: &ModelHostConfig) -> SmokeCheck {
-    let model_dir = Settings::default().resolve_model_dir();
-    let model_path = whispercpp_model_path(&model_dir, "tiny");
-    if !cfg.dll_dir.exists() || !model_path.exists() {
+    if !cfg.dll_dir.exists() || !dll_dir_has_whisper(&cfg.dll_dir) {
         return SmokeCheck {
             name: "live_model_host".into(),
             ok: true,
-            detail: "skipped (dll_dir or cached tiny model absent)".into(),
+            detail: "skipped (whisper shared library absent)".into(),
+        };
+    }
+
+    let model_dir = Settings::default().resolve_model_dir();
+    let model_path = whispercpp_model_path(&model_dir, "tiny");
+    if !model_path.exists() {
+        return match eqho_host::whisper_ffi::WhisperEngine::probe_library(&cfg.dll_dir) {
+            Ok((ver, sys)) => SmokeCheck {
+                name: "live_model_host".into(),
+                ok: true,
+                detail: format!("library ok: whisper.cpp {ver} ({})", sys.trim()),
+            },
+            Err(err) => SmokeCheck {
+                name: "live_model_host".into(),
+                ok: false,
+                detail: format!("library load failed: {err}"),
+            },
         };
     }
 

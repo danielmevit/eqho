@@ -110,7 +110,7 @@ APPRUN
   chmod 755 "$APPDIR/AppRun"
   APPIMAGE_PATH="$OUT_DIR/${BUNDLE_NAME}.AppImage"
   rm -f "$APPIMAGE_PATH"
-  ARCH="$ARCH" appimagetool "$APPDIR" "$APPIMAGE_PATH"
+  APPIMAGE_EXTRACT_AND_RUN=1 ARCH="$ARCH" appimagetool "$APPDIR" "$APPIMAGE_PATH"
   rm -rf "$APPDIR"
   echo "[ok] AppImage: $APPIMAGE_PATH"
   ARTIFACTS+=("$APPIMAGE_PATH")

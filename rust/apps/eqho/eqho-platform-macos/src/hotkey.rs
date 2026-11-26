@@ -4,7 +4,7 @@
 //! never types a stray character into focused text fields (including Onboarding Step 6).
 
 use std::ffi::c_void;
-use std::ptr::null_mut;
+use std::ptr::{null, null_mut};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -225,7 +225,7 @@ impl HotkeyService for MacHotkeyService {
                         K_CG_EVENT_TAP_OPTION_DEFAULT,
                         mask,
                         event_tap_proc,
-                        (&mut *ctx as *mut TapContext).cast(),
+                        std::ptr::from_mut(&mut *ctx).cast(),
                     );
                     if tap.is_null() {
                         let _ = ready_tx.send(Err(PlatformError(
@@ -234,7 +234,7 @@ impl HotkeyService for MacHotkeyService {
                         return;
                     }
                     ctx.tap_port = tap;
-                    let src = CFMachPortCreateRunLoopSource(null_mut(), tap, 0);
+                    let src = CFMachPortCreateRunLoopSource(null(), tap, 0);
                     if src.is_null() {
                         CFRelease(tap.cast());
                         let _ = ready_tx.send(Err(PlatformError(

@@ -33,8 +33,10 @@ impl MicPrivacyProbe for MacMicPrivacyProbe {
             }
             type MsgStr = unsafe extern "C" fn(*mut c_void, *mut c_void, *const c_char) -> *mut c_void;
             type MsgAuth = unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> isize;
-            let send_str: MsgStr = std::mem::transmute(objc_msgSend as *const ());
-            let send_auth: MsgAuth = std::mem::transmute(objc_msgSend as *const ());
+            let send_str: MsgStr =
+                std::mem::transmute::<*const (), MsgStr>(objc_msgSend as *const ());
+            let send_auth: MsgAuth =
+                std::mem::transmute::<*const (), MsgAuth>(objc_msgSend as *const ());
 
             // `AVMediaTypeAudio` constant string value is `"soun"`.
             let media_audio = send_str(

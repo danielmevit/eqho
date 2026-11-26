@@ -30,8 +30,10 @@ impl FocusTracker for MacFocusTracker {
             }
             type MsgPtr = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void;
             type MsgPid = unsafe extern "C" fn(*mut c_void, *mut c_void) -> c_int;
-            let send_ptr: MsgPtr = std::mem::transmute(objc_msgSend as *const ());
-            let send_pid: MsgPid = std::mem::transmute(objc_msgSend as *const ());
+            let send_ptr: MsgPtr =
+                std::mem::transmute::<*const (), MsgPtr>(objc_msgSend as *const ());
+            let send_pid: MsgPid =
+                std::mem::transmute::<*const (), MsgPid>(objc_msgSend as *const ());
 
             let ws = send_ptr(ws_cls, sel_registerName(c"sharedWorkspace".as_ptr()));
             if ws.is_null() {
@@ -66,8 +68,10 @@ impl FocusTracker for MacFocusTracker {
             }
             type MsgByPid = unsafe extern "C" fn(*mut c_void, *mut c_void, c_int) -> *mut c_void;
             type MsgActivate = unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> u8;
-            let send_pid: MsgByPid = std::mem::transmute(objc_msgSend as *const ());
-            let send_act: MsgActivate = std::mem::transmute(objc_msgSend as *const ());
+            let send_pid: MsgByPid =
+                std::mem::transmute::<*const (), MsgByPid>(objc_msgSend as *const ());
+            let send_act: MsgActivate =
+                std::mem::transmute::<*const (), MsgActivate>(objc_msgSend as *const ());
 
             let app = send_pid(
                 cls,
@@ -103,9 +107,12 @@ impl FocusTracker for MacFocusTracker {
             type MsgByPid = unsafe extern "C" fn(*mut c_void, *mut c_void, c_int) -> *mut c_void;
             type MsgPtr = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void;
             type MsgCstr = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *const c_char;
-            let send_pid: MsgByPid = std::mem::transmute(objc_msgSend as *const ());
-            let send_ptr: MsgPtr = std::mem::transmute(objc_msgSend as *const ());
-            let send_cstr: MsgCstr = std::mem::transmute(objc_msgSend as *const ());
+            let send_pid: MsgByPid =
+                std::mem::transmute::<*const (), MsgByPid>(objc_msgSend as *const ());
+            let send_ptr: MsgPtr =
+                std::mem::transmute::<*const (), MsgPtr>(objc_msgSend as *const ());
+            let send_cstr: MsgCstr =
+                std::mem::transmute::<*const (), MsgCstr>(objc_msgSend as *const ());
 
             let app = send_pid(
                 cls,

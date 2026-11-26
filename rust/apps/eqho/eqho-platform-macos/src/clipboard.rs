@@ -24,7 +24,8 @@ impl MacClipboardService {
         unsafe {
             let cls = objc_getClass(c"NSString".as_ptr());
             type MsgStr = unsafe extern "C" fn(*mut c_void, *mut c_void, *const c_char) -> *mut c_void;
-            let send: MsgStr = std::mem::transmute(objc_msgSend as *const ());
+            let send: MsgStr =
+                std::mem::transmute::<*const (), MsgStr>(objc_msgSend as *const ());
             send(cls, sel_registerName(c"stringWithUTF8String:".as_ptr()), s.as_ptr())
         }
     }
@@ -41,9 +42,10 @@ impl ClipboardService for MacClipboardService {
             type Msg0 = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void;
             type Msg1 = unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> *mut c_void;
             type MsgCstr = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *const c_char;
-            let send0: Msg0 = std::mem::transmute(objc_msgSend as *const ());
-            let send1: Msg1 = std::mem::transmute(objc_msgSend as *const ());
-            let send_cstr: MsgCstr = std::mem::transmute(objc_msgSend as *const ());
+            let send0: Msg0 = std::mem::transmute::<*const (), Msg0>(objc_msgSend as *const ());
+            let send1: Msg1 = std::mem::transmute::<*const (), Msg1>(objc_msgSend as *const ());
+            let send_cstr: MsgCstr =
+                std::mem::transmute::<*const (), MsgCstr>(objc_msgSend as *const ());
 
             let pb = send0(pb_cls, sel_registerName(c"generalPasteboard".as_ptr()));
             if pb.is_null() {
@@ -77,9 +79,11 @@ impl ClipboardService for MacClipboardService {
             type MsgSet2 =
                 unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void) -> u8;
 
-            let send0: Msg0 = std::mem::transmute(objc_msgSend as *const ());
-            let send_clear: MsgClear = std::mem::transmute(objc_msgSend as *const ());
-            let send_set2: MsgSet2 = std::mem::transmute(objc_msgSend as *const ());
+            let send0: Msg0 = std::mem::transmute::<*const (), Msg0>(objc_msgSend as *const ());
+            let send_clear: MsgClear =
+                std::mem::transmute::<*const (), MsgClear>(objc_msgSend as *const ());
+            let send_set2: MsgSet2 =
+                std::mem::transmute::<*const (), MsgSet2>(objc_msgSend as *const ());
 
             let pb = send0(pb_cls, sel_registerName(c"generalPasteboard".as_ptr()));
             if pb.is_null() {

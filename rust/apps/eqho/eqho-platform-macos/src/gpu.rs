@@ -92,10 +92,14 @@ impl MacGpuProbe {
             type MsgRetCstr = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *const c_char;
             type MsgVoid = unsafe extern "C" fn(*mut c_void, *mut c_void);
 
-            let send_ptr: MsgRetPtr = std::mem::transmute(objc_msgSend as *const ());
-            let send_u64: MsgRetU64 = std::mem::transmute(objc_msgSend as *const ());
-            let send_cstr: MsgRetCstr = std::mem::transmute(objc_msgSend as *const ());
-            let send_void: MsgVoid = std::mem::transmute(objc_msgSend as *const ());
+            let send_ptr: MsgRetPtr =
+                std::mem::transmute::<*const (), MsgRetPtr>(objc_msgSend as *const ());
+            let send_u64: MsgRetU64 =
+                std::mem::transmute::<*const (), MsgRetU64>(objc_msgSend as *const ());
+            let send_cstr: MsgRetCstr =
+                std::mem::transmute::<*const (), MsgRetCstr>(objc_msgSend as *const ());
+            let send_void: MsgVoid =
+                std::mem::transmute::<*const (), MsgVoid>(objc_msgSend as *const ());
 
             let name_obj = send_ptr(dev, sel_registerName(c"name".as_ptr()));
             let name = if !name_obj.is_null() {

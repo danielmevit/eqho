@@ -186,14 +186,21 @@ unsafe extern "C" fn apply_frame_on_main_thread(ctx: *mut c_void) {
             unsafe extern "C" fn(*mut c_void, *mut c_void, NSRect, usize, usize, u8) -> *mut c_void;
         type MsgSetFrame = unsafe extern "C" fn(*mut c_void, *mut c_void, NSRect, u8);
 
-        let send0: Msg0 = std::mem::transmute(objc_msgSend as *const ());
-        let send_void: MsgVoid = std::mem::transmute(objc_msgSend as *const ());
-        let send_bool: MsgSetBool = std::mem::transmute(objc_msgSend as *const ());
-        let send_isize: MsgSetIsize = std::mem::transmute(objc_msgSend as *const ());
-        let send_usize: MsgSetUsize = std::mem::transmute(objc_msgSend as *const ());
-        let send_ptr: MsgSetPtr = std::mem::transmute(objc_msgSend as *const ());
-        let send_init: MsgInitPanel = std::mem::transmute(objc_msgSend as *const ());
-        let send_frame: MsgSetFrame = std::mem::transmute(objc_msgSend as *const ());
+        let send0: Msg0 = std::mem::transmute::<*const (), Msg0>(objc_msgSend as *const ());
+        let send_void: MsgVoid =
+            std::mem::transmute::<*const (), MsgVoid>(objc_msgSend as *const ());
+        let send_bool: MsgSetBool =
+            std::mem::transmute::<*const (), MsgSetBool>(objc_msgSend as *const ());
+        let send_isize: MsgSetIsize =
+            std::mem::transmute::<*const (), MsgSetIsize>(objc_msgSend as *const ());
+        let send_usize: MsgSetUsize =
+            std::mem::transmute::<*const (), MsgSetUsize>(objc_msgSend as *const ());
+        let send_ptr: MsgSetPtr =
+            std::mem::transmute::<*const (), MsgSetPtr>(objc_msgSend as *const ());
+        let send_init: MsgInitPanel =
+            std::mem::transmute::<*const (), MsgInitPanel>(objc_msgSend as *const ());
+        let send_frame: MsgSetFrame =
+            std::mem::transmute::<*const (), MsgSetFrame>(objc_msgSend as *const ());
 
         let mut panel = frame.panel_slot.load(Ordering::Acquire) as *mut c_void;
 

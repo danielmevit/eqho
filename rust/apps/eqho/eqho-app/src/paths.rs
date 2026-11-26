@@ -45,7 +45,7 @@ fn dir_has_whisper_lib(dir: &Path) -> bool {
     #[cfg(target_os = "macos")]
     const NAMES: &[&str] = &["libwhisper.dylib", "libwhisper.1.dylib"];
     #[cfg(all(unix, not(target_os = "macos")))]
-    const NAMES: &[&str] = &["libwhisper.so", "libwhisper.so.1", "whisper.dll"];
+    const NAMES: &[&str] = &["libwhisper.so", "libwhisper.so.1"];
     NAMES.iter().any(|n| dir.join(n).is_file())
 }
 
@@ -122,13 +122,20 @@ mod tests {
 
     #[test]
     fn dll_dir_priority_order() {
+        #[cfg(windows)]
+        const LIB_NAME: &str = "whisper.dll";
+        #[cfg(target_os = "macos")]
+        const LIB_NAME: &str = "libwhisper.dylib";
+        #[cfg(all(unix, not(target_os = "macos")))]
+        const LIB_NAME: &str = "libwhisper.so";
+
         let root = make_temp_dir("dll");
-        let exe_path = root.join("Eqho.exe");
+        let exe_path = root.join("Eqho");
         let cli_dir = root.join("cli_dlls");
         let env_dir = root.join("env_dlls");
         let sub_dlls = root.join("dlls");
         fs::create_dir_all(&sub_dlls).unwrap();
-        fs::write(sub_dlls.join("whisper.dll"), b"stub").unwrap();
+        fs::write(sub_dlls.join(LIB_NAME), b"stub").unwrap();
 
         // 1. CLI override wins over everything.
         assert_eq!(
@@ -146,14 +153,14 @@ mod tests {
             env_dir
         );
 
-        // 3. <exe_dir>/dlls wins when whisper.dll exists there.
+        // 3. <exe_dir>/dlls wins when the platform whisper shared library exists there.
         assert_eq!(
             resolve_dll_dir_with_env(None, Some("   "), &exe_path),
             sub_dlls
         );
 
-        // 4. <exe_dir> fallback when <exe_dir>/dlls/whisper.dll is absent.
-        fs::remove_file(sub_dlls.join("whisper.dll")).unwrap();
+        // 4. <exe_dir> fallback when <exe_dir>/dlls/<lib> is absent.
+        fs::remove_file(sub_dlls.join(LIB_NAME)).unwrap();
         assert_eq!(resolve_dll_dir_with_env(None, None, &exe_path), root);
 
         let _ = fs::remove_dir_all(&root);

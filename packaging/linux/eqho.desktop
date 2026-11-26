@@ -6,6 +6,6 @@ Comment=Calm, 100% offline local voice-to-text dictation
 Exec=Eqho --open-dashboard
 Icon=eqho
 Terminal=false
-Categories=Utility;Audio;Accessibility;
+Categories=Utility;Accessibility;
 StartupWMClass=Eqho
 Keywords=dictation;voice;speech;whisper;offline;

@@ -504,6 +504,17 @@ impl Drop for WhisperEngine {
 }
 
 impl WhisperEngine {
+    /// Probe the co-located `whisper.cpp` shared library and GGML dynamic backends without
+    /// loading a `.bin` model file, returning `(whisper_version, system_info)`.
+    pub fn probe_library(dll_dir: &Path) -> Result<(String, String), HostError> {
+        let api = WhisperApi::load(dll_dir)?;
+        // SAFETY: `whisper_version` and `whisper_print_system_info` take no arguments and return static C strings.
+        let version = unsafe { cstr_to_string((api.whisper_version)()) };
+        // SAFETY: See above.
+        let system_info = unsafe { cstr_to_string((api.whisper_print_system_info)()) };
+        Ok((version, system_info))
+    }
+
     /// Load `whisper.dll` / `libwhisper.so`, initialize the model from `model_path`,
     /// and run a 0.5 s silence warm-up inference.
     pub fn load(dll_dir: &Path, model_path: &Path, use_gpu: bool) -> Result<Self, HostError> {
