@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 use eqho_platform::{GpuAdapter, GpuProbe};
 use libloading::Library;
 
-use crate::pure::is_software_vulkan_device;
+use crate::pure::{is_software_vulkan_device, vulkan_dedicated_vram_bytes};
 
 static VULKAN_LIB: OnceLock<Option<Library>> = OnceLock::new();
 
@@ -161,10 +161,11 @@ impl GpuProbe for LinuxGpuProbe {
                             .map(|h| h.size)
                             .max()
                             .unwrap_or(0);
+                        let dedicated_vram = vulkan_dedicated_vram_bytes(props.device_type, vram);
                         adapters.push(GpuAdapter {
                             name,
                             vendor_id: props.vendor_id,
-                            dedicated_video_memory_bytes: vram,
+                            dedicated_video_memory_bytes: dedicated_vram,
                         });
                     }
                 }

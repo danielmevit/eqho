@@ -11,10 +11,12 @@ pub mod pure;
 
 pub use pure::{
     LinuxHotkeyModifiers, ParsedLinuxHotkey, add_gsettings_keybinding_path,
-    build_gnome_toggle_command, format_gsettings_string, format_gsettings_string_array,
-    hotkey_to_gtk_accelerator, is_monitor_source, is_software_vulkan_device, is_wayland_session,
+    build_gnome_toggle_command, char_to_xkb_keysym, dbus_unique_name_to_portal_sender,
+    format_gsettings_string, format_gsettings_string_array, hotkey_to_gtk_accelerator,
+    is_monitor_source, is_software_vulkan_device, is_wayland_session,
     parse_gsettings_string_array, parse_hotkey_combo, parse_pactl_sources, parse_pactl_volume,
     parse_proc_meminfo_available_mb, parse_wpctl_volume, remove_gsettings_keybinding_path,
+    vulkan_dedicated_vram_bytes,
 };
 
 #[cfg(target_os = "linux")]
@@ -33,6 +35,8 @@ mod injector;
 mod memory;
 #[cfg(target_os = "linux")]
 mod mic_privacy;
+#[cfg(target_os = "linux")]
+mod portal_input;
 #[cfg(target_os = "linux")]
 mod volume;
 #[cfg(target_os = "linux")]

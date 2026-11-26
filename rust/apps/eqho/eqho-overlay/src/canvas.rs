@@ -389,6 +389,77 @@ impl PremulCanvas {
             }
         }
     }
+
+    /// Resample this premultiplied-BGRA canvas into `dst` (`dst_w × dst_h`) using bilinear
+    /// interpolation, scaling all channels by `alpha_mul` (`0.0..=1.0`).
+    ///
+    /// Used on Linux HiDPI displays so logical 1× vector shapes/icons/flags scale smoothly to
+    /// physical X11 pixels before crisp native-DPI Pango/Cairo text is composited on top.
+    #[cfg_attr(windows, allow(dead_code))]
+    pub(crate) fn resample_into(&self, dst: &mut PremulCanvas, dst_w: u32, dst_h: u32, alpha_mul: f32) {
+        let dw = dst_w.max(1);
+        let dh = dst_h.max(1);
+        dst.reset(dw, dh);
+        if self.width == 0 || self.height == 0 {
+            return;
+        }
+        let mul = alpha_mul.clamp(0.0, 1.0);
+        if self.width == dw && self.height == dh {
+            if (mul - 1.0).abs() < 1e-4 {
+                dst.pixels.copy_from_slice(&self.pixels);
+            } else {
+                for (s, d) in self.pixels.iter().zip(dst.pixels.iter_mut()) {
+                    *d = (f32::from(*s) * mul).round().clamp(0.0, 255.0) as u8;
+                }
+            }
+            return;
+        }
+
+        let sw = self.width as i32;
+        let sh = self.height as i32;
+        let scale_x = (self.width as f32) / (dw as f32);
+        let scale_y = (self.height as f32) / (dh as f32);
+
+        for dy in 0..dh {
+            let fy = ((dy as f32) + 0.5) * scale_y - 0.5;
+            let y0 = (fy.floor() as i32).clamp(0, sh - 1);
+            let y1 = (y0 + 1).clamp(0, sh - 1);
+            let ty = (fy - (y0 as f32)).clamp(0.0, 1.0);
+            let wy0 = 1.0 - ty;
+            let wy1 = ty;
+            let row0 = (y0 as usize) * (self.width as usize) * 4;
+            let row1 = (y1 as usize) * (self.width as usize) * 4;
+            let dst_row = (dy as usize) * (dw as usize) * 4;
+
+            for dx in 0..dw {
+                let fx = ((dx as f32) + 0.5) * scale_x - 0.5;
+                let x0 = (fx.floor() as i32).clamp(0, sw - 1);
+                let x1 = (x0 + 1).clamp(0, sw - 1);
+                let tx = (fx - (x0 as f32)).clamp(0.0, 1.0);
+                let wx0 = 1.0 - tx;
+                let wx1 = tx;
+
+                let w00 = wx0 * wy0 * mul;
+                let w10 = wx1 * wy0 * mul;
+                let w01 = wx0 * wy1 * mul;
+                let w11 = wx1 * wy1 * mul;
+
+                let i00 = row0 + (x0 as usize) * 4;
+                let i10 = row0 + (x1 as usize) * 4;
+                let i01 = row1 + (x0 as usize) * 4;
+                let i11 = row1 + (x1 as usize) * 4;
+                let di = dst_row + (dx as usize) * 4;
+
+                for c in 0..4 {
+                    let v = f32::from(self.pixels[i00 + c]) * w00
+                        + f32::from(self.pixels[i10 + c]) * w10
+                        + f32::from(self.pixels[i01 + c]) * w01
+                        + f32::from(self.pixels[i11 + c]) * w11;
+                    dst.pixels[di + c] = v.round().clamp(0.0, 255.0) as u8;
+                }
+            }
+        }
+    }
 }
 
 /// Signed distance to an axis-aligned rounded rectangle centered at `(0, 0)`.
@@ -473,5 +544,20 @@ mod tests {
         assert_eq!(solid_alpha, 255);
         assert!(mid_fade_alpha < solid_alpha && mid_fade_alpha > right_edge_alpha);
         assert!(right_edge_alpha < 30);
+    }
+
+    #[test]
+    fn canvas_resample_scales_and_modulates_alpha() {
+        let mut src = PremulCanvas::new(10, 10);
+        src.fill_rect(LocalRect::new(0, 0, 10, 10), Rgba::rgb(200, 100, 50));
+        let mut dst = PremulCanvas::new(1, 1);
+        src.resample_into(&mut dst, 20, 20, 0.5);
+        assert_eq!((dst.width, dst.height), (20, 20));
+        let mid = (10 * 20 + 10) * 4;
+        // Premultiplied BGRA scaled by 0.5 -> [25, 50, 100, 128]
+        assert!((i32::from(dst.pixels[mid]) - 25).abs() <= 1);
+        assert!((i32::from(dst.pixels[mid + 1]) - 50).abs() <= 1);
+        assert!((i32::from(dst.pixels[mid + 2]) - 100).abs() <= 1);
+        assert!((i32::from(dst.pixels[mid + 3]) - 128).abs() <= 1);
     }
 }

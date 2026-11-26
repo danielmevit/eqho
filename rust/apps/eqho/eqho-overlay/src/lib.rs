@@ -3,7 +3,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 #![warn(missing_debug_implementations)]
 
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(not(any(windows, target_os = "linux")), allow(dead_code))]
 mod canvas;
 #[cfg(target_os = "linux")]
 mod linux;
@@ -132,7 +132,11 @@ impl OverlayHandle {
         {
             let visibility = UnderbarVisibility::new(config.controls_enabled, config.controls_pinned);
             #[cfg(target_os = "linux")]
-            let linux_client = linux::LinuxOverlayClient::start(config.clone());
+            let linux_client = linux::LinuxOverlayClient::start(
+                config.clone(),
+                on_action.clone(),
+                flag_provider.clone(),
+            );
             #[cfg(target_os = "macos")]
             let macos_client = macos::MacOverlayClient::start(config.clone());
             Self {
@@ -171,7 +175,7 @@ impl OverlayHandle {
         if let Ok(guard) = self.linux_client.lock()
             && let Some(client) = guard.as_ref()
         {
-            client.send(linux::LinuxOverlayCmd::Show);
+            client.send(linux::LinuxOverlayCmd::Show(text.to_owned()));
         }
         #[cfg(target_os = "macos")]
         if let Ok(guard) = self.macos_client.lock()
@@ -206,6 +210,12 @@ impl OverlayHandle {
             && let Some(client) = guard.as_ref()
         {
             client.send(win::OverlayCmd::UpdateText(text.to_owned()));
+        }
+        #[cfg(target_os = "linux")]
+        if let Ok(guard) = self.linux_client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(linux::LinuxOverlayCmd::UpdateText(text.to_owned()));
         }
         #[cfg(not(windows))]
         if let Ok(mut guard) = self.state.lock() {
@@ -278,6 +288,12 @@ impl OverlayHandle {
         {
             client.send(win::OverlayCmd::SetFinishing(finishing));
         }
+        #[cfg(target_os = "linux")]
+        if let Ok(guard) = self.linux_client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(linux::LinuxOverlayCmd::SetFinishing(finishing));
+        }
         #[cfg(not(windows))]
         if let Ok(mut guard) = self.state.lock() {
             guard.finishing = finishing;
@@ -311,6 +327,17 @@ impl OverlayHandle {
                 delivery_mode: mode,
                 pinned,
                 recent_languages: recents,
+            });
+        }
+        #[cfg(target_os = "linux")]
+        if let Ok(guard) = self.linux_client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(linux::LinuxOverlayCmd::UpdateSessionMeta {
+                language: lang.clone(),
+                delivery_mode: mode.clone(),
+                pinned,
+                recent_languages: recents.clone(),
             });
         }
         #[cfg(not(windows))]
@@ -370,7 +397,13 @@ impl OverlayHandle {
         {
             client.send(win::OverlayCmd::ShowRecovery(text.to_owned()));
         }
-        #[cfg(not(windows))]
+        #[cfg(target_os = "linux")]
+        if let Ok(guard) = self.linux_client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(linux::LinuxOverlayCmd::ShowRecovery(text.to_owned()));
+        }
+        #[cfg(not(any(windows, target_os = "linux")))]
         let _ = text;
     }
 
@@ -381,6 +414,12 @@ impl OverlayHandle {
             && let Some(client) = guard.as_ref()
         {
             client.send(win::OverlayCmd::HideRecovery);
+        }
+        #[cfg(target_os = "linux")]
+        if let Ok(guard) = self.linux_client.lock()
+            && let Some(client) = guard.as_ref()
+        {
+            client.send(linux::LinuxOverlayCmd::HideRecovery);
         }
     }
 

@@ -418,6 +418,44 @@ pub fn is_software_vulkan_device(device_type: u32, name: &str) -> bool {
         || lower.contains("softpipe")
 }
 
+/// Convert a Vulkan physical device's largest `DEVICE_LOCAL` heap size into dedicated VRAM bytes.
+///
+/// Only discrete GPUs (`VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU == 2`) have dedicated VRAM.
+/// Integrated UMA GPUs (`VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU == 1`, e.g. Intel UHD / Iris)
+/// expose a large slice of shared system RAM as `DEVICE_LOCAL`; reporting that as dedicated VRAM
+/// would misclassify laptop iGPUs as discrete GPUs and recommend heavy `large` Whisper models.
+#[must_use]
+pub const fn vulkan_dedicated_vram_bytes(device_type: u32, device_local_heap_bytes: u64) -> u64 {
+    if device_type == 2 {
+        device_local_heap_bytes
+    } else {
+        0
+    }
+}
+
+/// Convert a D-Bus unique bus name (e.g. `":1.652"`) into the portal request path sender segment
+/// (`"1_652"`) per the XDG Desktop Portal specification.
+#[must_use]
+pub fn dbus_unique_name_to_portal_sender(unique_name: &str) -> String {
+    unique_name
+        .trim()
+        .trim_start_matches(':')
+        .replace('.', "_")
+}
+
+/// Convert a Unicode scalar into an X11/XKB keysym suitable for `RemoteDesktop.NotifyKeyboardKeysym`.
+#[must_use]
+pub const fn char_to_xkb_keysym(ch: char) -> Option<i32> {
+    match ch {
+        '\n' | '\r' => Some(0xFF0D), // XK_Return
+        '\t' => Some(0xFF09),        // XK_Tab
+        '\u{0020}'..='\u{007E}' => Some(ch as i32),
+        c if (c as u32) >= 0x00A0 && (c as u32) <= 0x00FF => Some(c as i32),
+        c if (c as u32) >= 0x0100 => Some((0x0100_0000_u32 | (c as u32)) as i32),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -531,8 +569,20 @@ Source #1
         assert!(is_software_vulkan_device(4, "llvmpipe (LLVM 17)"));
         assert!(is_software_vulkan_device(0, "SwiftShader Device"));
         assert!(!is_software_vulkan_device(2, "NVIDIA GeForce RTX 3060"));
+        assert_eq!(
+            vulkan_dedicated_vram_bytes(2, 12 * 1024 * 1024 * 1024),
+            12 * 1024 * 1024 * 1024
+        );
+        // Integrated UMA GPU (e.g. Intel UHD 620 reporting 23 GiB shared RAM) has 0 dedicated VRAM.
+        assert_eq!(vulkan_dedicated_vram_bytes(1, 23 * 1024 * 1024 * 1024), 0);
+        assert_eq!(vulkan_dedicated_vram_bytes(4, 31 * 1024 * 1024 * 1024), 0);
         assert!(is_wayland_session(Some("wayland-0"), None));
         assert!(is_wayland_session(None, Some("wayland")));
         assert!(!is_wayland_session(None, Some("x11")));
+        assert_eq!(dbus_unique_name_to_portal_sender(":1.652"), "1_652");
+        assert_eq!(char_to_xkb_keysym('A'), Some(0x41));
+        assert_eq!(char_to_xkb_keysym('\n'), Some(0xFF0D));
+        assert_eq!(char_to_xkb_keysym('€'), Some(0x0100_20AC));
+        assert_eq!(char_to_xkb_keysym('\x07'), None);
     }
 }

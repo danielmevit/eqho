@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use eqho_platform::{InputInjector, ModifierKey, PlatformError};
 
+use crate::portal_input::{self, PortalOutcome};
 use crate::pure::is_wayland_session;
 use crate::x11_ffi::{CURRENT_TIME, X11Api};
 
@@ -120,6 +121,12 @@ impl LinuxInputInjector {
 
 impl InputInjector for LinuxInputInjector {
     fn held_modifiers(&self) -> Option<Vec<ModifierKey>> {
+        if Self::is_wayland() {
+            // XWayland `XQueryKeymap` does not reliably track key state for native Wayland
+            // windows, and releasing modifiers via XTest would trigger an un-persisted XWayland
+            // Remote Interaction prompt.
+            return None;
+        }
         let api = X11Api::load()?;
         // SAFETY: Queries the live 32-byte X11 keymap bitmask.
         unsafe {
@@ -154,7 +161,7 @@ impl InputInjector for LinuxInputInjector {
     }
 
     fn release_modifiers(&self, mods: &[ModifierKey]) -> Result<(), PlatformError> {
-        if mods.is_empty() {
+        if mods.is_empty() || Self::is_wayland() {
             return Ok(());
         }
         let Some(api) = X11Api::load() else {
@@ -178,12 +185,20 @@ impl InputInjector for LinuxInputInjector {
 
     fn send_paste_shortcut(&self) -> Result<(), PlatformError> {
         if Self::is_wayland() {
+            // Let Mutter/compositor finish bridging the newly set X11 CLIPBOARD selection to
+            // Wayland `wl_data_device` before delivering Ctrl+V to the focused Wayland window.
+            thread::sleep(Duration::from_millis(35));
             if Self::run_ok("wtype", &["-M", "ctrl", "-k", "v", "-m", "ctrl"]) {
                 return Ok(());
             }
             // Linux evdev keycodes: KEY_LEFTCTRL=29, KEY_V=47.
             if Self::run_ok("ydotool", &["key", "29:1", "47:1", "47:0", "29:0"]) {
                 return Ok(());
+            }
+            match portal_input::send_paste_shortcut() {
+                PortalOutcome::Injected => return Ok(()),
+                PortalOutcome::Denied(msg) => return Err(PlatformError(msg)),
+                PortalOutcome::Unavailable => {}
             }
         }
         if let Some(api) = X11Api::load()
@@ -196,6 +211,8 @@ impl InputInjector for LinuxInputInjector {
                 if ctrl_kc != 0 && v_kc != 0 {
                     fake(dpy, u32::from(ctrl_kc), 1, CURRENT_TIME);
                     fake(dpy, u32::from(v_kc), 1, CURRENT_TIME);
+                    (api.flush)(dpy);
+                    thread::sleep(Duration::from_millis(15));
                     fake(dpy, u32::from(v_kc), 0, CURRENT_TIME);
                     fake(dpy, u32::from(ctrl_kc), 0, CURRENT_TIME);
                     (api.flush)(dpy);
@@ -227,6 +244,11 @@ impl InputInjector for LinuxInputInjector {
             }
             if Self::run_ok("ydotool", &["type", "--", text]) {
                 return Ok(());
+            }
+            match portal_input::type_unicode_text(text) {
+                PortalOutcome::Injected => return Ok(()),
+                PortalOutcome::Denied(msg) => return Err(PlatformError(msg)),
+                PortalOutcome::Unavailable => {}
             }
         }
         // Prefer xdotool for non-ASCII Unicode (handles arbitrary UTF-8 cleanly on X11).
@@ -302,6 +324,11 @@ impl InputInjector for LinuxInputInjector {
             }
             if Self::run_ok("wtype", &args) {
                 return Ok(());
+            }
+            match portal_input::send_backspaces(count) {
+                PortalOutcome::Injected => return Ok(()),
+                PortalOutcome::Denied(msg) => return Err(PlatformError(msg)),
+                PortalOutcome::Unavailable => {}
             }
         }
         if let Some(api) = X11Api::load()
