@@ -37,8 +37,8 @@ Do **not** commit Partner Center identity strings, Store IDs, or signing certifi
 | Category | **Productivity** |
 | Subcategory | (leave blank) |
 | Secondary category | **Utilities & tools** (optional) |
-| Privacy policy URL | `https://danielmevit.github.io/eqho/privacy/` |
-| Website | `https://danielmevit.github.io/eqho/` |
+| Privacy policy URL | `https://eqho.damt.xyz/privacy/` |
+| Website | `https://eqho.damt.xyz/` |
 | Support contact info | Use a support email address or `https://damt.xyz` — **do not** use a GitHub repository URL |
 
 **Product declarations (checkboxes):**

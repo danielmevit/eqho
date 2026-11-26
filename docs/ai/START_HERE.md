@@ -15,7 +15,7 @@ Eqho 0.9.0 is a **Rust 1.95 + Slint 1.19 (`renderer-software`) + `whisper.cpp 1.
   - `rust/apps/eqho/` — `eqho-core` (pure logic: settings, history, textproc, adaptive VAD, pillfx, modelpick/modelstore), `eqho-platform` + `eqho-platform-win` (WASAPI, COM volume, `WH_KEYBOARD_LL`, clipboard/injector, DXGI), `eqho-host` (`--model-host` child + WinHTTP GGML downloader), `eqho-engine` (coordinator), `eqho-overlay` (native Win32 layered pill, under-pill micro-bar, live text panel), `eqho-ui` (Slint 1.19 Dashboard & 6-step Onboarding), `eqho-app` (`Eqho.exe` binary + optional `--features store` 15-day trial licensing)
 - **Version:** `rust/Cargo.toml` (`[workspace.package] version`) for Rust 0.9.x (`src/version.py` for legacy Python reference). Stay in `0.x` (`0.9.x`); never release `1.0` without Daniel's explicit go.
 - **Repo:** `origin` = `github.com/danielmevit/eqho` (PUBLIC; `dev` = all work, `main` = releases). Merge `dev` → `main` ONLY on Daniel's explicit release request. If a push bounces after a GitHub web UI edit on `main`, `git pull origin main`, merge, NEVER force-push, then merge `main` back into `dev`.
-- **Landing page:** `site/` (Astro) → GitHub Pages at `danielmevit.github.io/eqho` via `.github/workflows/deploy.yml` (builds `./site` on every `main` push), plus `site/public/llms.txt`.
+- **Landing page:** `site/` (Astro) → GitHub Pages at `eqho.damt.xyz` via `.github/workflows/deploy.yml` (builds `./site` on every `main` push), plus `site/public/llms.txt`.
 
 ## Non-Negotiable Invariants
 
