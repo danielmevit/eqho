@@ -13,6 +13,9 @@ const body = `# Eqho
 - Previous version 0.8.10 for Linux and macOS: ${LEGACY_URL}
 - Support: support@damt.xyz
 - Author: Daniel Mevit (https://damt.xyz)
+- Development: built by damt.xyz with extensive use of generative AI tools (code, tests, documentation,
+  packaging and CI, website, store graphics and marketing copy, maintenance). At runtime Eqho calls no cloud AI:
+  speech recognition runs locally with whisper.cpp.
 
 ## Tech Stack (v${VERSION})
 * Language & UI: Rust 1.95 + Slint 1.19 (\`renderer-software\`) + native Win32 per-pixel alpha overlay (\`Eqho.exe\`, static CRT, ~3.4 MB idle RAM, ~38 ms startup)
