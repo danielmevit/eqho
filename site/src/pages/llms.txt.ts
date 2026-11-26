@@ -14,7 +14,8 @@ const body = `# Eqho
 - Support: support@damt.xyz
 - Author: Daniel Mevit (https://damt.xyz)
 - Development: built by damt.xyz with extensive use of generative AI tools (code, tests, documentation,
-  packaging and CI, design and visuals, website, store listing and marketing, maintenance). At runtime Eqho calls no cloud AI:
+  packaging and CI, website, store listing and marketing materials, maintenance), steered by a real person
+  who decides what is released. At runtime Eqho calls no cloud AI:
   speech recognition runs locally with whisper.cpp.
 
 ## Tech Stack (v${VERSION})
