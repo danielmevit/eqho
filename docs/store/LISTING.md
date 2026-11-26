@@ -100,7 +100,7 @@ voice to text · offline dictation · speech to text · voice typing · local wh
 - Eqho collects no personal data, sends no telemetry, and never uploads microphone audio or transcripts.
 - All speech recognition runs locally on the user's device.
 - Network requests occur only when the user explicitly downloads an offline Whisper GGML speech model (HTTPS from Hugging Face) or when Windows checks the Store trial/purchase licence via `Windows.Services.Store.StoreContext`.
-- Privacy Policy URL: `https://danielmevit.github.io/eqho/privacy/`
+- Privacy Policy URL: `https://eqho.damt.xyz/privacy/`
 
 ---
 

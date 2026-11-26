@@ -102,7 +102,7 @@ Settings persist to `settings.json` and history to `history.jsonl` in your confi
 
 ## Under the hood
 
-For the technically curious (the [website](https://danielmevit.github.io/eqho/) stays non-technical on purpose):
+For the technically curious (the [website](https://eqho.damt.xyz/) stays non-technical on purpose):
 
 - **Native Rust workspace (`rust/`):** Rust 1.95 (edition 2024) + **Slint 1.19** (`renderer-software` — zero idle GPU context, ~3.4 MB private RAM in tray, ~38 ms launch to tray ready) with `+crt-static` (PE-verified zero `VCRUNTIME140` / `MSVCP140` / `vcomp140` / `ucrtbase` runtime imports across `Eqho.exe` and all 13 bundled DLLs)
 - **Out-of-process model host (`Eqho.exe --model-host`):** runs **[whisper.cpp 1.8.4](https://github.com/ggml-org/whisper.cpp)** in an isolated child process over IPC, so engine/model switches cleanly release VRAM and native driver faults never take down the tray or UI
