@@ -53,6 +53,10 @@ jobs:
       - name: Build whisper.cpp v1.8.4 (Metal GPU + Accelerate + Dynamic CPU backends)
         run: |
           git clone --depth 1 --branch "$WHISPER_CPP_TAG" https://github.com/ggml-org/whisper.cpp.git "$RUNNER_TEMP/whisper.cpp"
+          EXTRA_CPU_FLAGS=()
+          if [[ "${{ matrix.arch }}" == "x64" ]]; then
+            EXTRA_CPU_FLAGS=(-DGGML_NATIVE=OFF -DGGML_CPU_ALL_VARIANTS=ON)
+          fi
           cmake -S "$RUNNER_TEMP/whisper.cpp" -B "$RUNNER_TEMP/whisper-build" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
@@ -61,13 +65,14 @@ jobs:
             -DGGML_BLAS=ON \
             -DGGML_OPENMP=OFF \
             -DGGML_BACKEND_DL=ON \
+            "${EXTRA_CPU_FLAGS[@]}" \
             -DCMAKE_INSTALL_RPATH='@loader_path' \
             -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
             -DWHISPER_BUILD_EXAMPLES=OFF \
             -DWHISPER_BUILD_TESTS=OFF
           cmake --build "$RUNNER_TEMP/whisper-build" --config Release
           mkdir -p "$RUNNER_TEMP/whisper-libs"
-          find "$RUNNER_TEMP/whisper-build" \( -name 'libwhisper*.dylib' -o -name 'libggml*.dylib' \) -exec cp -a {} "$RUNNER_TEMP/whisper-libs/" \;
+          find "$RUNNER_TEMP/whisper-build" \( -name 'libwhisper*.dylib' -o -name 'libggml*.dylib' -o -name 'libggml*.so' \) -exec cp -a {} "$RUNNER_TEMP/whisper-libs/" \;
           ls -lh "$RUNNER_TEMP/whisper-libs"
 
       - name: Build & package Eqho.app + DMG

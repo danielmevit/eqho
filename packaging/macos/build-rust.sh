@@ -64,10 +64,11 @@ cp "$ROOT/LICENSE" "$APP_BUNDLE/Contents/Resources/LICENSE.txt"
 cp "$ROOT/THIRD_PARTY_NOTICES.txt" "$APP_BUNDLE/Contents/Resources/THIRD_PARTY_NOTICES.txt"
 
 if [[ -n "$LIB_DIR" && -d "$LIB_DIR" ]]; then
-  find "$LIB_DIR" -maxdepth 2 \( -name 'libwhisper*.dylib' -o -name 'libggml*.dylib' \) -exec cp -a {} "$APP_BUNDLE/Contents/Frameworks/" \;
-  echo "[ok] Bundled $(ls "$APP_BUNDLE/Contents/Frameworks"/*.dylib | wc -l | tr -d ' ') whisper.cpp/ggml dylibs"
+  find "$LIB_DIR" -maxdepth 2 \( -name 'libwhisper*.dylib' -o -name 'libggml*.dylib' -o -name 'libggml*.so' \) -exec cp -a {} "$APP_BUNDLE/Contents/Frameworks/" \;
+  LIB_COUNT="$(find "$APP_BUNDLE/Contents/Frameworks" -maxdepth 1 \( -name '*.dylib' -o -name '*.so' \) | wc -l | tr -d ' ')"
+  echo "[ok] Bundled ${LIB_COUNT} whisper.cpp/ggml libraries (dylib + dynamic backend .so)"
 else
-  echo "error: --lib-dir with compiled libwhisper.dylib + libggml*.dylib (Metal) is required" >&2
+  echo "error: --lib-dir with compiled libwhisper.dylib + libggml* (Metal + Accelerate + CPU) is required" >&2
   exit 1
 fi
 
@@ -107,7 +108,13 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Ad-hoc sign so Apple Silicon executes cleanly without Gatekeeper invalid-signature kills.
+# Ad-hoc sign every bundled dynamic library/module first, then the app bundle,
+# so Apple Silicon executes cleanly without Gatekeeper invalid-signature kills.
+for lib in "$APP_BUNDLE/Contents/Frameworks"/*.dylib "$APP_BUNDLE/Contents/Frameworks"/*.so; do
+  if [[ -f "$lib" && ! -L "$lib" ]]; then
+    codesign --force --sign - "$lib"
+  fi
+done
 codesign --force --deep --sign - "$APP_BUNDLE"
 
 ISO_CFG="$(mktemp -d)"

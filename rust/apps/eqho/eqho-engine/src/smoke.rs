@@ -219,11 +219,25 @@ fn check_live_model_host(cfg: &ModelHostConfig) -> SmokeCheck {
     let model_path = whispercpp_model_path(&model_dir, "tiny");
     if !model_path.exists() {
         return match eqho_host::whisper_ffi::WhisperEngine::probe_library(&cfg.dll_dir) {
-            Ok((ver, sys)) => SmokeCheck {
-                name: "live_model_host".into(),
-                ok: true,
-                detail: format!("library ok: whisper.cpp {ver} ({})", sys.trim()),
-            },
+            Ok((ver, sys)) => {
+                let sys_trimmed = sys.trim();
+                let upper = sys_trimmed.to_ascii_uppercase();
+                let has_backend = upper.contains("CPU")
+                    || upper.contains("METAL")
+                    || upper.contains("BLAS")
+                    || upper.contains("VULKAN");
+                SmokeCheck {
+                    name: "live_model_host".into(),
+                    ok: has_backend,
+                    detail: if has_backend {
+                        format!("library ok: whisper.cpp {ver} ({sys_trimmed})")
+                    } else {
+                        format!(
+                            "library loaded whisper.cpp {ver} but zero GGML backends registered ({sys_trimmed})"
+                        )
+                    },
+                }
+            }
             Err(err) => SmokeCheck {
                 name: "live_model_host".into(),
                 ok: false,
