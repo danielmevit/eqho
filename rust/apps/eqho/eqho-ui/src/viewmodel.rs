@@ -604,6 +604,31 @@ pub fn format_active_engine_display(
     }
 }
 
+/// Concise hardware driver / backend line for `Settings -> About -> Driver`.
+#[must_use]
+pub fn format_active_driver_display(
+    engine_backend: &str,
+    hw: HardwareClass,
+    gpu_name: Option<&str>,
+    cpu_threads: u32,
+) -> String {
+    let pref = engine_backend.trim().to_ascii_lowercase();
+    let using_gpu = match pref.as_str() {
+        "cpu" => false,
+        "vulkan" | "gpu" => true,
+        _ => hw == HardwareClass::Gpu,
+    };
+    if using_gpu {
+        if let Some(name) = gpu_name.filter(|n| !n.trim().is_empty()) {
+            format!("Vulkan · {}", name.trim())
+        } else {
+            "Vulkan".to_owned()
+        }
+    } else {
+        format!("CPU · {cpu_threads} threads")
+    }
+}
+
 /// Dynamic window title showing the active model (and live listening indicator when dictating).
 pub fn dashboard_window_title(model_key: &str, is_dictating: bool) -> String {
     let model = model_short_name(model_key);

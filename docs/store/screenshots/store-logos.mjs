@@ -1,10 +1,11 @@
 // Renders Microsoft Partner Center Store logo assets for Eqho:
 //   - box-art-2160x2160.png, box-art-1080x1080.png (1:1 Box Art)
-//   - poster-art-1440x2160.png, poster-art-720x1080.png (9:16 Poster Art)
+//   - poster-art-1440x2160.png, poster-art-720x1080.png (9:16 Poster Art, featuring the real Eqho pill)
 //   - logo-mark-1080.png, app-tile-300x300.png, app-tile-150x150.png, app-tile-71x71.png
 //
 // Usage:
-//   NODE_PATH="/mnt/d/Vibe Coding/glitch-lab/node_modules" node docs/store/screenshots/store-logos.mjs --out <dir>
+//   NODE_PATH="/mnt/d/Vibe Coding/glitch-lab/node_modules" node docs/store/screenshots/store-logos.mjs \
+//     --caps <0.9.4-captures-dir> --out <dir>
 import { createRequire } from 'node:module';
 import { readFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
@@ -14,10 +15,16 @@ const require = createRequire(join(process.env.NODE_PATH?.split(':')[0] || proce
 const { chromium } = require('playwright');
 const here = dirname(fileURLToPath(import.meta.url));
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d; };
+const caps = resolve(arg('--caps', join(here, '../../../dist/captures')));
 const out = resolve(arg('--out', join(here, '../../../dist/store-assets/store-logos')));
 mkdirSync(out, { recursive: true });
 
 const markSvg = readFileSync(join(here, 'eqho-mark.svg'), 'utf8');
+const realPillPath = join(caps, 'pill_dark_real.png');
+const realPillHtml = existsSync(realPillPath)
+  ? `<img src="data:image/png;base64,${readFileSync(realPillPath).toString('base64')}" width="260" height="48" style="margin-top:38px;display:block;filter:drop-shadow(0 16px 32px rgba(4,10,24,0.58))" alt="Eqho listening pill" />`
+  : `<div class="pill-mini"></div>`;
+
 const brandBg = 'radial-gradient(900px 700px at 25% 22%, rgba(88,166,255,0.22), transparent 68%), linear-gradient(135deg, #1E54B5 0%, #1A489B 32%, #102B63 68%, #09152E 100%)';
 
 const tile = (px, shadow = '') => {
@@ -49,7 +56,7 @@ const jobs = [
   ['poster-art', 720, 1080, `<div class="c" style="background:${brandBg}">${tile(330, lift)}
     <div class="name" style="font-size:132px;margin-top:52px">Eqho</div>
     <div class="line" style="font-size:38px;margin-top:22px;max-width:520px">Speak anywhere.<br>100% offline on your PC.</div>
-    <div class="pill-mini"></div></div>`],
+    ${realPillHtml}</div>`],
 ];
 
 const browser = await chromium.launch({ args: ['--allow-file-access-from-files'] });

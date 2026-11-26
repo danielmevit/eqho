@@ -1179,9 +1179,15 @@ impl OverlayState {
     fn cmd_update_config(&mut self, cfg: OverlayConfig) {
         let was_enabled = self.config.enabled;
         let theme_changed = self.config.dark_theme != cfg.dark_theme;
+        let panel_opacity_changed = (self.config.panel_opacity - cfg.panel_opacity).abs() > 1e-3;
         self.config = cfg;
+        if theme_changed || panel_opacity_changed {
+            let panel_tint = ((self.config.panel_opacity as f32).clamp(0.3, 1.0) * 168.0)
+                .round()
+                .clamp(48.0, 168.0) as u8;
+            apply_acrylic_blur_behind(self.panel_hwnd, self.config.dark_theme, panel_tint);
+        }
         if theme_changed {
-            apply_acrylic_blur_behind(self.panel_hwnd, self.config.dark_theme, 0xA8);
             apply_acrylic_blur_behind(self.popup_hwnd, self.config.dark_theme, 0xB8);
             apply_acrylic_blur_behind(self.recovery_hwnd, self.config.dark_theme, 0xA8);
         }

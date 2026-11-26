@@ -28,10 +28,11 @@ use eqho_overlay::{
 };
 use eqho_platform::{AudioBackend, AudioDeviceInfo, AudioStreamHandle, ClipboardService, GpuProbe, MicPrivacyProbe};
 use eqho_ui::{
-    DashboardWindow, EqhoTray, Theme, apply_settings_to_window, blur_snapshot, build_history_rows,
+    DashboardWindow, EqhoTray, Theme, apply_settings_to_window, blur_snapshot,
+    blur_snapshot_strong, build_history_rows,
     build_history_rows_with_trash_meta, build_model_cards, build_onboarding_model_options,
     dashboard_window_title, delivery_mode_index, delivery_mode_key, engine_backend_key,
-    filter_history_entries, format_active_engine_display, history_trash_days_value,
+    filter_history_entries, format_active_driver_display, history_trash_days_value,
     language_code_for_index, language_index_for_code, language_warning_text, model_short_name,
     onboarding_model_copy_for_key, overlay_monitor_key, overlay_position_key,
     parse_paste_rules_text, parse_replacements_text, render_flag_rgba, split_model_cards,
@@ -39,7 +40,9 @@ use eqho_ui::{
 };
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use crate::assets::{LOGO_32, build_tray_icon_rgba, decode_png_rgba, rgba_to_slint_image};
+use crate::assets::{
+    LOGO_64_DARK, LOGO_64_WHITE, build_tray_icon_rgba, decode_png_rgba, rgba_to_slint_image,
+};
 use crate::license::{DemoLicense, demo_license_is_honoured};
 #[cfg(feature = "store")]
 use crate::license::{
@@ -191,6 +194,7 @@ struct UiSyncSnapshot {
 /// to the Slint UI thread.
 struct AppUiSink {
     overlay: Arc<OverlayHandle>,
+    overlay_preview_shown: Arc<AtomicBool>,
     damt_platform: Arc<DamtPlatformImpl>,
     error_log: ErrorLog,
     tray_weak: slint::Weak<EqhoTray>,
@@ -362,6 +366,7 @@ impl AppUiSink {
 
 impl UiEventSink for AppUiSink {
     fn show_overlay(&self, text: &str) {
+        self.overlay_preview_shown.store(false, Ordering::Release);
         self.overlay.set_finishing(false);
         self.overlay.show(text);
         self.set_step6_hint(text);
@@ -655,6 +660,9 @@ impl UiEventSink for AppUiSink {
     }
 }
 
+const OVERLAY_PREVIEW_TEXT: &str =
+    "Live preview — drag any slider to tune pill size, transparency, and text.";
+
 struct AppController {
     settings: Arc<Mutex<Settings>>,
     settings_path: PathBuf,
@@ -662,6 +670,8 @@ struct AppController {
     history: TranscriptHistory,
     coordinator: DictationCoordinator,
     overlay: Arc<OverlayHandle>,
+    overlay_preview_shown: Arc<AtomicBool>,
+    overlay_preview_timer: slint::Timer,
     platform: Arc<EqhoPlatformImpl>,
     damt_platform: Arc<DamtPlatformImpl>,
     hw_class: HardwareClass,
@@ -672,6 +682,7 @@ struct AppController {
     mic_devices: Vec<AudioDeviceInfo>,
     mic_test_stream: Option<Box<dyn AudioStreamHandle>>,
     hotkey_ok: bool,
+    is_isolated: bool,
     hotkey_capture_cancel: Option<Arc<AtomicBool>>,
     download_cancel: Option<Arc<AtomicBool>>,
     error_log: ErrorLog,
@@ -748,6 +759,84 @@ impl AppController {
         if let Some(dash) = &self.dashboard {
             dash.global::<Theme>().set_dark(is_dark);
             dash.set_logo_image(wordmark_image(is_dark));
+            let icon_bytes = if is_dark { LOGO_64_DARK } else { LOGO_64_WHITE };
+            if let Ok((w, h, rgba)) = decode_png_rgba(icon_bytes) {
+                dash.set_window_icon(rgba_to_slint_image(w, h, &rgba));
+            }
+        }
+        self.sync_overlay_preview();
+    }
+
+    fn stop_overlay_preview(&self) {
+        self.overlay_preview_timer.stop();
+        if self.overlay_preview_shown.swap(false, Ordering::AcqRel) {
+            let is_dictating = self
+                .snapshot
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_dictating;
+            if !is_dictating {
+                self.overlay.set_finishing(false);
+                self.overlay.hide();
+            }
+        }
+    }
+
+    fn sync_overlay_preview(&self) {
+        let is_dictating = self
+            .snapshot
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_dictating;
+        let s = self.settings.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let should_show = self.dashboard.as_ref().is_some_and(|d| {
+            !d.get_onboarding_active()
+                && d.get_settings_open()
+                && d.get_settings_section().as_str() == "overlay"
+                && d.get_overlay_preview_active()
+        }) && s.overlay_enabled
+            && !is_dictating;
+
+        if !should_show {
+            self.stop_overlay_preview();
+            return;
+        }
+
+        let was_shown = self.overlay_preview_shown.swap(true, Ordering::AcqRel);
+        self.overlay.update_session_meta(
+            &s.language,
+            &s.delivery_mode,
+            s.overlay_controls_pinned,
+            s.recent_languages.clone(),
+        );
+        let preview_text = if s.overlay_show_text {
+            OVERLAY_PREVIEW_TEXT
+        } else {
+            ""
+        };
+        if !was_shown {
+            self.overlay.set_finishing(false);
+            self.overlay.show(preview_text);
+            let ov = Arc::clone(&self.overlay);
+            let active_flag = Arc::clone(&self.overlay_preview_shown);
+            let tick = Rc::new(RefCell::new(0u64));
+            self.overlay_preview_timer.start(
+                slint::TimerMode::Repeated,
+                std::time::Duration::from_millis(60),
+                move || {
+                    if !active_flag.load(Ordering::Acquire) {
+                        return;
+                    }
+                    let mut n = tick.borrow_mut();
+                    *n = n.wrapping_add(1);
+                    let t = (*n as f32) * 0.16;
+                    let loud = 0.24 + 0.26 * (t.sin() * 0.65 + (t * 2.3).cos() * 0.35).abs();
+                    let tone = 0.5 + 0.35 * (t * 0.7).sin();
+                    ov.set_waveform(loud, tone);
+                },
+            );
+        } else if s.overlay_show_text {
+            self.overlay.update_text(OVERLAY_PREVIEW_TEXT);
         }
     }
 
@@ -761,13 +850,14 @@ impl AppController {
             .unwrap_or_else(|e| e.into_inner())
             .engine_backend
             .clone();
-        let display = format_active_engine_display(
+        let driver = format_active_driver_display(
             &backend,
             self.hw_class,
             self.gpu_name.as_deref(),
             default_cpu_threads(),
         );
-        dash.set_active_engine_display(display.into());
+        dash.set_active_engine_display("whisper.cpp 1.8.4".into());
+        dash.set_active_driver_display(driver.into());
     }
 
     fn refresh_history(&self) {
@@ -852,6 +942,18 @@ impl AppController {
         dash.set_onboarding_model_summary(summary.into());
         dash.set_onboarding_model_url(url.into());
         dash.set_onboarding_model_cached(is_cached);
+    }
+
+    fn ensure_hotkey_registered(&mut self) {
+        if !self.is_isolated && !self.hotkey_ok {
+            match self.coordinator.register_hotkey() {
+                Ok(()) => self.hotkey_ok = true,
+                Err(err) => self.error_log.log(Some("register_hotkey_retry"), &err),
+            }
+        }
+        if let Some(dash) = &self.dashboard {
+            dash.set_onboarding_hotkey_ok(self.hotkey_ok);
+        }
     }
 
     fn preload_for_onboarding_try(&self) {
@@ -1180,7 +1282,8 @@ fn ensure_dashboard(ctrl: &Rc<RefCell<AppController>>, tab: Option<&str>) {
                 dash.set_onboarding_hotkey_ok(c.hotkey_ok);
                 dash.set_onboarding_is_dictating(snap.is_dictating);
 
-                if let Ok((w, h, rgba)) = decode_png_rgba(LOGO_32) {
+                let icon_bytes = if is_dark { LOGO_64_DARK } else { LOGO_64_WHITE };
+                if let Ok((w, h, rgba)) = decode_png_rgba(icon_bytes) {
                     dash.set_window_icon(rgba_to_slint_image(w, h, &rgba));
                 }
 
@@ -1254,6 +1357,17 @@ fn capture_settings_backdrop(dash: &DashboardWindow) {
     }
 }
 
+fn capture_tour_backdrop(dash: &DashboardWindow) {
+    let was_tour = dash.get_tour_active();
+    dash.set_tour_active(false);
+    if let Ok(snap) = dash.window().take_snapshot() {
+        dash.set_tour_backdrop(blur_snapshot_strong(&snap));
+    } else {
+        dash.set_tour_backdrop(slint::Image::default());
+    }
+    dash.set_tour_active(was_tour);
+}
+
 fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     let Some(dash) = ctrl.borrow().dashboard.as_ref().map(|d| d.as_weak()) else {
         return;
@@ -1269,6 +1383,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         dash.window().on_close_requested(move || {
             let mut c = ctrl_w.borrow_mut();
             c.stop_mic_test();
+            c.stop_overlay_preview();
             if let Some(cancel) = c.hotkey_capture_cancel.take() {
                 cancel.store(true, Ordering::Release);
                 let _ = c.coordinator.register_hotkey();
@@ -1354,38 +1469,61 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         dash.on_tab_selected(move |t| {
             if let Some(d) = dash_w.upgrade() {
                 d.set_active_tab(t);
+                if d.get_tour_active() {
+                    capture_tour_backdrop(&d);
+                }
             }
         });
     }
     {
+        let ctrl_w = Rc::clone(ctrl);
         let dash_w = dash.as_weak();
         dash.on_open_settings(move || {
             if let Some(d) = dash_w.upgrade() {
                 d.set_tour_active(false);
+                d.set_tour_backdrop(slint::Image::default());
                 d.set_settings_open(false);
                 capture_settings_backdrop(&d);
                 d.set_settings_open(true);
             }
+            ctrl_w.borrow().sync_overlay_preview();
         });
     }
     {
+        let ctrl_w = Rc::clone(ctrl);
         let dash_w = dash.as_weak();
         dash.on_close_settings(move || {
             if let Some(d) = dash_w.upgrade() {
                 d.set_settings_open(false);
                 d.set_settings_backdrop(slint::Image::default());
             }
+            ctrl_w.borrow().stop_overlay_preview();
         });
     }
     {
+        let ctrl_w = Rc::clone(ctrl);
+        dash.on_settings_section_changed(move |_section| {
+            ctrl_w.borrow().sync_overlay_preview();
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        dash.on_overlay_preview_toggled(move |_active| {
+            ctrl_w.borrow().sync_overlay_preview();
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
         let dash_w = dash.as_weak();
         dash.on_start_tour(move || {
+            ctrl_w.borrow().stop_overlay_preview();
             if let Some(d) = dash_w.upgrade() {
                 d.set_settings_open(false);
                 d.set_settings_backdrop(slint::Image::default());
                 d.set_tour_step(0);
-                d.set_tour_active(true);
                 d.set_active_tab("general".into());
+                d.set_tour_active(true);
+                capture_tour_backdrop(&d);
             }
         });
     }
@@ -1397,6 +1535,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
                 let next = d.get_tour_step() + 1;
                 if next >= 4 {
                     d.set_tour_active(false);
+                    d.set_tour_backdrop(slint::Image::default());
                     d.set_tour_step(0);
                     let c = ctrl_w.borrow();
                     c.settings
@@ -1412,6 +1551,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
                         _ => "general",
                     };
                     d.set_active_tab(tab.into());
+                    capture_tour_backdrop(&d);
                 }
             }
         });
@@ -1428,6 +1568,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
                     _ => "general",
                 };
                 d.set_active_tab(tab.into());
+                capture_tour_backdrop(&d);
             }
         });
     }
@@ -1437,6 +1578,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         dash.on_dismiss_tour(move || {
             if let Some(d) = dash_w.upgrade() {
                 d.set_tour_active(false);
+                d.set_tour_backdrop(slint::Image::default());
             }
             let c = ctrl_w.borrow();
             c.settings
@@ -1461,6 +1603,9 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
             c.apply_theme_and_overlay();
             if let Some(d) = dash_w.upgrade() {
                 d.set_theme_mode_index(if currently_dark { 0 } else { 1 });
+                if d.get_tour_active() {
+                    capture_tour_backdrop(&d);
+                }
             }
         });
     }
@@ -2145,6 +2290,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         let dash_w = dash.as_weak();
         dash.on_start_onboarding(move || {
             let c = ctrl_w.borrow();
+            c.stop_overlay_preview();
             let s = c.settings.lock().unwrap_or_else(|e| e.into_inner()).clone();
             let model_dir = s.resolve_model_dir();
             let s_cached = whispercpp_model_path(&model_dir, &s.model_size)
@@ -2237,6 +2383,28 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     }
     {
         let ctrl_w = Rc::clone(ctrl);
+        let coord = ctrl.borrow().coordinator.clone();
+        dash.on_onboarding_try_hotkey(move |ctrl_k, alt_k, shift_k, meta_k, text| {
+            let raw_hotkey = ctrl_w
+                .borrow()
+                .settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .hotkey
+                .clone();
+            if matches_slint_hotkey(&raw_hotkey, ctrl_k, alt_k, shift_k, meta_k, text.as_str()) {
+                let c = coord.clone();
+                let _ = thread::Builder::new()
+                    .name("eqho-onboarding-hotkey-test".into())
+                    .spawn(move || c.toggle());
+                true
+            } else {
+                false
+            }
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
         let dash_w = dash.as_weak();
         dash.on_onboarding_go_to_step(move |target_step| {
             if let Some(d) = dash_w.upgrade() {
@@ -2251,6 +2419,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
                 if target_step == 3 {
                     c.refresh_onboarding_models(None);
                 } else if target_step == 5 {
+                    c.ensure_hotkey_registered();
                     c.refresh_onboarding_models(None);
                     c.preload_for_onboarding_try();
                 }
@@ -2300,6 +2469,7 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
                 if step == 3 {
                     c.refresh_onboarding_models(None);
                 } else if step == 5 {
+                    c.ensure_hotkey_registered();
                     c.refresh_onboarding_models(None);
                     c.preload_for_onboarding_try();
                 }
@@ -2343,6 +2513,105 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     {
         let finish_b = finish_onboarding;
         dash.on_onboarding_finish(finish_b);
+    }
+}
+
+/// Match a Slint `KeyEvent` (modifiers + text) against a stored hotkey combo such as
+/// `"alt+q"`, `"ctrl+shift+space"`, or `"win+f2"`.
+///
+/// Used as a belt-and-suspenders guard on Onboarding Step 6's test text box so pressing the
+/// dictation hotkey while typing in the box always toggles dictation and never types the
+/// trigger character (e.g. `'q'`) even if another app prevented `RegisterHotKey`.
+fn matches_slint_hotkey(
+    raw: &str,
+    ctrl: bool,
+    alt: bool,
+    shift: bool,
+    meta: bool,
+    text: &str,
+) -> bool {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || text.is_empty() {
+        return false;
+    }
+
+    let mut req_ctrl = false;
+    let mut req_alt = false;
+    let mut req_shift = false;
+    let mut req_meta = false;
+    let mut trigger: Option<String> = None;
+
+    for part in trimmed.split('+') {
+        let token = part
+            .trim()
+            .trim_start_matches('<')
+            .trim_end_matches('>')
+            .to_ascii_lowercase();
+        if token.is_empty() {
+            return false;
+        }
+        match token.as_str() {
+            "ctrl" | "control" | "ctrl_l" | "ctrl_r" | "lctrl" | "rctrl" => req_ctrl = true,
+            "alt" | "alt_l" | "alt_r" | "alt_gr" | "lalt" | "ralt" | "menu" | "option" => {
+                req_alt = true;
+            }
+            "shift" | "shift_l" | "shift_r" | "lshift" | "rshift" => req_shift = true,
+            "win" | "windows" | "super" | "cmd" | "cmd_l" | "cmd_r" | "meta" | "lwin"
+            | "rwin" => req_meta = true,
+            other => {
+                if trigger.is_some() {
+                    return false;
+                }
+                trigger = Some(other.to_owned());
+            }
+        }
+    }
+
+    let Some(trigger) = trigger else {
+        return false;
+    };
+
+    if req_ctrl != ctrl || req_alt != alt || req_shift != shift || req_meta != meta {
+        return false;
+    }
+
+    if trigger.len() == 1 {
+        let target = trigger.as_bytes()[0];
+        if target.is_ascii_alphanumeric() {
+            let mut chars = text.chars();
+            if let (Some(ch), None) = (chars.next(), chars.next()) {
+                let b = ch as u32;
+                // Handle ASCII control characters produced by Ctrl+A..Z (0x01..=0x1A).
+                if ctrl && (1..=26).contains(&b) {
+                    let mapped = (b as u8 - 1) + b'a';
+                    return mapped == target;
+                }
+                return ch.is_ascii() && (ch as u8).to_ascii_lowercase() == target;
+            }
+            return false;
+        }
+    }
+
+    if let Some(num) = trigger.strip_prefix('f')
+        && let Ok(n) = num.parse::<u32>()
+        && (1..=24).contains(&n)
+    {
+        // Slint encodes F1..F24 as U+F704..U+F71B.
+        let expected = char::from_u32(0xF704 + (n - 1));
+        return expected.is_some_and(|c| {
+            let mut chars = text.chars();
+            chars.next() == Some(c) && chars.next().is_none()
+        });
+    }
+
+    match trigger.as_str() {
+        "space" | "spacebar" => text == " ",
+        "enter" | "return" => text == "\n" || text == "\r",
+        "tab" => text == "\t",
+        "esc" | "escape" => text == "\u{001b}",
+        "backspace" | "back" => text == "\u{0008}",
+        "delete" | "del" => text == "\u{007f}",
+        _ => false,
     }
 }
 
@@ -2664,6 +2933,7 @@ pub fn run_desktop_app(
     let tray_slot: Arc<OnceLock<slint::Weak<EqhoTray>>> = Arc::new(OnceLock::new());
     let snapshot_slot: Arc<OnceLock<Arc<Mutex<UiSyncSnapshot>>>> = Arc::new(OnceLock::new());
     let open_history_requested = Arc::new(AtomicBool::new(false));
+    let overlay_preview_shown = Arc::new(AtomicBool::new(false));
 
     let on_action: OverlayActionCallback = {
         let coord_slot = Arc::clone(&coord_slot);
@@ -2671,6 +2941,7 @@ pub fn run_desktop_app(
         let tray_slot = Arc::clone(&tray_slot);
         let snapshot_slot = Arc::clone(&snapshot_slot);
         let open_history_requested = Arc::clone(&open_history_requested);
+        let overlay_preview_shown = Arc::clone(&overlay_preview_shown);
         let settings_arc = Arc::clone(&settings_arc);
         let settings_path = paths.settings_path.clone();
         let dash_weak = Arc::clone(&dash_weak);
@@ -2681,6 +2952,7 @@ pub fn run_desktop_app(
             let tray_slot = Arc::clone(&tray_slot);
             let snapshot_slot = Arc::clone(&snapshot_slot);
             let open_history_requested = Arc::clone(&open_history_requested);
+            let overlay_preview_shown = Arc::clone(&overlay_preview_shown);
             let settings_arc = Arc::clone(&settings_arc);
             let settings_path = settings_path.clone();
             let dash_weak = Arc::clone(&dash_weak);
@@ -2692,6 +2964,25 @@ pub fn run_desktop_app(
                         return;
                     };
                     match action {
+                        OverlayAction::Cancel | OverlayAction::Done
+                            if overlay_preview_shown.swap(false, Ordering::AcqRel) =>
+                        {
+                            if let Some(ov) = overlay_slot.get() {
+                                ov.set_finishing(false);
+                                ov.hide();
+                            }
+                            let dash_weak_opt = dash_weak
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .clone();
+                            if let Some(dw) = dash_weak_opt {
+                                let _ = slint::invoke_from_event_loop(move || {
+                                    if let Some(d) = dw.upgrade() {
+                                        d.set_overlay_preview_active(false);
+                                    }
+                                });
+                            }
+                        }
                         OverlayAction::Cancel => coord.cancel(),
                         OverlayAction::Done => coord.deactivate(),
                         OverlayAction::ToggleDeliveryMode(mode) => coord.set_delivery_mode(&mode),
@@ -2837,6 +3128,7 @@ pub fn run_desktop_app(
 
     let ui_sink = Arc::new(AppUiSink {
         overlay: Arc::clone(&overlay),
+        overlay_preview_shown: Arc::clone(&overlay_preview_shown),
         damt_platform: Arc::clone(&damt_platform),
         error_log: error_log.clone(),
         tray_weak: tray.as_weak(),
@@ -2881,6 +3173,8 @@ pub fn run_desktop_app(
         history: TranscriptHistory::with_default_cap(&paths.history_path),
         coordinator: coordinator.clone(),
         overlay: Arc::clone(&overlay),
+        overlay_preview_shown,
+        overlay_preview_timer: slint::Timer::default(),
         platform,
         damt_platform,
         hw_class,
@@ -2891,6 +3185,7 @@ pub fn run_desktop_app(
         mic_devices: Vec::new(),
         mic_test_stream: None,
         hotkey_ok,
+        is_isolated,
         hotkey_capture_cancel: None,
         download_cancel: None,
         error_log: error_log.clone(),
@@ -3267,5 +3562,56 @@ mod store_license {
                 });
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod hotkey_match_tests {
+    use super::matches_slint_hotkey;
+
+    #[test]
+    fn matches_default_alt_q_and_rejects_plain_q() {
+        assert!(matches_slint_hotkey("alt+q", false, true, false, false, "q"));
+        assert!(matches_slint_hotkey("alt+q", false, true, false, false, "Q"));
+        assert!(matches_slint_hotkey("<alt>+q", false, true, false, false, "q"));
+        assert!(!matches_slint_hotkey("alt+q", false, false, false, false, "q"));
+        assert!(!matches_slint_hotkey("alt+q", true, true, false, false, "q"));
+        assert!(!matches_slint_hotkey("alt+q", false, true, false, false, "w"));
+    }
+
+    #[test]
+    fn matches_ctrl_shift_space_and_function_keys() {
+        assert!(matches_slint_hotkey(
+            "ctrl+shift+space",
+            true,
+            false,
+            true,
+            false,
+            " "
+        ));
+        assert!(matches_slint_hotkey(
+            "ctrl+q",
+            true,
+            false,
+            false,
+            false,
+            "\u{0011}"
+        ));
+        assert!(matches_slint_hotkey(
+            "win+f2",
+            false,
+            false,
+            false,
+            true,
+            "\u{F705}"
+        ));
+        assert!(!matches_slint_hotkey(
+            "win+f2",
+            false,
+            false,
+            false,
+            true,
+            "\u{F704}"
+        ));
     }
 }

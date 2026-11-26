@@ -61,5 +61,5 @@ Semantic colors (**amber/yellow** = warning/attention, **green** = ready/approve
 
 - **Zero GitHub URLs or mentions** anywhere in Store UI strings or Store-build surfaces.
 - **Calm trial UI:**
-  - Active trial: single quiet bottom footer line (`"N day(s) left in your trial · Buy Eqho"` + `"Made with Slint"`).
+  - Active trial: single quiet bottom footer line (`"N day(s) left in your trial · Buy Eqho"` on the left, clickable `"Made by damt.xyz"` on the right; `"Made with Slint"` attribution lives in `Settings → About`).
   - Expired trial: neutral `Theme.surface` top banner with accent `Buy Eqho` button—never red/yellow alarm chrome.

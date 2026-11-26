@@ -83,7 +83,7 @@ CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=4 \
 - **Offline cache:** Atomic `<config_dir>/license.json` (`*.tmp` → `rename`), never storing `Unknown`.
 - **Check cadence:** Startup (immediately after reading cache), every 4 hours (`LICENSE_RECHECK_INTERVAL`) with an in-flight guard, on OS resume (`SessionEvent::Resumed`), and right after purchase.
 - **Purchase dialog:** `StoreContext::RequestPurchaseAsync(STORE_ID)` initialized with the dashboard Win32 HWND via `IInitializeWithWindow`. `Succeeded` / `AlreadyPurchased` immediately unlock `Full`; `NotPurchased` (cancel) is a silent no-op.
-- **Attribution & compliance:** Zero GitHub links in the Store build; `"Made with Slint"` attribution is shown in the trial footer and `Settings → About Eqho` (required by Slint's royalty-free license).
+- **Attribution & compliance:** Zero GitHub links in the Store build; `"Made with Slint"` attribution is shown in `Settings → About` (required by Slint's royalty-free desktop license), and clickable `"Made by damt.xyz"` appears on the right of the trial footer.
 
 ### Testing All Trial States Without a Store Package
 In Store builds (`--features store`), combine `--demo-dashboard` (which creates an isolated temporary config dir and never touches `%APPDATA%` or `license.json`) with `--demo-license`:

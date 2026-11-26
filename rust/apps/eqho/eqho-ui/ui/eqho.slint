@@ -26,6 +26,8 @@ export component DashboardWindow inherits Window {
     in-out property <bool> settings-open: false;
     in-out property <string> settings-section: "appearance";
     in-out property <image> settings-backdrop;
+    in-out property <image> tour-backdrop;
+    in-out property <bool> overlay-preview-active: true;
     in-out property <bool> tour-active: false;
     in-out property <int> tour-step: 0;
     in-out property <bool> onboarding-active: false;
@@ -57,6 +59,8 @@ export component DashboardWindow inherits Window {
     callback theme-toggled();
     callback open-settings();
     callback close-settings();
+    callback settings-section-changed(string);
+    callback overlay-preview-toggled(bool);
     callback start-tour();
     callback tour-next();
     callback tour-back();
@@ -150,8 +154,9 @@ export component DashboardWindow inherits Window {
     in-out property <int> overlay-see-through-pct: 5;
     in-out property <int> overlay-panel-see-through-pct: 22;
     in-out property <int> overlay-font-size: 14;
-    in property <string> app-version: "0.9.3";
-    in-out property <string> active-engine-display: "GPU (Vulkan) · whisper.cpp 1.8.4";
+    in property <string> app-version: "0.9.4";
+    in-out property <string> active-engine-display: "whisper.cpp 1.8.4";
+    in-out property <string> active-driver-display: "Vulkan";
 
     callback theme-mode-changed(int);
     callback ui-scale-changed(int);
@@ -213,6 +218,7 @@ export component DashboardWindow inherits Window {
     callback copy-text(string);
     callback onboarding-sound-chosen(bool);
     callback onboarding-toggle-test();
+    callback onboarding-try-hotkey(bool, bool, bool, bool, string) -> bool;
     callback onboarding-go-to-step(int);
     callback onboarding-step-changed(int);
     callback onboarding-skip();
@@ -266,6 +272,7 @@ export component DashboardWindow inherits Window {
         copy-text(t) => { root.copy-text(t); }
         sound-chosen(m) => { root.onboarding-sound-chosen(m); }
         toggle-test-dictation => { root.onboarding-toggle-test(); }
+        try-box-hotkey-pressed(c, a, s, m, t) => { root.onboarding-try-hotkey(c, a, s, m, t) }
         go-to-step(s) => { root.onboarding-go-to-step(s); }
         step-changed(s) => { root.onboarding-step-changed(s); }
         skip-clicked => { root.onboarding-skip(); }
@@ -354,18 +361,18 @@ export component DashboardWindow inherits Window {
             if root.active-tab == "models" : ModelsTab {
                 width: parent.width;
                 height: parent.height;
-                hardware-summary <=> root.hardware-summary;
-                engine-backend-index <=> root.engine-backend-index;
+                engine-backend-index: root.engine-backend-index;
                 english-models: root.english-models;
                 multilingual-models: root.multilingual-models;
-                model-dir-display <=> root.model-dir-display;
 
-                engine-backend-changed(i) => { root.engine-backend-changed(i); }
+                open-engine-settings => {
+                    root.settings-section = "system";
+                    root.open-settings();
+                }
                 select-model(k) => { root.select-model(k); }
                 download-model(k) => { root.download-model(k); }
                 cancel-download-model(k) => { root.cancel-download-model(k); }
                 delete-model(k) => { root.delete-model(k); }
-                open-model-folder => { root.open-model-folder(); }
             }
 
             if root.active-tab == "history" : HistoryTab {
@@ -396,16 +403,21 @@ export component DashboardWindow inherits Window {
         if root.trial-running : StoreTrialFooter {
             days-left-text: root.trial-days-left-text;
             buy-label: root.buy-label;
-            made-with-slint-label: root.made-with-slint-label;
             buy-clicked => { root.buy-clicked(); }
+            brand-clicked => { root.open-url("https://damt.xyz"); }
         }
     }
 
-    // Floating bottom-left contextual walkthrough cards (separate from initial onboarding wizard)
-    if !root.onboarding-active && !root.settings-open && root.tour-active : TourCard {
+    // Floating bottom-left contextual walkthrough card with frosted inverted backdrop blur
+    if !root.onboarding-active && !root.settings-open && root.tour-active : tour-card := TourCard {
         x: 16px;
         y: root.height - self.height - (root.trial-running ? 44px : 16px);
         step: root.tour-step;
+        backdrop-image: root.tour-backdrop;
+        viewport-width: root.width;
+        viewport-height: root.height;
+        card-x: self.x;
+        card-y: self.y;
         next-clicked => { root.tour-next(); }
         back-clicked => { root.tour-back(); }
         dismiss-clicked => { root.dismiss-tour(); }
@@ -426,10 +438,13 @@ export component DashboardWindow inherits Window {
         replacements-status <=> root.replacements-status;
         paste-rules-text <=> root.paste-rules-text;
         paste-rules-status <=> root.paste-rules-status;
+        hardware-summary <=> root.hardware-summary;
+        engine-backend-index <=> root.engine-backend-index;
         volume-duck-index <=> root.volume-duck-index;
         history-trash-days-index <=> root.history-trash-days-index;
         start-with-windows <=> root.start-with-windows;
         model-dir-display: root.model-dir-display;
+        overlay-preview-active <=> root.overlay-preview-active;
         overlay-enabled <=> root.overlay-enabled;
         overlay-show-text <=> root.overlay-show-text;
         overlay-show-level <=> root.overlay-show-level;
@@ -443,6 +458,7 @@ export component DashboardWindow inherits Window {
         overlay-font-size <=> root.overlay-font-size;
         app-version: root.app-version;
         active-engine-display: root.active-engine-display;
+        active-driver-display: root.active-driver-display;
         store-build: root.store-build;
         license-state: root.license-state;
         trial-days-left-text: root.trial-days-left-text;
@@ -450,12 +466,15 @@ export component DashboardWindow inherits Window {
         made-with-slint-label: root.made-with-slint-label;
 
         close-requested => { root.close-settings(); }
+        section-changed(s) => { root.settings-section-changed(s); }
+        overlay-preview-toggled(v) => { root.overlay-preview-toggled(v); }
         theme-mode-changed(i) => { root.theme-mode-changed(i); }
         ui-scale-changed(i) => { root.ui-scale-changed(i); }
         remove-fillers-toggled(b) => { root.remove-fillers-toggled(b); }
         voice-commands-toggled(b) => { root.voice-commands-toggled(b); }
         save-replacements(s) => { root.save-replacements(s); }
         save-paste-rules(s) => { root.save-paste-rules(s); }
+        engine-backend-changed(i) => { root.engine-backend-changed(i); }
         volume-duck-selected(i) => { root.volume-duck-selected(i); }
         history-trash-days-selected(i) => { root.history-trash-days-selected(i); }
         open-trash => { root.open-trash(); }

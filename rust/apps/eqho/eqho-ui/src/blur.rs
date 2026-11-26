@@ -10,6 +10,17 @@ use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 /// rendering behind the Settings modal dialog.
 #[must_use]
 pub fn blur_snapshot(src: &SharedPixelBuffer<Rgba8Pixel>) -> Image {
+    blur_snapshot_with_radius(src, 4)
+}
+
+/// Downscale and heavily blur an RGBA snapshot buffer into a creamy frosted-glass `Image`
+/// suitable for floating translucent surfaces like the interactive guide card.
+#[must_use]
+pub fn blur_snapshot_strong(src: &SharedPixelBuffer<Rgba8Pixel>) -> Image {
+    blur_snapshot_with_radius(src, 18)
+}
+
+fn blur_snapshot_with_radius(src: &SharedPixelBuffer<Rgba8Pixel>, base_radius: usize) -> Image {
     let sw = src.width() as usize;
     let sh = src.height() as usize;
     if sw == 0 || sh == 0 {
@@ -52,8 +63,12 @@ pub fn blur_snapshot(src: &SharedPixelBuffer<Rgba8Pixel>) -> Image {
         }
     }
 
-    // 3 separable box-blur passes closely approximate a silky Gaussian blur (sigma ~10px full-res).
-    let radius = if dw >= 16 && dh >= 16 { 4usize } else { 1usize };
+    // 3 separable box-blur passes closely approximate a silky Gaussian blur.
+    let radius = if dw >= 16 && dh >= 16 {
+        base_radius.min(dw.min(dh) / 2).max(1)
+    } else {
+        1usize
+    };
     let mut scratch = vec![0u8; buf.len()];
     for _ in 0..3 {
         box_blur_h(&buf, &mut scratch, dw, dh, radius);
@@ -169,6 +184,20 @@ mod tests {
                 (80..=180).contains(&bytes[mid]),
                 "expected smooth mid-tone at step edge, got {}",
                 bytes[mid]
+            );
+        }
+
+        // Strong frosted-glass blur must spread further away from the step edge.
+        let strong = blur_snapshot_strong(&snap);
+        assert_eq!(strong.size().width, 100);
+        assert_eq!(strong.size().height, 60);
+        if let Some(buf) = strong.to_rgba8() {
+            let bytes = buf.as_bytes();
+            let offset_px = (30 * 100 + 42) * 4;
+            assert!(
+                bytes[offset_px] > 15,
+                "expected strong blur to spread past 8 downscaled px from edge, got {}",
+                bytes[offset_px]
             );
         }
     }

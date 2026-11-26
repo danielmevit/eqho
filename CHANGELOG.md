@@ -4,6 +4,23 @@ All notable changes to Eqho are tracked here.
 
 Date format: `YYYY-MM-DD`.
 
+## [0.9.4] - 2026-11-26
+
+Live Overlay Preview on Screen, pure-vector dashboard wordmark, unified tray/window monogram icon, reliable kernel-level global hotkey & Onboarding Step 6 `Alt+Q` fix, streamlined Models & Settings organization, frosted interactive guide cards, and refreshed onboarding-style Microsoft Store assets featuring the real iridescent pill.
+
+### Added
+- **Live Overlay Preview on Screen:** Added a `Live Preview on Screen` toggle (on by default) in `Settings → Overlay` that shows Eqho's real topmost floating iridescent pill, frosted Acrylic live transcript box, and under-pill bar with a live simulated voice waveform while you adjust sliders, theme, opacity, or position — hiding cleanly as soon as you leave or start dictating.
+- **Separated Engine & Driver diagnostics (`Settings → About`):** Split the `About` readout into clean **Engine** (`whisper.cpp 1.8.4`) and **Driver** (`Vulkan · <GPU Name>` or `CPU · N threads`) rows while keeping `Inference Engine` (`Auto · GPU · CPU`) inside `Settings → System` with a subtle clickable `Engine: Auto` shortcut in the Models section header.
+- **Refreshed Microsoft Store listing assets:** Updated all 6 Store presentation slides and Poster Art to showcase Eqho `0.9.4` captures, the real `eqho_core::pillfx` iridescent listening pill (both Dark and Light), and onboarding-style feature walkthrough copy.
+
+### Changed
+- **Pure-vector dashboard wordmark & real tray window icon:** Replaced the downscaled bitmap `eqho` header logo with native Slint vector `Path` geometry (`EqhoWordmark`) for razor-sharp rendering at every DPI, and replaced the legacy `qh` dashboard/taskbar window icon with Eqho's real two-tone blue tray monogram (`logo_64_dark.png` / `logo_64_white.png`).
+- **Streamlined Models tab & calm color hierarchy:** Removed the top `Inference Engine` and duplicate `Storage` cards from Models, hid the top-right download icon once a model is cached, introduced a sliding blue arrow download animation with inline single-line stats beside `Cancel`, highlighted the active model with a filled Eqho-blue `Active` button and crisp `1px` solid blue outline, and kept secondary actions (`Select`, `Download`, `Delete`, `Cancel`) calm neutral outline buttons.
+- **Frosted glass Interactive Guide cards & unified tooltips:** Upgraded the 4-step floating guide card to strong-blur translucent glass (`blur_snapshot_strong`) matching the active theme with a crisp solid dark rim, tightened General's bento grid to symmetrical `10px × 10px` gutters, removed neon green from Onboarding Steps 4–6 in favor of clean blue outlines and a compact top-right download status pill, and replaced `"Made with Slint"` in the Store trial footer with clickable **`Made by damt.xyz`** (keeping `"Made with Slint"` in `Settings → About`).
+
+### Fixed
+- **Onboarding Step 6 `Alt+Q` typing `'q'` instead of activating dictation:** Upgraded `HotkeyMode::Toggle` on Windows to register a kernel-level Win32 `RegisterHotKey` (`MOD_NOREPEAT`) with a `WH_KEYBOARD_LL` + `TrackedModifiers` fallback, retried hotkey registration on Step 6 entry, and added a Slint `FocusScope { capture-key-pressed }` guard around Step 6's test text box so `Alt+Q` reliably activates dictation and never leaks `'q'` into the box.
+
 ## [0.9.3] - 2026-11-25
 
 Obsidian-charcoal dark palette unified across the entire dashboard, real Gaussian-blurred dashboard backdrop behind the Settings modal, concentric rounded-square icon geometry, active-only top-bar tab icons, flush Win11 overlay silhouettes, and post-install dashboard auto-launch.

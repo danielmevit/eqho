@@ -102,9 +102,14 @@ export component StackedSettingRow inherits VerticalLayout {
     }
 }
 
-// Clean hairline card with an optional integrated header bar separated by a 1px divider line.
+// Clean hairline card with an optional integrated header bar separated by a 1px divider line,
+// plus an optional subtle right-aligned header indicator/action pill.
 export component SectionCard inherits Card {
     in property <string> title: "";
+    in property <string> action-label: "";
+    in property <string> action-glyph: "";
+    in property <string> action-tooltip: "";
+    callback action-clicked();
     shadow: false;
     border-color: Theme.border-subtle;
 
@@ -115,9 +120,11 @@ export component SectionCard inherits Card {
             spacing: 0px;
             HorizontalLayout {
                 padding-left: Theme.space-12;
-                padding-right: Theme.space-12;
-                padding-top: Theme.space-10;
-                padding-bottom: Theme.space-8;
+                padding-right: root.action-label != "" ? 8px : Theme.space-12;
+                padding-top: root.action-label != "" ? 6px : Theme.space-10;
+                padding-bottom: root.action-label != "" ? 6px : Theme.space-8;
+                alignment: space-between;
+
                 Text {
                     text: root.title;
                     font-size: Theme.font-size-sm;
@@ -125,6 +132,67 @@ export component SectionCard inherits Card {
                     letter-spacing: 0.6px;
                     color: Theme.text-muted;
                     vertical-alignment: center;
+                }
+
+                if root.action-label != "" : header-action := Rectangle {
+                    height: 24px;
+                    min-width: act-lay.preferred-width;
+                    border-radius: 7px;
+                    background: act-touch.pressed ? Theme.button-outline-pressed
+                        : act-touch.has-hover ? Theme.surface-hover
+                        : transparent;
+                    accessible-role: button;
+                    accessible-label: root.action-tooltip != "" ? root.action-tooltip : root.action-label;
+                    accessible-action-default => { root.action-clicked(); }
+
+                    act-lay := HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 5px;
+                        alignment: center;
+
+                        if root.action-glyph != "" : VerticalLayout {
+                            alignment: center;
+                            PhIcon {
+                                glyph: root.action-glyph;
+                                size: 12px;
+                                icon-color: act-touch.has-hover ? Theme.text : Theme.text-muted;
+                            }
+                        }
+
+                        Text {
+                            text: root.action-label;
+                            font-size: Theme.font-size-xs;
+                            font-weight: 500;
+                            color: act-touch.has-hover ? Theme.text : Theme.text-muted;
+                            vertical-alignment: center;
+                            accessible-role: none;
+                        }
+                    }
+
+                    act-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        changed has-hover => {
+                            if (root.action-tooltip != "") {
+                                if (self.has-hover) {
+                                    HoverTooltip.text = root.action-tooltip;
+                                    HoverTooltip.anchor-x = header-action.absolute-position.x;
+                                    HoverTooltip.anchor-y = header-action.absolute-position.y;
+                                    HoverTooltip.anchor-w = header-action.width;
+                                    HoverTooltip.anchor-h = header-action.height;
+                                    HoverTooltip.visible = true;
+                                } else if (HoverTooltip.text == root.action-tooltip) {
+                                    HoverTooltip.visible = false;
+                                }
+                            }
+                        }
+                        clicked => {
+                            if (root.action-tooltip != "" && HoverTooltip.text == root.action-tooltip) {
+                                HoverTooltip.visible = false;
+                            }
+                            root.action-clicked();
+                        }
+                    }
                 }
             }
             HorizontalLayout {
@@ -200,11 +268,12 @@ export component StoreTrialBanner inherits Card {
 }
 
 // Quiet one-line footer shown in Microsoft Store builds while a trial is active.
+// ("Made with Slint" attribution lives in Settings -> About per Slint's Royalty-Free License.)
 export component StoreTrialFooter inherits Rectangle {
     in property <string> days-left-text: "";
     in property <string> buy-label: "Buy Eqho";
-    in property <string> made-with-slint-label: "Made with Slint";
     callback buy-clicked();
+    callback brand-clicked();
 
     vertical-stretch: 0;
     height: lay.preferred-height;
@@ -270,11 +339,26 @@ export component StoreTrialFooter inherits Rectangle {
             }
         }
 
-        if root.made-with-slint-label != "" : Text {
-            text: root.made-with-slint-label;
-            font-size: Theme.font-size-help;
-            color: Theme.text-subtle;
-            vertical-alignment: center;
+        brand-link := Rectangle {
+            min-width: brand-txt.preferred-width + 4px;
+            min-height: brand-txt.preferred-height + 2px;
+            accessible-role: button;
+            accessible-label: "Made by damt.xyz";
+            accessible-action-default => { root.brand-clicked(); }
+
+            brand-txt := Text {
+                text: "Made by damt.xyz";
+                font-size: Theme.font-size-help;
+                color: brand-touch.has-hover ? Theme.text-muted : Theme.text-subtle;
+                vertical-alignment: center;
+                horizontal-alignment: center;
+                accessible-role: none;
+            }
+
+            brand-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.brand-clicked(); }
+            }
         }
     }
 }
@@ -508,7 +592,42 @@ export component ThemedTextEdit inherits Rectangle {
     }
 }
 
-// 68 px GatherOS-inspired top bar: smaller subordinate wordmark (left), prominent floating
+// Pure native vector Eqho wordmark (exact Illustrator SVG geometry rendered at native display DPI —
+// zero bitmap downscaling or pixelation at any zoom 100%–200%).
+export component EqhoWordmark inherits Rectangle {
+    property <color> primary: Theme.dark ? #029cff : #0062b1;
+    property <color> secondary: Theme.dark ? #0062b1 : #029cff;
+
+    width: 62px;
+    height: 26.5px;
+    accessible-role: none;
+
+    // e, h, o
+    Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 673.43;
+        viewbox-height: 288.49;
+        fill: root.primary;
+        stroke: root.primary;
+        stroke-width: 0.35px;
+        commands: "M81.64,226.87c-14.48,0-27.11-3.6-37.9-10.79-10.79-7.19-19.13-17.04-25.03-29.55-5.9-12.51-8.85-26.78-8.85-42.79s2.95-30.3,8.85-42.86c5.9-12.56,14.02-22.44,24.38-29.63s22.15-10.79,35.38-10.79c9.11,0,17.71,1.8,25.82,5.39,8.1,3.6,15.25,8.82,21.43,15.68,6.18,6.86,11.05,15.17,14.6,24.95,3.55,9.78,5.32,20.95,5.32,33.51v6.04H18.07v-11.65h120.52l-6.04,4.6c0-12.46-2.25-23.73-6.76-33.8-4.51-10.07-10.81-18.03-18.91-23.88-8.1-5.85-17.57-8.77-28.41-8.77s-20.02,2.97-28.41,8.92c-8.39,5.95-14.98,13.95-19.78,24.02-4.8,10.07-7.19,21.29-7.19,33.65v5.32c0,13.42,2.32,25.43,6.98,36.03,4.65,10.6,11.36,18.96,20.14,25.1,8.77,6.14,19.25,9.2,31.43,9.2,8.82,0,16.32-1.46,22.51-4.38,6.18-2.92,11.27-6.54,15.25-10.86,3.98-4.31,6.98-8.44,8.99-12.37l11.94,4.75c-2.4,5.37-6.18,10.74-11.36,16.11-5.18,5.37-11.7,9.85-19.56,13.45-7.86,3.6-17.12,5.39-27.76,5.39Z M375.76,119.44v103.98h-12.94V9.12h12.94v89.46h-2.59c3.93-13.13,10.81-22.77,20.64-28.91,9.83-6.13,20.83-9.21,33.01-9.21,10.93,0,20.57,2.28,28.91,6.83,8.34,4.55,14.86,11.07,19.56,19.56,4.7,8.48,7.05,18.67,7.05,30.56v106h-13.09v-105.28c0-13.81-4.15-24.86-12.44-33.15-8.29-8.29-19.15-12.44-32.58-12.44-9.21,0-17.47,1.96-24.81,5.9-7.34,3.93-13.11,9.4-17.33,16.39-4.22,7-6.33,15.2-6.33,24.6Z M595.23,226.87c-13.23,0-25.05-3.6-35.45-10.79-10.4-7.19-18.58-17.04-24.52-29.55-5.95-12.51-8.92-26.82-8.92-42.93s2.97-30.42,8.92-42.93c5.94-12.51,14.12-22.34,24.52-29.48,10.4-7.14,22.22-10.71,35.45-10.71s25.17,3.57,35.52,10.71c10.35,7.14,18.5,17,24.45,29.56,5.94,12.56,8.92,26.85,8.92,42.86s-2.97,30.42-8.92,42.93c-5.95,12.51-14.1,22.36-24.45,29.55-10.36,7.19-22.2,10.79-35.52,10.79ZM595.23,214.79c11.22,0,21-3.16,29.34-9.49s14.81-14.88,19.42-25.67,6.9-22.8,6.9-36.03-2.3-25.1-6.9-35.88-11.07-19.34-19.42-25.67-18.12-9.49-29.34-9.49-20.85,3.19-29.2,9.56c-8.34,6.38-14.84,14.91-19.49,25.6-4.65,10.69-6.98,22.65-6.98,35.88s2.32,25.24,6.98,36.03c4.65,10.79,11.15,19.34,19.49,25.67s18.07,9.49,29.2,9.49Z";
+    }
+
+    // q
+    Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 673.43;
+        viewbox-height: 288.49;
+        fill: root.secondary;
+        stroke: root.secondary;
+        stroke-width: 0.35px;
+        commands: "M309.74,283.54h-13.09v-95.21h-1.29c-2.4,6.9-5.95,13.28-10.64,19.13-4.7,5.85-10.48,10.55-17.33,14.09-6.86,3.55-14.84,5.32-23.95,5.32-12.85,0-24.09-3.57-33.73-10.71-9.64-7.14-17.09-16.99-22.36-29.56-5.27-12.56-7.91-26.94-7.91-43.15s2.66-30.42,7.98-42.93c5.32-12.51,12.8-22.31,22.44-29.41,9.64-7.09,20.83-10.64,33.58-10.64,9.21,0,17.23,1.73,24.09,5.18,6.85,3.45,12.63,8.08,17.33,13.88,4.7,5.8,8.2,12.15,10.5,19.06h1.58v-35.96h12.8v220.91ZM244.73,214.79c10.83,0,20.14-3.11,27.9-9.35,7.77-6.23,13.74-14.74,17.91-25.53s6.26-22.99,6.26-36.6-2.09-25.74-6.26-36.39-10.14-19.03-17.91-25.17c-7.77-6.13-17.07-9.2-27.9-9.2s-20.28,3.12-28.05,9.35c-7.77,6.23-13.71,14.7-17.83,25.38-4.12,10.69-6.18,22.7-6.18,36.03s2.06,25.53,6.18,36.32c4.12,10.79,10.07,19.34,17.83,25.67,7.77,6.33,17.11,9.49,28.05,9.49Z";
+    }
+}
+
+// 68 px GatherOS-inspired top bar: crisp pure-vector wordmark (left), prominent floating
 // 3-tab capsule pill (center, no search icon), and smaller borderless utility icons (right).
 export component TopBar inherits Rectangle {
     in-out property <string> active-tab;
@@ -528,29 +647,15 @@ export component TopBar inherits Rectangle {
         padding-right: Theme.space-16;
         alignment: space-between;
 
-        // Left: smaller, understated horizontal wordmark
+        // Left: crisp pure-vector horizontal wordmark (native Slint Path, zero bitmap aliasing)
         HorizontalLayout {
             spacing: Theme.space-8;
             alignment: start;
             width: 120px;
 
-            if root.logo-image.width > 0 : VerticalLayout {
+            VerticalLayout {
                 alignment: center;
-                Image {
-                    source: root.logo-image;
-                    width: 56px;
-                    height: 24px;
-                    image-fit: contain;
-                    image-rendering: smooth;
-                    accessible-role: none;
-                }
-            }
-            if root.logo-image.width == 0 : Text {
-                text: "eqho";
-                font-size: Theme.font-size-lg;
-                font-weight: 600;
-                color: Theme.accent-text;
-                vertical-alignment: center;
+                EqhoWordmark {}
             }
         }
 
@@ -699,15 +804,25 @@ export component TopBar inherits Rectangle {
     }
 }
 
-// Floating bottom-left contextual walkthrough card (modeled on GatherOS 1/7 coach-mark card).
-// Separate from the initial 6-step setup wizard; explains each section live on top of the app.
+// Floating bottom-left contextual walkthrough card with deep frosted-glass styling:
+// - Dark mode: low-opacity deep obsidian glass (#121215) over ultra-high live backdrop blur + solid opaque dark rim
+// - Light mode: low-opacity crystal white glass (#FFFFFF) over ultra-high live backdrop blur + solid opaque white rim
 export component TourCard inherits Rectangle {
     in property <int> step: 0;
     in property <int> total-steps: 4;
+    in property <image> backdrop-image;
+    in property <length> viewport-width: 940px;
+    in property <length> viewport-height: 560px;
+    in property <length> card-x: 16px;
+    in property <length> card-y: 360px;
     callback next-clicked();
     callback back-clicked();
     callback dismiss-clicked();
 
+    property <bool> light-card: !Theme.dark;
+    property <color> fg-primary: root.light-card ? #1A1C1F : #F5F6F8;
+    property <color> fg-body: root.light-card ? #4B4F58 : #C4C8D1;
+    property <color> fg-muted: root.light-card ? #74747E : #989DA8;
     property <string> card-title: root.step == 0 ? "General controls"
         : root.step == 1 ? "Offline speech models"
         : root.step == 2 ? "History & Trash"
@@ -715,52 +830,84 @@ export component TourCard inherits Rectangle {
     property <string> card-body: root.step == 0
         ? "Pick your mic, tune sensitivity, set your global hotkey, and switch between Batch or Live dictation."
         : root.step == 1
-            ? "Download local Whisper models and switch between Vulkan GPU acceleration or multi-core CPU anytime."
+            ? "Download and switch between local English and multilingual Whisper models — everything stays 100% offline."
             : root.step == 2
                 ? "Search local transcripts, recover failed pastes with one click, or restore deleted items from Trash."
-                : "Click the gear icon anytime to tune the floating pill, replacements, startup, and trashed data retention.";
+                : "Click the gear icon anytime to tune the floating pill, inference engine, replacements, startup, and storage.";
 
-    width: 304px;
+    width: 308px;
     height: lay.preferred-height;
     border-radius: 14px;
-    background: #1C1A19;
-    border-width: 1px;
-    border-color: #FFFFFF22;
-    drop-shadow-blur: 24px;
-    drop-shadow-offset-y: 8px;
-    drop-shadow-color: #00000066;
+    background: transparent;
+    drop-shadow-blur: 28px;
+    drop-shadow-offset-y: 10px;
+    drop-shadow-color: root.light-card ? #00000028 : #00000090;
+
+    // Clipped frosted-glass surface containing the ultra-high-blur backdrop slice + low-opacity glass tint
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        border-radius: 14px;
+        clip: true;
+        background: transparent;
+
+        if root.backdrop-image.width > 0 : Image {
+            x: -root.card-x;
+            y: -root.card-y;
+            width: root.viewport-width;
+            height: root.viewport-height;
+            source: root.backdrop-image;
+            image-fit: fill;
+            image-rendering: smooth;
+            accessible-role: none;
+        }
+
+        // Ultra-translucent frosted glass tint + crisp 1.5px solid opaque dark rim in both themes
+        Rectangle {
+            width: parent.width;
+            height: parent.height;
+            border-radius: 14px;
+            background: root.light-card
+                ? (root.backdrop-image.width > 0 ? #FFFFFF5C : #FFFFFFE6)
+                : (root.backdrop-image.width > 0 ? #12121562 : #121215E8);
+            border-width: 1.5px;
+            border-color: root.light-card ? #2C2C35 : #383844;
+        }
+    }
 
     lay := VerticalLayout {
         padding: 16px;
         spacing: 10px;
 
-        // Top row: step counter + close X
+        // Top row: step counter + rounded-square close X
         HorizontalLayout {
             alignment: space-between;
             Text {
                 text: (root.step + 1) + "/" + root.total-steps;
                 font-size: Theme.font-size-xs;
                 font-weight: 500;
-                color: #A1A1AA;
+                color: root.fg-muted;
                 vertical-alignment: center;
             }
             Rectangle {
-                width: 22px;
-                height: 22px;
-                border-radius: 11px;
-                background: x-touch.has-hover ? #FFFFFF1A : transparent;
+                width: 24px;
+                height: 24px;
+                border-radius: 7px;
+                background: x-touch.has-hover
+                    ? (root.light-card ? #12121514 : #FFFFFF1A)
+                    : transparent;
                 accessible-role: button;
                 accessible-label: "Dismiss guide";
                 accessible-action-default => { root.dismiss-clicked(); }
                 Path {
                     width: 8px;
                     height: 8px;
-                    x: 7px;
-                    y: 7px;
+                    x: 8px;
+                    y: 8px;
                     viewbox-width: 10;
                     viewbox-height: 10;
                     commands: "M1 1 L9 9 M9 1 L1 9";
-                    stroke: #A1A1AA;
+                    stroke: x-touch.has-hover ? root.fg-primary : root.fg-muted;
                     stroke-width: 1.4px;
                     fill: transparent;
                 }
@@ -798,14 +945,14 @@ export component TourCard inherits Rectangle {
                         : root.step == 2 ? Icons.history
                         : Icons.settings;
                     size: 16px;
-                    icon-color: #F5F6F8;
+                    icon-color: root.fg-primary;
                 }
             }
             Text {
                 text: root.card-title;
                 font-size: Theme.font-size-base;
                 font-weight: 600;
-                color: #F5F6F8;
+                color: root.fg-primary;
                 vertical-alignment: center;
             }
         }
@@ -814,11 +961,11 @@ export component TourCard inherits Rectangle {
         Text {
             text: root.card-body;
             font-size: Theme.font-size-sm;
-            color: #C7C7CE;
+            color: root.fg-body;
             wrap: word-wrap;
         }
 
-        // Bottom actions: quiet Back link + white capsule Next/Done button
+        // Bottom actions: quiet Back link + high-contrast inverted Next/Done button
         HorizontalLayout {
             padding-top: 2px;
             alignment: space-between;
@@ -831,7 +978,7 @@ export component TourCard inherits Rectangle {
                     text: "Back";
                     font-size: Theme.font-size-sm;
                     font-weight: 500;
-                    color: back-touch.has-hover ? #FFFFFF : #A1A1AA;
+                    color: back-touch.has-hover ? root.fg-primary : root.fg-muted;
                     vertical-alignment: center;
                 }
                 back-touch := TouchArea {
@@ -845,7 +992,9 @@ export component TourCard inherits Rectangle {
                 height: 30px;
                 min-width: 72px;
                 border-radius: 15px;
-                background: next-touch.pressed ? #D4D4D8 : next-touch.has-hover ? #F4F4F5 : #FFFFFF;
+                background: root.light-card
+                    ? (next-touch.pressed ? #0C0C0E : next-touch.has-hover ? #25252D : #17171B)
+                    : (next-touch.pressed ? #D4D4D8 : next-touch.has-hover ? #ECEEF2 : #FFFFFF);
                 accessible-role: button;
                 accessible-label: root.step + 1 >= root.total-steps ? "Done" : "Next";
                 accessible-action-default => { root.next-clicked(); }
@@ -856,7 +1005,7 @@ export component TourCard inherits Rectangle {
                         text: root.step + 1 >= root.total-steps ? "Done" : "Next";
                         font-size: Theme.font-size-sm;
                         font-weight: 600;
-                        color: #141416;
+                        color: root.light-card ? #F4F4F6 : #121215;
                         horizontal-alignment: center;
                         vertical-alignment: center;
                         accessible-role: none;

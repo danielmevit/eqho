@@ -51,15 +51,15 @@ export component GeneralTab inherits Rectangle {
         height: parent.height;
         padding-left: Theme.space-16;
         padding-right: 6px;
-        spacing: Theme.space-16;
+        spacing: Theme.space-10;
 
         // Left column: compact pinned quick settings rail (same width as prior right column)
         VerticalLayout {
-            width: Math.clamp((parent.width - 48px) * 0.38, 300px, 360px);
+            width: Math.clamp((parent.width - 42px) * 0.38, 300px, 360px);
             horizontal-stretch: 0;
             padding-top: Theme.space-16;
             padding-bottom: Theme.space-16;
-            spacing: Theme.space-12;
+            spacing: Theme.space-10;
             alignment: start;
 
             SectionCard {
@@ -167,7 +167,7 @@ export component GeneralTab inherits Rectangle {
                 padding-top: Theme.space-16;
                 padding-bottom: Theme.space-16;
                 padding-right: 4px;
-                spacing: Theme.space-12;
+                spacing: Theme.space-10;
                 alignment: start;
 
                 SectionCard {

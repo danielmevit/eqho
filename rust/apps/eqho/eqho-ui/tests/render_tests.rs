@@ -9,8 +9,8 @@ use eqho_core::modelpick::HardwareClass;
 use eqho_core::settings::Settings;
 use eqho_ui::{
     DashboardWindow, HoverTooltip, Theme, apply_settings_to_window, blur_snapshot,
-    build_history_rows, build_model_cards, format_active_engine_display, split_model_cards,
-    wordmark_image,
+    blur_snapshot_strong, build_history_rows, build_model_cards, format_active_driver_display,
+    split_model_cards, wordmark_image,
 };
 use slint::platform::software_renderer::{
     MinimalSoftwareWindow, PremultipliedRgbaColor, RepaintBufferType,
@@ -101,19 +101,21 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
         ..Settings::default()
     };
     apply_settings_to_window(&win, &settings, HardwareClass::Gpu, true);
-    win.set_active_engine_display(
-        format_active_engine_display("auto", HardwareClass::Gpu, Some("NVIDIA GeForce RTX 3060"), 12)
+    win.set_active_engine_display("whisper.cpp 1.8.4".into());
+    win.set_active_driver_display(
+        format_active_driver_display("auto", HardwareClass::Gpu, Some("NVIDIA GeForce RTX 3060"), 12)
             .into(),
     );
     win.set_mic_names(ModelRc::new(VecModel::from(vec![
         "System Default".into(),
         "Microphone Array (Realtek Audio)".into(),
     ])));
-    // Exercise all model card states simultaneously: Active (distil-large-v3), Downloading
-    // (small.en-q5), Cached/Ready (large-v3-turbo, tiny), and Not downloaded (distil-medium.en).
+    // Exercise all model card states simultaneously in the visible 2x2 English grid:
+    // Active (distil-large-v3), Cached/Ready (distil-medium.en), Not downloaded (distil-small.en),
+    // and Downloading (small.en-q5).
     let (en_cards, ml_cards) = split_model_cards(build_model_cards(
         "distil-large-v3",
-        &["distil-large-v3", "large-v3-turbo", "tiny"],
+        &["distil-large-v3", "distil-medium.en", "large-v3-turbo", "tiny"],
         Some("small.en-q5"),
         None,
         0.42,
@@ -163,17 +165,44 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
     let light_logo = wordmark_image(false);
     win.show().unwrap();
 
-    // 1. General tab (dark & light, wide 940x560 + interactive tour card + top-right hover tooltip)
+    // 1. General tab (dark & light, wide 940x560 + frosted inverted tour card + top-right hover tooltip)
     win.set_active_tab("general".into());
     win.set_tour_step(0);
-    win.set_tour_active(true);
+    win.set_tour_active(false);
     win.set_logo_image(dark_logo.clone());
+    let dark_base = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
+    assert_non_uniform_and_valid_png(&dark_base, 940, 560);
+    maybe_save_png(
+        dump_dir.as_ref(),
+        "01b_general_clean_dark_940x560",
+        &dark_base,
+        940,
+        560,
+    );
+    win.set_tour_backdrop(blur_snapshot_strong(
+        &SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&dark_base, 940, 560),
+    ));
+    win.set_tour_active(true);
     let dark_wide = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
     assert_non_uniform_and_valid_png(&dark_wide, 940, 560);
     maybe_save_png(dump_dir.as_ref(), "01_general_dark_940x560", &dark_wide, 940, 560);
 
-    // Light mode with floating "Dark mode" hover tooltip pill under top-right theme icon + tour card
+    // Light mode with floating "Dark mode" hover tooltip pill under top-right theme icon + frosted obsidian tour card
+    win.set_tour_active(false);
     win.set_logo_image(light_logo.clone());
+    let light_base = render_dashboard_rgba(&window_adapter, &win, 940, 560, false);
+    assert_non_uniform_and_valid_png(&light_base, 940, 560);
+    maybe_save_png(
+        dump_dir.as_ref(),
+        "02b_general_clean_light_940x560",
+        &light_base,
+        940,
+        560,
+    );
+    win.set_tour_backdrop(blur_snapshot_strong(
+        &SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&light_base, 940, 560),
+    ));
+    win.set_tour_active(true);
     let tip = win.global::<HoverTooltip>();
     tip.set_text("Dark mode".into());
     tip.set_anchor_x(864.0);
@@ -187,6 +216,7 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
     maybe_save_png(dump_dir.as_ref(), "02_general_light_940x560", &light_wide, 940, 560);
     tip.set_visible(false);
     win.set_tour_active(false);
+    win.set_tour_backdrop(slint::Image::default());
 
     // 2. Models tab (wide dark, wide light, narrow dark & narrow light)
     win.set_active_tab("models".into());
@@ -306,6 +336,19 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
         dump_dir.as_ref(),
         "06b_settings_modal_overlay_light",
         &settings_light,
+        940,
+        560,
+    );
+
+    win.set_settings_section("system".into());
+    win.set_settings_backdrop(bg_dark_blur.clone());
+    win.set_logo_image(dark_logo.clone());
+    let settings_system_dark = render_dashboard_rgba(&window_adapter, &win, 940, 560, true);
+    assert_non_uniform_and_valid_png(&settings_system_dark, 940, 560);
+    maybe_save_png(
+        dump_dir.as_ref(),
+        "06f_settings_modal_system_dark",
+        &settings_system_dark,
         940,
         560,
     );
@@ -479,4 +522,35 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
         940,
         560,
     );
+
+    // 7. Real high-resolution iridescent floating pills straight from `eqho_core::pillfx`
+    //    (used in Microsoft Store listing slides & Poster Art so the real shader is showcased).
+    let pill_w = 720u32;
+    let pill_h = 132u32;
+    for (name, light_mix) in [("pill_dark_real", 0.0_f32), ("pill_light_real", 1.0_f32)] {
+        let premul = eqho_core::pillfx::render_premul_bgra(
+            pill_w,
+            pill_h,
+            2.35,
+            0.72,
+            light_mix,
+            1.0,
+            Some((0.76, 0.56, 2.15)),
+        );
+        let mut rgba = Vec::with_capacity(premul.len());
+        for px in premul.chunks_exact(4) {
+            let (b, g, r, a) = (px[0], px[1], px[2], px[3]);
+            if a == 0 {
+                rgba.extend_from_slice(&[0, 0, 0, 0]);
+            } else if a == 255 {
+                rgba.extend_from_slice(&[r, g, b, 255]);
+            } else {
+                let af = u16::from(a);
+                let un = |c: u8| -> u8 { ((u16::from(c) * 255 + af / 2) / af).min(255) as u8 };
+                rgba.extend_from_slice(&[un(r), un(g), un(b), a]);
+            }
+        }
+        assert_non_uniform_and_valid_png(&rgba, pill_w, pill_h);
+        maybe_save_png(dump_dir.as_ref(), name, &rgba, pill_w, pill_h);
+    }
 }

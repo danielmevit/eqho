@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
 PackageIdentifier: damt.Eqho
-PackageVersion: 0.9.3
+PackageVersion: 0.9.4
 PackageLocale: en-US
 Publisher: damt.xyz
 PublisherUrl: https://damt.xyz
@@ -32,6 +32,6 @@ Tags:
 - privacy
 - accessibility
 - transcription
-ReleaseNotesUrl: https://github.com/danielmevit/eqho/releases/tag/v0.9.3
+ReleaseNotesUrl: https://github.com/danielmevit/eqho/releases/tag/v0.9.4
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0

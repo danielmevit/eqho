@@ -1,107 +1,109 @@
-// Models Tab: Inference Engine + Storage top row, Whisper model cards (English Optimized & Multilingual).
+// Models Tab: Whisper model cards (English Optimized & Multilingual) with a subtle Engine settings shortcut.
 import { Theme } from "@app-theme/theme.slint";
-import { Button, ButtonKind, ProgressLine, TabList } from "@damt-ui/kit.slint";
+import { Button, ButtonKind, ProgressLine } from "@damt-ui/kit.slint";
 import { ModelCardItem } from "types.slint";
 import { ScrollArea, SectionCard } from "components.slint";
 import { Icons, PhIcon, HoverTooltip } from "icons.slint";
 
-// Clean 28x28 circular icon-led status indicator (no checkmarks, no loud green pills).
-// - Downloaded / Active: blue download icon + blue outline (stronger outline when active)
-// - Loading into memory: blue download icon + calm status text
-// - Downloading: tinted Eqho-blue circle + animated 3-dot indicator
-// - Error: subtle circle with error border + clickable retry icon
-// - Not downloaded: muted neutral circle + clickable grey download arrow with standard gray hover
+// Clean 28x28 borderless rounded-square download icon (hidden completely once a model is downloaded):
+// - Not downloaded: muted/grayed-out download icon; brightens with a whiter tile on hover (clickable)
+// - Downloading: soft Eqho-blue tile + animated blue arrow gliding into a fixed tray
+// - Error: subtle tinted tile + clickable red retry icon
 component ModelStatusIcon inherits Rectangle {
-    in property <bool> is-selected: false;
-    in property <bool> is-cached: false;
     in property <bool> is-downloading: false;
-    in property <bool> is-loading: false;
     in property <bool> has-error: false;
     callback download-clicked();
 
-    property <bool> clickable: !root.is-cached && !root.is-downloading;
-    property <int> dot-phase: Math.mod(Math.floor(animation-tick() / 240ms), 4);
-    property <string> tooltip-text: root.is-loading ? "Loading into memory…"
-        : root.is-selected && root.is-cached ? "Active model"
-        : root.is-downloading ? "Downloading model…"
+    property <bool> clickable: !root.is-downloading;
+    // Continuous 1.2s downward glide cycle (phase-offset by +0.45 so t=0 static frames show the arrow centered).
+    property <float> dl-t: root.is-downloading
+        ? Math.mod(Math.mod(animation-tick() / 1ms, 1200) / 1200.0 + 0.45, 1.0)
+        : 0.45;
+    property <length> arrow-dy: (-5.5 + root.dl-t * 10.5) * 1px;
+    property <float> arrow-alpha: root.dl-t < 0.18
+        ? (root.dl-t / 0.18)
+        : root.dl-t > 0.78
+            ? ((1.0 - root.dl-t) / 0.22)
+            : 1.0;
+    property <string> tooltip-text: root.is-downloading ? "Downloading model…"
         : root.has-error ? "Download failed — click to retry"
-        : root.is-cached ? "Downloaded"
         : "Download model";
 
     width: 28px;
     height: 28px;
     border-radius: 8px;
-    border-width: (root.is-cached && !root.is-downloading) ? 1.5px : 1px;
-    border-color: root.is-cached && !root.is-downloading ? Theme.accent-line
-        : root.has-error ? Theme.error
-        : root.is-downloading ? Theme.accent-line
-        : touch.has-hover && root.clickable ? Theme.border
-        : Theme.dark ? #383844 : Theme.border-subtle;
-    background: root.is-cached && !root.is-downloading ? Theme.accent-muted
-        : root.is-downloading ? Theme.accent-muted
-        : touch.pressed && root.clickable ? Theme.button-outline-pressed
-        : touch.has-hover && root.clickable ? Theme.surface-hover
-        : Theme.dark ? #2A2A33 : Theme.surface-tertiary;
+    border-width: 0px;
+    background: root.is-downloading ? Theme.accent-muted
+        : root.has-error ? (touch.has-hover ? (Theme.dark ? #F43F5E30 : #DC262622) : (Theme.dark ? #F43F5E1C : #DC262614))
+        : touch.pressed && root.clickable ? (Theme.dark ? #FFFFFF2C : #00000018)
+        : touch.has-hover && root.clickable ? (Theme.dark ? #FFFFFF20 : #00000012)
+        : (Theme.dark ? #FFFFFF08 : #00000006);
 
     accessible-role: button;
     accessible-enabled: root.clickable;
     accessible-label: root.tooltip-text;
 
-    // Downloaded (cached, loading, or active): Phosphor download icon in Eqho blue inside blue-outlined circle
-    if root.is-cached && !root.is-downloading : PhIcon {
-        glyph: Icons.download;
-        size: 15px;
-        icon-color: Theme.accent-text;
-    }
+    // Downloading: blue arrow smoothly gliding into a fixed tray (centered cleanly in the 28x28 tile)
+    if root.is-downloading : Rectangle {
+        x: 6.5px;
+        y: 6.5px;
+        width: 15px;
+        height: 15px;
 
-    // Downloading animated 3 dots (Eqho blue)
-    if root.is-downloading : HorizontalLayout {
-        alignment: center;
-        spacing: 2.5px;
-        VerticalLayout {
-            alignment: center;
-            Rectangle {
-                width: 4px;
-                height: 4px;
-                border-radius: 2px;
-                background: Theme.accent-text;
-                opacity: root.dot-phase == 0 ? 1.0 : 0.32;
+        // Clipped region above the tray floor so the gliding arrow tucks cleanly into the tray
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: 15px;
+            height: 12px;
+            clip: true;
+
+            Path {
+                x: 0px;
+                y: root.arrow-dy;
+                width: 15px;
+                height: 15px;
+                viewbox-width: 16;
+                viewbox-height: 16;
+                commands: "M 8 2.5 L 8 10.5 M 4.7 7.3 L 8 10.6 L 11.3 7.3";
+                stroke: Theme.accent-text;
+                stroke-width: 1.5px;
+                stroke-line-cap: round;
+                stroke-line-join: round;
+                fill: transparent;
+                opacity: root.arrow-alpha;
             }
         }
-        VerticalLayout {
-            alignment: center;
-            Rectangle {
-                width: 4px;
-                height: 4px;
-                border-radius: 2px;
-                background: Theme.accent-text;
-                opacity: root.dot-phase == 1 ? 1.0 : 0.32;
-            }
-        }
-        VerticalLayout {
-            alignment: center;
-            Rectangle {
-                width: 4px;
-                height: 4px;
-                border-radius: 2px;
-                background: Theme.accent-text;
-                opacity: root.dot-phase == 2 ? 1.0 : 0.32;
-            }
+
+        // Fixed bottom tray (stays anchored while the arrow glides into it)
+        Path {
+            x: 0px;
+            y: 0px;
+            width: 15px;
+            height: 15px;
+            viewbox-width: 16;
+            viewbox-height: 16;
+            commands: "M 2.5 10.8 L 2.5 13 C 2.5 13.7 3.1 14.3 3.8 14.3 L 12.2 14.3 C 12.9 14.3 13.5 13.7 13.5 13 L 13.5 10.8";
+            stroke: Theme.accent-text;
+            stroke-width: 1.5px;
+            stroke-line-cap: round;
+            stroke-line-join: round;
+            fill: transparent;
         }
     }
 
     // Error retry icon (Phosphor)
-    if root.has-error && !root.is-downloading && !root.is-cached : PhIcon {
+    if root.has-error && !root.is-downloading : PhIcon {
         glyph: Icons.retry;
         size: 15px;
         icon-color: Theme.error;
     }
 
-    // Not downloaded: muted grey Phosphor download icon with neutral gray hover
-    if !root.is-cached && !root.is-downloading && !root.has-error : PhIcon {
+    // Not downloaded: grayed-out download icon that brightens to crisp white/ink on hover
+    if !root.is-downloading && !root.has-error : PhIcon {
         glyph: Icons.download;
         size: 15px;
-        icon-color: touch.has-hover ? Theme.text : Theme.text-muted;
+        icon-color: touch.has-hover ? Theme.text : (Theme.dark ? #6C6C78 : #A0A7B2);
     }
 
     touch := TouchArea {
@@ -136,15 +138,14 @@ component ModelCard inherits Rectangle {
 
     property <bool> is-active: root.item.is_selected && root.item.is_cached && !root.item.is_downloading;
 
-    // Dark-mode depth ladder: canvas (#121215) -> SectionCard (#17171B) -> ModelCard (#202026 / #25252D active).
-    // Calm grayish-white outline on the active model (never a loud full-blue rectangle).
+    // Active card gets a crisp 1px solid Eqho-blue outline; inactive cards stay calm obsidian neutral.
     background: Theme.dark
-        ? (root.is-active ? #25252D : Theme.surface-tertiary)
+        ? (root.is-active ? #202028 : Theme.surface-tertiary)
         : Theme.bg;
     border-radius: Theme.radius-card;
-    border-width: root.is-active ? 1.5px : 1px;
+    border-width: 1px;
     border-color: root.is-active
-        ? (Theme.dark ? #D4D4D86E : #1A1C1F52)
+        ? Theme.accent-line
         : (Theme.dark ? #303038 : Theme.border-subtle);
     min-height: lay.preferred-height;
     horizontal-stretch: 1;
@@ -154,6 +155,7 @@ component ModelCard inherits Rectangle {
         spacing: Theme.space-8;
 
         HorizontalLayout {
+            min-height: 28px;
             spacing: Theme.space-8;
             alignment: space-between;
 
@@ -167,14 +169,11 @@ component ModelCard inherits Rectangle {
                 vertical-alignment: center;
             }
 
-            VerticalLayout {
+            if !root.item.is_cached || root.item.is_downloading : VerticalLayout {
                 horizontal-stretch: 0;
                 alignment: center;
                 ModelStatusIcon {
-                    is-selected: root.is-active;
-                    is-cached: root.item.is_cached;
                     is-downloading: root.item.is_downloading;
-                    is-loading: root.item.is_loading;
                     has-error: root.item.has_error;
                     download-clicked => { root.download-clicked(root.item.key); }
                 }
@@ -192,13 +191,6 @@ component ModelCard inherits Rectangle {
             text: root.item.recommendation;
             font-size: Theme.font-size-sm;
             color: Theme.accent-text;
-            wrap: word-wrap;
-        }
-
-        if root.item.is_downloading && root.item.download_detail != "" : Text {
-            text: root.item.download_detail;
-            font-size: Theme.font-size-xs;
-            color: Theme.text-muted;
             wrap: word-wrap;
         }
 
@@ -221,13 +213,13 @@ component ModelCard inherits Rectangle {
 
             if !root.is-active && !root.item.is_downloading && root.item.is_cached : Button {
                 text: "Select";
-                kind: ButtonKind.accent;
+                kind: ButtonKind.outline;
                 clicked => { root.select-clicked(root.item.key); }
             }
 
             if !root.item.is_cached && !root.item.is_downloading : Button {
                 text: root.item.has_error ? "Try again" : "Download";
-                kind: root.item.has_error ? ButtonKind.outline : ButtonKind.accent;
+                kind: ButtonKind.outline;
                 clicked => { root.download-clicked(root.item.key); }
             }
 
@@ -245,49 +237,55 @@ component ModelCard inherits Rectangle {
 
             if root.item.is_downloading : Text {
                 height: 30px;
-                text: "Downloading…";
-                font-size: Theme.font-size-sm;
-                font-weight: 500;
-                color: Theme.accent-text;
-                vertical-alignment: center;
-            }
-
-            if root.is-active && root.item.is_loading : Text {
-                height: 30px;
-                text: "Loading model…";
-                font-size: Theme.font-size-sm;
+                horizontal-stretch: 1;
+                text: root.item.download_detail != "" ? root.item.download_detail : "Downloading…";
+                font-size: Theme.font-size-xs;
                 font-weight: 500;
                 color: Theme.text-muted;
                 vertical-alignment: center;
+                overflow: elide;
             }
 
-            if root.is-active && !root.item.is_loading : Text {
-                height: 30px;
-                text: "Active model";
-                font-size: Theme.font-size-sm;
-                font-weight: 600;
-                color: Theme.text;
-                vertical-alignment: center;
+            if root.is-active : Rectangle {
+                min-width: active-state-label.preferred-width + 24px;
+                min-height: active-state-label.preferred-height + 12px;
+                max-height: self.min-height;
+                horizontal-stretch: 0;
+                vertical-stretch: 0;
+                border-radius: 9px;
+                border-width: 0px;
+                background: root.item.is_loading ? Theme.accent-muted : Theme.accent;
+                accessible-role: text;
+                accessible-label: root.item.is_loading ? "Loading model" : "Active model";
+
+                active-state-label := Text {
+                    text: root.item.is_loading ? "Loading…" : "Active";
+                    font-size: Theme.font-size-label;
+                    font-weight: 500;
+                    color: root.item.is_loading ? Theme.accent-text : Theme.on-accent;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
             }
         }
     }
 }
 
 export component ModelsTab inherits Rectangle {
-    in-out property <string> hardware-summary: "On this PC, speech models run on your graphics card.";
-    in-out property <int> engine-backend-index: 0;
+    in property <int> engine-backend-index: 0;
     in property <[ModelCardItem]> english-models: [];
     in property <[ModelCardItem]> multilingual-models: [];
-    in-out property <string> model-dir-display: "";
 
-    callback engine-backend-changed(int);
+    callback open-engine-settings();
     callback select-model(string);
     callback download-model(string);
     callback cancel-download-model(string);
     callback delete-model(string);
-    callback open-model-folder();
 
     property <bool> two-col: root.width >= 720px;
+    property <string> engine-chip-label: root.engine-backend-index == 1 ? "Engine: GPU"
+        : root.engine-backend-index == 2 ? "Engine: CPU"
+        : "Engine: Auto";
 
     ScrollArea {
         width: parent.width;
@@ -297,123 +295,13 @@ export component ModelsTab inherits Rectangle {
             padding: Theme.space-16;
             spacing: Theme.space-12;
 
-            // TOP ROW: INFERENCE ENGINE (left) + STORAGE (right)
-            if root.two-col : HorizontalLayout {
-                spacing: Theme.space-12;
-                alignment: stretch;
-
-                SectionCard {
-                    horizontal-stretch: 1;
-                    title: "INFERENCE ENGINE";
-                    Text {
-                        text: root.hardware-summary;
-                        font-size: Theme.font-size-sm;
-                        color: Theme.text-muted;
-                        wrap: word-wrap;
-                    }
-                    Rectangle {
-                        vertical-stretch: 1;
-                        min-height: 0px;
-                    }
-                    TabList {
-                        items: ["Auto", "GPU (Vulkan)", "CPU"];
-                        selected <=> root.engine-backend-index;
-                        accessible-name: "Inference Engine";
-                        picked(i) => { root.engine-backend-changed(i); }
-                    }
-                }
-
-                SectionCard {
-                    horizontal-stretch: 1;
-                    title: "STORAGE";
-                    HorizontalLayout {
-                        spacing: Theme.space-10;
-                        alignment: space-between;
-                        Text {
-                            text: root.model-dir-display != "" ? root.model-dir-display : "Default cache folder";
-                            font-size: Theme.font-size-sm;
-                            color: Theme.text-muted;
-                            horizontal-stretch: 1;
-                            wrap: word-wrap;
-                            vertical-alignment: center;
-                        }
-                        VerticalLayout {
-                            horizontal-stretch: 0;
-                            alignment: center;
-                            Button {
-                                text: "Open Folder";
-                                kind: ButtonKind.outline;
-                                clicked => { root.open-model-folder(); }
-                            }
-                        }
-                    }
-                    Rectangle {
-                        vertical-stretch: 1;
-                        min-height: 0px;
-                    }
-                    Text {
-                        text: "Models download once over HTTPS from huggingface.co/ggerganov/whisper.cpp and stay 100% offline.";
-                        font-size: Theme.font-size-xs;
-                        color: Theme.text-subtle;
-                        wrap: word-wrap;
-                    }
-                }
-            }
-
-            if !root.two-col : VerticalLayout {
-                spacing: Theme.space-12;
-
-                SectionCard {
-                    title: "INFERENCE ENGINE";
-                    Text {
-                        text: root.hardware-summary;
-                        font-size: Theme.font-size-sm;
-                        color: Theme.text-muted;
-                        wrap: word-wrap;
-                    }
-                    TabList {
-                        items: ["Auto", "GPU (Vulkan)", "CPU"];
-                        selected <=> root.engine-backend-index;
-                        accessible-name: "Inference Engine";
-                        picked(i) => { root.engine-backend-changed(i); }
-                    }
-                }
-
-                SectionCard {
-                    title: "STORAGE";
-                    HorizontalLayout {
-                        spacing: Theme.space-10;
-                        alignment: space-between;
-                        Text {
-                            text: root.model-dir-display != "" ? root.model-dir-display : "Default cache folder";
-                            font-size: Theme.font-size-sm;
-                            color: Theme.text-muted;
-                            horizontal-stretch: 1;
-                            wrap: word-wrap;
-                            vertical-alignment: center;
-                        }
-                        VerticalLayout {
-                            horizontal-stretch: 0;
-                            alignment: center;
-                            Button {
-                                text: "Open Folder";
-                                kind: ButtonKind.outline;
-                                clicked => { root.open-model-folder(); }
-                            }
-                        }
-                    }
-                    Text {
-                        text: "Models download once over HTTPS from huggingface.co/ggerganov/whisper.cpp and stay 100% offline.";
-                        font-size: Theme.font-size-xs;
-                        color: Theme.text-subtle;
-                        wrap: word-wrap;
-                    }
-                }
-            }
-
             // ENGLISH OPTIMIZED
             SectionCard {
                 title: "ENGLISH OPTIMIZED";
+                action-glyph: Icons.settings;
+                action-label: root.engine-chip-label;
+                action-tooltip: "Configure inference engine & model storage in Settings";
+                action-clicked => { root.open-engine-settings(); }
                 if root.two-col : VerticalLayout {
                     spacing: Theme.space-10;
                     for row-idx in Math.ceil(root.english-models.length / 2) : HorizontalLayout {

@@ -84,11 +84,14 @@ export component SettingsModal inherits Rectangle {
     in-out property <string> paste-rules-text: "";
     in-out property <string> paste-rules-status: "";
 
+    in-out property <string> hardware-summary: "On this PC, speech models run on your graphics card.";
+    in-out property <int> engine-backend-index: 0;
     in-out property <int> volume-duck-index: 0;
     in-out property <int> history-trash-days-index: 2;
     in-out property <bool> start-with-windows: false;
     in property <string> model-dir-display: "";
 
+    in-out property <bool> overlay-preview-active: true;
     in-out property <bool> overlay-enabled: true;
     in-out property <bool> overlay-show-text: true;
     in-out property <bool> overlay-show-level: true;
@@ -101,8 +104,9 @@ export component SettingsModal inherits Rectangle {
     in-out property <int> overlay-panel-see-through-pct: 22;
     in-out property <int> overlay-font-size: 14;
 
-    in property <string> app-version: "0.9.3";
-    in property <string> active-engine-display: "GPU (Vulkan) · whisper.cpp 1.8.4";
+    in property <string> app-version: "0.9.4";
+    in property <string> active-engine-display: "whisper.cpp 1.8.4";
+    in property <string> active-driver-display: "Vulkan";
     in property <bool> store-build: false;
     in property <string> license-state: "unknown";
     in property <string> trial-days-left-text: "";
@@ -110,12 +114,15 @@ export component SettingsModal inherits Rectangle {
     in property <string> made-with-slint-label: "Made with Slint";
 
     callback close-requested();
+    callback section-changed(string);
+    callback overlay-preview-toggled(bool);
     callback theme-mode-changed(int);
     callback ui-scale-changed(int);
     callback remove-fillers-toggled(bool);
     callback voice-commands-toggled(bool);
     callback save-replacements(string);
     callback save-paste-rules(string);
+    callback engine-backend-changed(int);
     callback volume-duck-selected(int);
     callback history-trash-days-selected(int);
     callback open-trash();
@@ -233,43 +240,64 @@ export component SettingsModal inherits Rectangle {
                         glyph: Icons.palette;
                         label: "Appearance";
                         selected: root.active-section == "appearance";
-                        clicked => { root.active-section = "appearance"; }
+                        clicked => {
+                            root.active-section = "appearance";
+                            root.section-changed("appearance");
+                        }
                     }
                     ModalSidebarItem {
                         glyph: Icons.waveform;
                         label: "Dictation";
                         selected: root.active-section == "dictation";
-                        clicked => { root.active-section = "dictation"; }
+                        clicked => {
+                            root.active-section = "dictation";
+                            root.section-changed("dictation");
+                        }
                     }
                     ModalSidebarItem {
                         glyph: Icons.overlay;
                         label: "Overlay";
                         selected: root.active-section == "overlay";
-                        clicked => { root.active-section = "overlay"; }
+                        clicked => {
+                            root.active-section = "overlay";
+                            root.section-changed("overlay");
+                        }
                     }
                     ModalSidebarItem {
                         glyph: Icons.desktop;
                         label: "System";
                         selected: root.active-section == "system";
-                        clicked => { root.active-section = "system"; }
+                        clicked => {
+                            root.active-section = "system";
+                            root.section-changed("system");
+                        }
                     }
                     ModalSidebarItem {
                         glyph: Icons.database;
                         label: "Data & Trash";
                         selected: root.active-section == "data";
-                        clicked => { root.active-section = "data"; }
+                        clicked => {
+                            root.active-section = "data";
+                            root.section-changed("data");
+                        }
                     }
                     if root.store-build : ModalSidebarItem {
                         glyph: Icons.license;
                         label: "License";
                         selected: root.active-section == "license";
-                        clicked => { root.active-section = "license"; }
+                        clicked => {
+                            root.active-section = "license";
+                            root.section-changed("license");
+                        }
                     }
                     ModalSidebarItem {
                         glyph: Icons.info;
                         label: "About";
                         selected: root.active-section == "about";
-                        clicked => { root.active-section = "about"; }
+                        clicked => {
+                            root.active-section = "about";
+                            root.section-changed("about");
+                        }
                     }
                 }
 
@@ -450,6 +478,18 @@ export component SettingsModal inherits Rectangle {
 
                             SettingsGroup {
                                 CompactRow {
+                                    label: "Live Preview on Screen";
+                                    help: "Show the real floating pill and text box live while tuning these controls";
+                                    Toggle {
+                                        checked <=> root.overlay-preview-active;
+                                        accessible-name: "Live Preview on Screen";
+                                        toggled(v) => { root.overlay-preview-toggled(v); }
+                                    }
+                                }
+                            }
+
+                            SettingsGroup {
+                                CompactRow {
                                     label: "Show Overlay";
                                     help: "Show floating pill while dictating";
                                     Toggle {
@@ -564,26 +604,43 @@ export component SettingsModal inherits Rectangle {
                         }
 
                         // --- SYSTEM ---
-                        if root.active-section == "system" : SettingsGroup {
-                            StackedSettingRow {
-                                label: "Volume While Speaking";
-                                help: "Lower system audio automatically during dictation";
-                                Dropdown {
-                                    model: ["Off", "50%", "25%", "10%", "Mute"];
-                                    current-index <=> root.volume-duck-index;
-                                    window-height: root.window-height;
-                                    accessible-name: "Volume While Speaking";
-                                    selected(i) => { root.volume-duck-selected(i); }
+                        if root.active-section == "system" : VerticalLayout {
+                            spacing: Theme.space-12;
+
+                            SettingsGroup {
+                                StackedSettingRow {
+                                    label: "Inference Engine";
+                                    help: root.hardware-summary;
+                                    TabList {
+                                        items: ["Auto", "GPU", "CPU"];
+                                        selected <=> root.engine-backend-index;
+                                        accessible-name: "Inference Engine";
+                                        picked(i) => { root.engine-backend-changed(i); }
+                                    }
                                 }
                             }
-                            Rectangle { height: 1px; background: Theme.border-subtle; }
-                            CompactRow {
-                                label: "Start with Windows";
-                                help: "Launch Eqho automatically when you sign in";
-                                Toggle {
-                                    checked <=> root.start-with-windows;
-                                    accessible-name: "Start with Windows";
-                                    toggled(v) => { root.start-with-windows-toggled(v); }
+
+                            SettingsGroup {
+                                StackedSettingRow {
+                                    label: "Volume While Speaking";
+                                    help: "Lower system audio automatically during dictation";
+                                    Dropdown {
+                                        model: ["Off", "50%", "25%", "10%", "Mute"];
+                                        current-index <=> root.volume-duck-index;
+                                        window-height: root.window-height;
+                                        accessible-name: "Volume While Speaking";
+                                        selected(i) => { root.volume-duck-selected(i); }
+                                    }
+                                }
+                                Rectangle { height: 1px; background: Theme.border-subtle; }
+                                CompactRow {
+                                    label: "Start with Windows";
+                                    help: "Launch Eqho automatically when you sign in";
+                                    Toggle {
+                                        checked <=> root.start-with-windows;
+                                        accessible-name: "Start with Windows";
+                                        toggled(v) => { root.start-with-windows-toggled(v); }
+                                    }
                                 }
                             }
                         }
@@ -644,6 +701,12 @@ export component SettingsModal inherits Rectangle {
                                             clicked => { root.open-model-folder(); }
                                         }
                                     }
+                                }
+                                Text {
+                                    text: "Models download once over HTTPS from huggingface.co/ggerganov/whisper.cpp and stay 100% offline.";
+                                    font-size: Theme.font-size-xs;
+                                    color: Theme.text-subtle;
+                                    wrap: word-wrap;
                                 }
                             }
                         }
@@ -745,6 +808,24 @@ export component SettingsModal inherits Rectangle {
                                     }
                                     Text {
                                         text: root.active-engine-display;
+                                        font-size: Theme.font-size-sm;
+                                        color: Theme.text;
+                                        horizontal-alignment: right;
+                                        horizontal-stretch: 1;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                                Rectangle { height: 1px; background: Theme.border-subtle; }
+                                HorizontalLayout {
+                                    spacing: Theme.space-12;
+                                    alignment: space-between;
+                                    Text {
+                                        text: "Driver";
+                                        font-size: Theme.font-size-sm;
+                                        color: Theme.text-muted;
+                                    }
+                                    Text {
+                                        text: root.active-driver-display;
                                         font-size: Theme.font-size-sm;
                                         color: Theme.text;
                                         horizontal-alignment: right;

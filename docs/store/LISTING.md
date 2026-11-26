@@ -1,6 +1,6 @@
 # Microsoft Store Listing — Eqho (Ready to Paste)
 
-Field-by-field Partner Center copy for Eqho 0.9.0. Calm, warm, concrete, factual tone.
+Field-by-field Partner Center copy for Eqho 0.9.4. Calm, warm, concrete, factual tone.
 **Owner rule:** No GitHub repository URLs and no competitor names anywhere in the listing.
 
 ---
@@ -72,12 +72,11 @@ Calm, 100% offline voice-to-text dictation for Windows. Press Alt+Q, speak, and 
 
 ---
 
-## What's New in This Version (0.9.0)
-- Native Rust + Slint desktop app: tiny footprint (~3.4 MB idle RAM), instant tray launch, and zero extra runtime dependencies
-- Fast local Vulkan GPU acceleration (NVIDIA, AMD, Intel) and multi-core CPU inference with 4 compact Q5 speech models
-- Hover-reveal or pinnable under-pill control bar with silent cancel, live timer, searchable 99-language menu with recent chips, and Batch / Live delivery toggle
-- Deep Navy dark theme and crisp light theme, vector flags for all 99 languages, and a 6-step first-run setup wizard
-- 24-bit and 32-bit studio microphone support, multi-monitor overlay following, and private clipboard paste
+## What's New in This Version (0.9.4)
+- Live Overlay Preview on Screen: tune pill size, transparency, position, and live transcript styling directly on your desktop in real time from Settings → Overlay
+- Streamlined Models & Settings: clean active-model blue accenting, animated model download states with inline progress, one-click Engine shortcut (Auto · GPU · CPU), and separate Engine & Driver diagnostics in About
+- Crisp pure-vector header wordmark, unified tray & window monogram icon, frosted interactive 4-step section guide cards, and obsidian-charcoal dark theme with blurred Settings modal backdrop
+- More reliable global hotkey activation (including live Alt+Q testing inside first-run Setup Step 6) and Windows 11 Acrylic frosted overlay polish
 
 ---
 
@@ -105,13 +104,13 @@ voice to text · offline dictation · speech to text · voice typing · local wh
 ---
 
 ## Screenshots Plan (3840×2160 & 1920×1080)
-Generated via `docs/store/screenshots/` (brand slide first, calm Deep Navy / light alternating rhythm):
-1. **01 — Hero:** *"Speak anywhere. It just types."* — Eqho brand + floating iridescent listening pill + under-pill bar + key badges (`100% offline` · `99 languages` · `15-day free trial`).
-2. **02 — Under-pill & 99 Languages:** *"Switch languages without leaving your app"* — Floating pill + under-pill micro-bar + searchable 99-language menu with vector SVG flags & dynamic recent chips.
-3. **03 — Batch & Live Delivery:** *"Your pace: Batch or Live"* — General dashboard showing `Delivery Mode`, `Hotkey Mode`, `Custom Vocabulary`, and `FlagDropdown`.
-4. **04 — Fast on Any PC (GPU & CPU):** *"Fast on your GPU — or any laptop CPU"* — Models tab showing Vulkan GPU + compact Q5 CPU-fast models (`Base Q5 60 MB` through `Large v3 Turbo`).
-5. **05 — Calm, Local History & Privacy:** *"Private by design, always on your PC"* — History tab + local storage / zero cloud / private clipboard guarantees.
-6. **06 — Light & Dark + Guided Setup:** *"Ready in under a minute"* — Light & Dark dashboard themes + 6-step onboarding readiness view.
+Generated via `docs/store/screenshots/` (onboarding-style 6-step walkthrough with real `eqho_core::pillfx` pill renders and 0.9.4 UI captures):
+1. **01 — Press Alt+Q Anywhere:** *"Speak anywhere. It just types."* — Eqho tray monogram + live Acrylic preview + real iridescent listening pill + under-pill bar (`100% offline` · `No account needed` · `15-day free trial`).
+2. **02 — Quick Floating Controls:** *"Switch across 99 languages without leaving your app"* — Real listening pill + under-pill bar + searchable 99-language menu with vector SVG flags & recent chips.
+3. **03 — Dictate Your Way:** *"Your pace: Batch or Live"* — 0.9.4 Obsidian Dark General dashboard (`Audio Input`, `Hotkey`, `Speech`, `Delivery Mode`, `Custom Vocabulary`).
+4. **04 — Fast Local Models:** *"Fast on your GPU — or any laptop CPU"* — 0.9.4 Models tab + guided onboarding model picker (`NVIDIA · AMD · Intel Vulkan` and compact `60 MB` Q5 laptop models).
+5. **05 — Private & Never Lost:** *"Private by design. Never lose a word."* — Local History with Trash & failed-paste recovery + blurred Settings modal (`Live Preview on Screen`) + local privacy guarantees.
+6. **06 — Ready in 60 Seconds:** *"Guided setup. Light & dark. Buy once."* — Obsidian Dark with frosted Interactive Guide + Crisp Light dashboard (`15-day free trial` · `One-time purchase`).
 
 ---
 

@@ -7,6 +7,8 @@ use png::{ColorType, Decoder, Transformations};
 pub const LOGO_32: &[u8] = include_bytes!("../../../../../assets/logo_32.png");
 pub const LOGO_32_DARK: &[u8] = include_bytes!("../../../../../assets/logo_32_dark.png");
 pub const LOGO_32_WHITE: &[u8] = include_bytes!("../../../../../assets/logo_32_white.png");
+pub const LOGO_64_DARK: &[u8] = include_bytes!("../../../../../assets/logo_64_dark.png");
+pub const LOGO_64_WHITE: &[u8] = include_bytes!("../../../../../assets/logo_64_white.png");
 #[cfg(test)]
 pub const LOGO_HORIZONTAL_DARK: &[u8] =
     include_bytes!("../../../../../assets/logo_horizontal_dark.png");
@@ -123,10 +125,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn decodes_all_four_embedded_pngs() {
+    fn decodes_all_embedded_pngs() {
         for (name, bytes) in [
+            ("logo_32", LOGO_32),
             ("logo_32_dark", LOGO_32_DARK),
             ("logo_32_white", LOGO_32_WHITE),
+            ("logo_64_dark", LOGO_64_DARK),
+            ("logo_64_white", LOGO_64_WHITE),
             ("logo_horizontal_dark", LOGO_HORIZONTAL_DARK),
             ("logo_horizontal_light", LOGO_HORIZONTAL_LIGHT),
         ] {

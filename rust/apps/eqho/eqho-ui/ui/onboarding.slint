@@ -47,13 +47,13 @@ component SoundOptionCard inherits Rectangle {
     callback clicked();
 
     border-radius: Theme.radius-card;
-    border-width: root.checked ? 2px : 1px;
+    border-width: 1px;
     border-color: root.checked ? Theme.accent-line
         : touch.has-hover ? Theme.border
         : Theme.border-subtle;
-    background: root.checked ? Theme.accent-muted
-        : touch.has-hover ? Theme.surface-hover
-        : Theme.surface;
+    background: root.checked
+        ? (Theme.dark ? #1D1D24 : Theme.surface)
+        : (touch.has-hover ? Theme.surface-hover : Theme.surface);
     min-height: lay.preferred-height;
     horizontal-stretch: 1;
 
@@ -102,13 +102,13 @@ component OnboardingModelCard inherits Rectangle {
     callback clicked(string);
 
     border-radius: Theme.radius-card;
-    border-width: root.item.is_selected ? 2px : 1px;
+    border-width: 1px;
     border-color: root.item.is_selected ? Theme.accent-line
         : touch.has-hover ? Theme.border
         : Theme.border-subtle;
-    background: root.item.is_selected ? Theme.accent-muted
-        : touch.has-hover ? Theme.surface-hover
-        : Theme.surface;
+    background: root.item.is_selected
+        ? (Theme.dark ? #1D1D24 : Theme.surface)
+        : (touch.has-hover ? Theme.surface-hover : Theme.surface);
     min-height: lay.preferred-height;
 
     accessible-role: checkbox;
@@ -179,10 +179,10 @@ component OnboardingModelCard inherits Rectangle {
                 color: Theme.accent-text;
             }
             if root.item.is_cached : Text {
-                text: "✓ Downloaded";
+                text: "Downloaded";
                 font-size: Theme.font-size-xs;
-                font-weight: 600;
-                color: Theme.success;
+                font-weight: 500;
+                color: Theme.text-muted;
             }
         }
     }
@@ -249,6 +249,7 @@ export component OnboardingView inherits Rectangle {
     callback copy-text(string);
     callback sound-chosen(bool);
     callback toggle-test-dictation();
+    callback try-box-hotkey-pressed(bool, bool, bool, bool, string) -> bool;
     callback go-to-step(int);
     callback step-changed(int);
     callback skip-clicked();
@@ -256,6 +257,15 @@ export component OnboardingView inherits Rectangle {
 
     property <bool> two-col-models: root.width >= 680px;
     property <bool> all-checks-ready: root.hotkey-ok && (root.model-ready || root.model-cached || root.bg-download-done) && !root.bg-download-active;
+    property <float> dl-t: root.bg-download-active
+        ? Math.mod(Math.mod(animation-tick() / 1ms, 1200) / 1200.0 + 0.45, 1.0)
+        : 0.45;
+    property <length> dl-arrow-dy: (-5.0 + root.dl-t * 9.5) * 1px;
+    property <float> dl-arrow-alpha: root.dl-t < 0.18
+        ? (root.dl-t / 0.18)
+        : root.dl-t > 0.78
+            ? ((1.0 - root.dl-t) / 0.22)
+            : 1.0;
 
     background: Theme.bg;
 
@@ -692,104 +702,31 @@ export component OnboardingView inherits Rectangle {
                         }
                     }
 
-                    ThemedTextEdit {
+                    // Intercept the user's configured hotkey before TextInput so Alt+Q
+                    // activates dictation cleanly and never types 'q' into the test box.
+                    FocusScope {
                         height: 112px;
-                        text <=> root.try-text;
-                        placeholder-text: "Click here, press " + root.hotkey-display + " (or Start test), speak a sentence, then stop…";
-                        font-size: Theme.font-size-base;
-                    }
-                }
-            }
-        }
-
-        // Persistent background download bar (compact, visible across all steps while downloading / done / error)
-        if root.bg-download-active || root.bg-download-done || root.bg-download-error : Rectangle {
-            background: Theme.surface;
-            vertical-stretch: 0;
-            height: dl-lay.preferred-height;
-
-            Rectangle {
-                y: 0;
-                width: parent.width;
-                height: 1px;
-                background: Theme.border-subtle;
-            }
-
-            dl-lay := VerticalLayout {
-                padding-left: Theme.space-24;
-                padding-right: Theme.space-24;
-                padding-top: Theme.space-8;
-                padding-bottom: Theme.space-8;
-                spacing: 5px;
-
-                HorizontalLayout {
-                    spacing: Theme.space-8;
-                    alignment: space-between;
-
-                    HorizontalLayout {
-                        spacing: Theme.space-6;
-                        horizontal-stretch: 1;
-                        alignment: start;
-
-                        VerticalLayout {
-                            alignment: center;
-                            horizontal-stretch: 0;
-                            Rectangle {
-                                width: 8px;
-                                height: 8px;
-                                border-radius: 4px;
-                                background: root.bg-download-error ? Theme.error
-                                    : root.bg-download-done ? Theme.success
-                                    : Theme.accent-line;
+                        capture-key-pressed(event) => {
+                            if (root.try-box-hotkey-pressed(
+                                event.modifiers.control,
+                                event.modifiers.alt,
+                                event.modifiers.shift,
+                                event.modifiers.meta,
+                                event.text
+                            )) {
+                                return accept;
                             }
+                            reject
                         }
 
-                        Text {
-                            text: root.bg-download-error
-                                ? "Download failed" + (root.bg-download-model != "" ? " (" + root.bg-download-model + ")" : "")
-                                : root.bg-download-done
-                                    ? "✓ " + (root.bg-download-model != "" ? root.bg-download-model : "Speech model") + " ready"
-                                    : "Downloading " + (root.bg-download-model != "" ? root.bg-download-model : "speech model") + " in background";
-                            font-size: Theme.font-size-sm;
-                            font-weight: 600;
-                            color: root.bg-download-error ? Theme.error
-                                : root.bg-download-done ? Theme.success
-                                : Theme.text;
-                            vertical-alignment: center;
-                            overflow: elide;
+                        ThemedTextEdit {
+                            width: parent.width;
+                            height: parent.height;
+                            text <=> root.try-text;
+                            placeholder-text: "Click here, press " + root.hotkey-display + " (or Start test), speak a sentence, then stop…";
+                            font-size: Theme.font-size-base;
                         }
                     }
-
-                    HorizontalLayout {
-                        spacing: Theme.space-8;
-                        horizontal-stretch: 0;
-                        alignment: end;
-
-                        Text {
-                            text: root.bg-download-done
-                                ? "Ready"
-                                : root.bg-download-detail != ""
-                                    ? root.bg-download-detail
-                                    : root.bg-download-active ? root.bg-download-pct + "%" : "";
-                            font-size: Theme.font-size-xs;
-                            font-weight: 500;
-                            color: root.bg-download-error ? Theme.error : Theme.text-muted;
-                            vertical-alignment: center;
-                        }
-
-                        if root.bg-download-error : Button {
-                            text: "Retry";
-                            kind: ButtonKind.outline;
-                            clicked => { root.download-model(); }
-                        }
-                    }
-                }
-
-                if root.bg-download-active : ProgressLine {
-                    height: 5px;
-                    border-radius: 2.5px;
-                    progress: root.bg-download-progress;
-                    accessible-name: "Background model download progress";
                 }
             }
         }
@@ -879,6 +816,142 @@ export component OnboardingView inherits Rectangle {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // Subtle floating top-right background-download status pill (cleanly clear of the bottom step bar)
+    if root.bg-download-active || root.bg-download-done || root.bg-download-error : Rectangle {
+        x: parent.width - self.width - 28px;
+        y: 22px;
+        width: Math.min(310px, Math.max(196px, pill-lay.preferred-width));
+        height: pill-lay.preferred-height;
+        border-radius: 10px;
+        background: Theme.dark ? #202026F2 : #FFFFFFF5;
+        border-width: 1px;
+        border-color: Theme.border-subtle;
+        drop-shadow-blur: 14px;
+        drop-shadow-offset-y: 4px;
+        drop-shadow-color: Theme.dark ? #00000044 : #00000014;
+
+        pill-lay := VerticalLayout {
+            padding-left: 12px;
+            padding-right: 12px;
+            padding-top: 8px;
+            padding-bottom: 8px;
+            spacing: 6px;
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: space-between;
+
+                HorizontalLayout {
+                    spacing: 7px;
+                    horizontal-stretch: 1;
+                    alignment: start;
+
+                    // Animated blue sliding arrow while downloading; calm subtle dot for done/error
+                    if root.bg-download-active : VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 0;
+                        Rectangle {
+                            width: 14px;
+                            height: 14px;
+                            Rectangle {
+                                x: 0px;
+                                y: 0px;
+                                width: 14px;
+                                height: 11px;
+                                clip: true;
+                                Path {
+                                    x: 0px;
+                                    y: root.dl-arrow-dy;
+                                    width: 14px;
+                                    height: 14px;
+                                    viewbox-width: 16;
+                                    viewbox-height: 16;
+                                    commands: "M 8 2.5 L 8 10.5 M 4.7 7.3 L 8 10.6 L 11.3 7.3";
+                                    stroke: Theme.accent-text;
+                                    stroke-width: 1.5px;
+                                    stroke-line-cap: round;
+                                    stroke-line-join: round;
+                                    fill: transparent;
+                                    opacity: root.dl-arrow-alpha;
+                                }
+                            }
+                            Path {
+                                x: 0px;
+                                y: 0px;
+                                width: 14px;
+                                height: 14px;
+                                viewbox-width: 16;
+                                viewbox-height: 16;
+                                commands: "M 2.5 10.8 L 2.5 13 C 2.5 13.7 3.1 14.3 3.8 14.3 L 12.2 14.3 C 12.9 14.3 13.5 13.7 13.5 13 L 13.5 10.8";
+                                stroke: Theme.accent-text;
+                                stroke-width: 1.5px;
+                                stroke-line-cap: round;
+                                stroke-line-join: round;
+                                fill: transparent;
+                            }
+                        }
+                    }
+
+                    if !root.bg-download-active : VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 0;
+                        Rectangle {
+                            width: 6px;
+                            height: 6px;
+                            border-radius: 3px;
+                            background: root.bg-download-error ? Theme.error : Theme.accent;
+                        }
+                    }
+
+                    Text {
+                        text: root.bg-download-error
+                            ? "Download failed"
+                            : root.bg-download-done
+                                ? (root.bg-download-model != "" ? root.bg-download-model : "Speech model") + " ready"
+                                : (root.bg-download-model != "" ? root.bg-download-model : "Speech model");
+                        font-size: Theme.font-size-xs;
+                        font-weight: 400;
+                        color: root.bg-download-error ? Theme.error : Theme.text;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+
+                if root.bg-download-active : Text {
+                    horizontal-stretch: 0;
+                    text: root.bg-download-pct + "%";
+                    font-size: Theme.font-size-xs;
+                    font-weight: 500;
+                    color: Theme.text-muted;
+                    vertical-alignment: center;
+                }
+
+                if root.bg-download-error : Button {
+                    horizontal-stretch: 0;
+                    text: "Retry";
+                    kind: ButtonKind.text;
+                    padding-y: 1px;
+                    clicked => { root.download-model(); }
+                }
+            }
+
+            if root.bg-download-active : ProgressLine {
+                height: 3px;
+                border-radius: 1.5px;
+                progress: root.bg-download-progress;
+                accessible-name: "Background model download progress";
+            }
+
+            if root.bg-download-active && root.bg-download-detail != "" : Text {
+                text: root.bg-download-detail;
+                font-size: 10.5px;
+                font-weight: 400;
+                color: Theme.text-subtle;
+                overflow: elide;
             }
         }
     }

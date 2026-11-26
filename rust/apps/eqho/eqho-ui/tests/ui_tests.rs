@@ -11,7 +11,8 @@ use eqho_ui::{
     DashboardWindow, EqhoTray, HistoryRowItem, Theme, apply_settings_to_window,
     build_history_rows, build_history_rows_with_trash_meta, build_model_cards,
     dashboard_window_title, engine_backend_index, engine_backend_key, filter_history_entries,
-    format_active_engine_display, format_hotkey_display, format_paste_rules_text,
+    format_active_driver_display, format_active_engine_display, format_hotkey_display,
+    format_paste_rules_text,
     format_replacements_text, history_trash_days_index, history_trash_days_value,
     language_warning_text, parse_paste_rules_text, parse_replacements_text, split_model_cards,
     status_summary_title, wordmark_image,
@@ -354,6 +355,14 @@ fn viewmodel_parsers_formatters_and_history_filter() {
     assert_eq!(
         format_active_engine_display("auto", HardwareClass::Cpu, None, 6),
         "CPU (6 threads) · whisper.cpp 1.8.4"
+    );
+    assert_eq!(
+        format_active_driver_display("auto", HardwareClass::Gpu, Some("NVIDIA RTX 4070"), 12),
+        "Vulkan · NVIDIA RTX 4070"
+    );
+    assert_eq!(
+        format_active_driver_display("cpu", HardwareClass::Gpu, Some("NVIDIA RTX 4070"), 8),
+        "CPU · 8 threads"
     );
 
     assert_eq!(history_trash_days_index(7), 0);
