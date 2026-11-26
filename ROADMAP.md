@@ -162,6 +162,10 @@ Migrate off the Python runtime for a lean commercial-grade product.
 - Current faster-whisper stack is ideal for development velocity; whisper.cpp is for shipping
 
 ## Stretch Goals / Backlog
+### 0.9.5 — next beta polish (planned, global cross-platform)
+- [ ] **Hardware-aware default for `Show live text` (global: Windows, macOS, Linux):** Default `overlay_show_text` to **ON** on discrete GPU / Apple Silicon setups and **OFF** on CPU-only PCs on first launch; always respect the user's explicit toggle in `Settings → Overlay` and add a short subtitle (*"Real-time on GPU; updates after pauses on CPU."*). See `docs/ai/DECISIONS.md`.
+- [ ] Linux desktop polish: `.deb` / `.desktop` integration (`GlobalShortcuts` Hold-to-Talk portal) and OS-neutral labels on Linux/macOS (`"Start with Windows"` → `"Start at login"`).
+
 - [x] Text cleanup — Tier 1 deterministic auto-format (v0.7.0)
 - [x] Model-switch reliability — subprocess model host, seamless (Option B, v0.8.0). Pluggable backend.
 - [ ] AMD/Intel GPU support — whisper.cpp/Vulkan backend (scaffolded in model_host; needs Vulkan build + packaging + AMD-hardware verification). Shared engine with Eqho Mobile / desktop Phase 8.
