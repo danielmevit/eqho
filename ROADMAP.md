@@ -164,6 +164,13 @@ Reusable privacy-first analytics foundation in `damt-app` shared across Eqho (Wi
 - [x] **Hardware-aware default for `Show live text` (global: Windows, macOS, Linux):** Default `overlay_show_text` to **ON** on discrete GPU / Apple Silicon setups and **OFF** on CPU-only PCs on first launch; always respect the user's explicit toggle in `Settings → Overlay` with subtitle (*"Real-time on GPU; updates after pauses on CPU."*).
 - [x] Linux `.deb` package generation (`Eqho-0.9.5-linux-x64.deb`) in `packaging/linux/build-rust.sh` & CI, plus cross-platform `"Start at login"` / `"Open system settings"` labels.
 
+### 0.9.6 — Multilingual UI Localization (33 `Tuned + Strong` Languages)
+Reusable `.po` localization foundation shared across Eqho (Windows, Linux, macOS) and future `damt.xyz` apps:
+- [ ] Wrap Slint UI strings in `@tr(...)` with compile-time bundled `.po` catalogs (`with_bundled_translations` + runtime `select_bundled_translation`), plus shared Rust string lookup for tray menus, OS-native floating overlays, recovery cards, and notifications
+- [ ] Add independent **Interface Language** setting (`Follow System` + selector) in Onboarding & Settings, kept separate from **Dictation Language**
+- [ ] Ship **Option A (33 `Tuned + Strong` UI languages)** matching `eqho-core::settings::LANGUAGE_TIERS` (13 Tuned + 20 Strong: English, Spanish, Mandarin, Japanese, Korean, Vietnamese, Arabic, Ukrainian, French, German, Portuguese, Russian, Italian, Dutch, Polish, Turkish, Swedish, Danish, Norwegian, Finnish, Czech, Romanian, Hungarian, Greek, Bulgarian, Croatian, Slovak, Catalan, Hindi, Indonesian, Malay, Thai, Hebrew), with English fallback and open `.po` files for community expansion (including additional Balkan & Experimental languages)
+- [ ] Layout pass for 30–50% text expansion (German, Russian, Bulgarian, Greek, Finnish) and proper RTL mirroring (`ar`, `he`)
+
 ### Why whisper.cpp for distribution
 - Pure C/C++, no Python runtime, no 200MB+ PyInstaller bundle
 - Runs fast on CPU out of the box; supports CUDA, DirectCompute, and Vulkan for GPU
