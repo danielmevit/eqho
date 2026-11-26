@@ -20,8 +20,9 @@ use eqho_platform::{
 };
 
 use crate::pure::{
-    add_gsettings_keybinding_path, build_gnome_toggle_command, hotkey_to_gtk_accelerator,
-    is_wayland_session, parse_hotkey_combo, remove_gsettings_keybinding_path,
+    add_gsettings_keybinding_path, build_gnome_toggle_command, format_gsettings_string,
+    hotkey_to_gtk_accelerator, is_wayland_session, parse_hotkey_combo,
+    remove_gsettings_keybinding_path,
 };
 use crate::x11_ffi::{
     GRAB_MODE_ASYNC, KEY_PRESS, KEY_RELEASE, LOCK_MASK, MOD2_MASK, X11Api, XEvent,
@@ -117,9 +118,12 @@ fn try_register_gnome_wayland(spec: &HotkeySpec) -> Option<Result<Box<dyn Hotkey
     let _guard = gnome_lock().lock().unwrap_or_else(|e| e.into_inner());
     let updated_list = add_gsettings_keybinding_path(&current, GNOME_EQHO_SLOT);
 
-    let ok = gsettings_set(&binding_schema, "name", "Eqho Dictation")
-        && gsettings_set(&binding_schema, "command", &cmd)
-        && gsettings_set(&binding_schema, "binding", &accel)
+    let ok = gsettings_set(
+        &binding_schema,
+        "name",
+        &format_gsettings_string("Eqho Dictation"),
+    ) && gsettings_set(&binding_schema, "command", &format_gsettings_string(&cmd))
+        && gsettings_set(&binding_schema, "binding", &format_gsettings_string(&accel))
         && gsettings_set(GNOME_MEDIA_KEYS_SCHEMA, "custom-keybindings", &updated_list);
 
     if ok {

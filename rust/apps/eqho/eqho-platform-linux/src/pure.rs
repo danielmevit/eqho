@@ -226,6 +226,15 @@ pub fn parse_gsettings_string_array(raw: &str) -> Vec<String> {
     out
 }
 
+/// Encode an arbitrary string as an unambiguous GVariant string literal for `gsettings set`.
+///
+/// Without explicit outer quoting, `gsettings set` treats values starting with `'` or `"` (such as
+/// `'/path/to/Eqho' --toggle`) as GVariant literals and fails with `expected end of input`.
+#[must_use]
+pub fn format_gsettings_string(value: &str) -> String {
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
 /// Format a list of strings as a `gsettings set` GVariant string array (`@as []` or `['a', 'b']`).
 #[must_use]
 pub fn format_gsettings_string_array(items: &[String]) -> String {
@@ -502,6 +511,14 @@ Source #1
         assert_eq!(
             build_gnome_toggle_command("/home/dan/My Apps/Eqho", None),
             "'/home/dan/My Apps/Eqho' --toggle"
+        );
+        assert_eq!(
+            format_gsettings_string(&build_gnome_toggle_command("/tmp/Eqho", None)),
+            "\"'/tmp/Eqho' --toggle\""
+        );
+        assert_eq!(
+            format_gsettings_string(r#"a\b"c"#),
+            r#""a\\b\"c""#
         );
         assert_eq!(
             build_gnome_toggle_command("/tmp/Eqho", Some("/tmp/cfg dir")),
