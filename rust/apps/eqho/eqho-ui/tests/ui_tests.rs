@@ -344,9 +344,14 @@ fn viewmodel_parsers_formatters_and_history_filter() {
     assert_eq!(engine_backend_key(1), "vulkan");
     assert_eq!(engine_backend_key(2), "cpu");
 
+    #[cfg(target_os = "macos")]
+    let expected_gpu_api = "Metal";
+    #[cfg(not(target_os = "macos"))]
+    let expected_gpu_api = "Vulkan";
+
     assert_eq!(
         format_active_engine_display("auto", HardwareClass::Gpu, Some("NVIDIA RTX 4070"), 12),
-        "GPU (Vulkan — NVIDIA RTX 4070) · whisper.cpp 1.8.4"
+        format!("GPU ({expected_gpu_api} — NVIDIA RTX 4070) · whisper.cpp 1.8.4")
     );
     assert_eq!(
         format_active_engine_display("cpu", HardwareClass::Gpu, Some("NVIDIA RTX 4070"), 8),
@@ -358,7 +363,7 @@ fn viewmodel_parsers_formatters_and_history_filter() {
     );
     assert_eq!(
         format_active_driver_display("auto", HardwareClass::Gpu, Some("NVIDIA RTX 4070"), 12),
-        "Vulkan · NVIDIA RTX 4070"
+        format!("{expected_gpu_api} · NVIDIA RTX 4070")
     );
     assert_eq!(
         format_active_driver_display("cpu", HardwareClass::Gpu, Some("NVIDIA RTX 4070"), 8),
