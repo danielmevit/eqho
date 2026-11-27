@@ -15,9 +15,10 @@ fn slint_output_compiles() {
     let tokens = Tokens::parse(&source).unwrap();
     let slint = tokens.to_slint();
 
-    // Sanity: the global switches on `dark` and carries the palette.
+    // Sanity: the global switches on `dark`, carries `scale`, and emits the palette.
     assert!(slint.contains("export global Theme"));
     assert!(slint.contains("in-out property <bool> dark"));
+    assert!(slint.contains("in-out property <float> scale: 1.0;"));
     assert!(slint.contains("out property <color> bg: dark ? #121215FF : #F5F6F8FF;"));
 
     let compiler = slint_interpreter::Compiler::default();

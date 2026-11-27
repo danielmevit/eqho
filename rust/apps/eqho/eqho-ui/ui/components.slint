@@ -17,7 +17,9 @@ export component ScrollArea inherits Rectangle {
         height: parent.height;
         content-width: self.width;
         content-height: Math.max(self.height, inner.preferred-height);
-        interactive: true;
+        // Disable touch-drag scrolling on desktop so dragging Sliders inside a ScrollArea never
+        // loses pointer capture to Flickable; mouse wheel and scrollbar dragging keep working.
+        interactive: false;
 
         inner := VerticalLayout {
             x: 0px;
@@ -368,6 +370,8 @@ export component StoreTrialFooter inherits Rectangle {
 // 3-line clamped scrollable preview, and fixed-height bottom actions.
 export component RecoveryBanner inherits Rectangle {
     in property <string> text;
+    in property <string> paste-target-label: "";
+    callback paste-previous-clicked();
     callback copy-clicked();
     callback view-history-clicked();
     callback dismiss-clicked();
@@ -400,7 +404,9 @@ export component RecoveryBanner inherits Rectangle {
                 }
             }
             Text {
-                text: "Dictation couldn't be pasted automatically";
+                text: root.paste-target-label != ""
+                    ? "Not pasted — no text box was focused"
+                    : "Dictation couldn't be pasted automatically";
                 font-size: Theme.font-size-sm;
                 font-weight: 600;
                 color: Theme.text;
@@ -452,9 +458,14 @@ export component RecoveryBanner inherits Rectangle {
         HorizontalLayout {
             spacing: Theme.space-8;
             alignment: start;
+            if root.paste-target-label != "" : Button {
+                text: "Paste to " + root.paste-target-label;
+                kind: ButtonKind.accent;
+                clicked => { root.paste-previous-clicked(); }
+            }
             Button {
                 text: "Copy";
-                kind: ButtonKind.accent;
+                kind: root.paste-target-label != "" ? ButtonKind.outline : ButtonKind.accent;
                 clicked => { root.copy-clicked(); }
             }
             Button {
@@ -639,7 +650,7 @@ export component TopBar inherits Rectangle {
     callback settings-clicked();
     callback tour-clicked();
 
-    height: 68px;
+    height: 68px * Theme.scale;
     background: Theme.bg;
 
     HorizontalLayout {
@@ -651,7 +662,7 @@ export component TopBar inherits Rectangle {
         HorizontalLayout {
             spacing: Theme.space-8;
             alignment: start;
-            width: 120px;
+            width: 120px * Theme.scale;
 
             VerticalLayout {
                 alignment: center;
@@ -663,8 +674,8 @@ export component TopBar inherits Rectangle {
         VerticalLayout {
             alignment: center;
             Rectangle {
-                height: 42px;
-                border-radius: 21px;
+                height: 42px * Theme.scale;
+                border-radius: 21px * Theme.scale;
                 background: Theme.surface;
                 border-width: 1px;
                 border-color: Theme.dark ? Theme.border : Theme.border-subtle;
@@ -825,14 +836,14 @@ export component TourCard inherits Rectangle {
     property <color> fg-muted: root.light-card ? #74747E : #989DA8;
     property <string> card-title: root.step == 0 ? "General controls"
         : root.step == 1 ? "Offline speech models"
-        : root.step == 2 ? "History & Trash"
+        : root.step == 2 ? "History & Recovery"
         : "Focused Settings";
     property <string> card-body: root.step == 0
         ? "Pick your mic, tune sensitivity, set your global hotkey, and switch between Batch or Live dictation."
         : root.step == 1
             ? "Download and switch between local English and multilingual Whisper models — everything stays 100% offline."
             : root.step == 2
-                ? "Search local transcripts, recover failed pastes with one click, or restore deleted items from Trash."
+                ? "Search local transcripts, recover unpasted dictations with one click, or restore items from Recently Deleted."
                 : "Click the gear icon anytime to tune the floating pill, inference engine, replacements, startup, and storage.";
 
     width: 308px;

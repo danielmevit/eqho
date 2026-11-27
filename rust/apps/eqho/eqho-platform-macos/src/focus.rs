@@ -134,4 +134,8 @@ impl FocusTracker for MacFocusTracker {
             if name.is_empty() { None } else { Some(name) }
         }
     }
+
+    fn is_non_paste_target(&self, window: WindowHandle) -> bool {
+        window.is_valid() && window.0 == std::process::id() as usize
+    }
 }

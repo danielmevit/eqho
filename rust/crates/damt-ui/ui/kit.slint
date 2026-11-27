@@ -447,7 +447,7 @@ export component Slider inherits Rectangle {
             }
         }
         track := Rectangle {
-            height: 16px;
+            height: 24px;
             property <float> t: (root.value - root.minimum) / Math.max(1, root.maximum - root.minimum);
             Rectangle {
                 y: (parent.height - 4px) / 2;
@@ -467,7 +467,7 @@ export component Slider inherits Rectangle {
             }
             Rectangle {
                 x: (parent.width - 14px) * parent.t;
-                y: 1px;
+                y: (parent.height - 14px) / 2;
                 width: 14px;
                 height: 14px;
                 border-radius: 7px;
@@ -479,7 +479,7 @@ export component Slider inherits Rectangle {
             }
             if focus.has-focus : Rectangle {
                 x: (parent.width - 14px) * parent.t - 3px;
-                y: -2px;
+                y: (parent.height - 20px) / 2;
                 width: 20px;
                 height: 20px;
                 border-radius: 10px;
@@ -523,7 +523,7 @@ export component TabList inherits Rectangle {
     in property <string> accessible-name;
     callback picked(int);
 
-    min-height: Math.max(34px, lay.preferred-height);
+    min-height: Math.max(34px * Theme.scale, lay.preferred-height);
     border-radius: 17px;
     border-width: 1px;
     border-color: Theme.dark ? #303038 : Theme.border-subtle;

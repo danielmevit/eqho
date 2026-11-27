@@ -531,7 +531,7 @@ impl Settings {
     pub fn clamp_ranges(&mut self) {
         self.overlay_pill_scale = self.overlay_pill_scale.clamp(0.6, 1.4);
         self.overlay_opacity = self.overlay_opacity.clamp(0.3, 1.0);
-        self.overlay_panel_opacity = self.overlay_panel_opacity.clamp(0.3, 1.0);
+        self.overlay_panel_opacity = self.overlay_panel_opacity.clamp(0.0, 1.0);
         self.vad_sensitivity = self.vad_sensitivity.clamp(0.5, 2.0);
         self.ui_scale = self.ui_scale.clamp(1.0, 2.0);
         self.history_trash_days = self.history_trash_days.clamp(0, 365);
@@ -1211,7 +1211,7 @@ mod tests {
             let s = Settings::from_json_object(&map);
             prop_assert!((0.6..=1.4).contains(&s.overlay_pill_scale));
             prop_assert!((0.3..=1.0).contains(&s.overlay_opacity));
-            prop_assert!((0.3..=1.0).contains(&s.overlay_panel_opacity));
+            prop_assert!((0.0..=1.0).contains(&s.overlay_panel_opacity));
             prop_assert!((0.5..=2.0).contains(&s.vad_sensitivity));
             prop_assert!((1.0..=2.0).contains(&s.ui_scale));
         }

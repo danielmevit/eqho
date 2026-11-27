@@ -37,7 +37,8 @@ pub use underbar::{
     UnderbarVisibility, calc_lang_popup_rect, calc_panel_rect_with_underbar,
     calc_pill_position_with_controls, calc_recent_strip_layout, calc_recovery_card_rect,
     calc_underbar_placement, calc_underbar_rect, delivery_mode_label, filter_languages,
-    format_elapsed, format_language_code, is_cursor_in_hover_zone, next_delivery_mode,
+    format_elapsed, format_language_code, format_paste_previous_button_label,
+    is_cursor_in_hover_zone, next_delivery_mode,
     normalize_delivery_mode, point_in_overlay_rect, sanitize_recent_languages, step_recent_scroll,
     wheel_delta_to_notches,
 };
@@ -51,6 +52,7 @@ pub enum OverlayAction {
     TogglePin(bool),
     ToggleDeliveryMode(String),
     SelectLanguage(String),
+    RecoveryPastePrevious,
     RecoveryShowText,
     RecoveryCopy,
     RecoveryDiscard,
@@ -385,26 +387,42 @@ impl OverlayHandle {
         }
     }
 
-    /// Show the compact floating failed-paste action card (`Show text` / `Copy` / `Discard`)
-    /// anchored at the pill's screen position when automatic pasting fails.
+    /// Show the compact floating failed-paste action card anchored at the pill's screen position
+    /// when automatic pasting fails.
     pub fn show_recovery(&self, text: &str) {
+        self.show_recovery_with_target(text, None);
+    }
+
+    /// Show the compact floating failed-paste action card, optionally offering a one-click
+    /// `"Paste to <previous_app>"` button when a prior external window is available.
+    pub fn show_recovery_with_target(&self, text: &str, paste_target: Option<&str>) {
         if !self.enabled.load(Ordering::Acquire) || text.trim().is_empty() {
             return;
         }
+        let target_owned = paste_target
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned);
         #[cfg(windows)]
         if let Ok(guard) = self.client.lock()
             && let Some(client) = guard.as_ref()
         {
-            client.send(win::OverlayCmd::ShowRecovery(text.to_owned()));
+            client.send(win::OverlayCmd::ShowRecovery {
+                text: text.to_owned(),
+                paste_target: target_owned,
+            });
         }
         #[cfg(target_os = "linux")]
         if let Ok(guard) = self.linux_client.lock()
             && let Some(client) = guard.as_ref()
         {
-            client.send(linux::LinuxOverlayCmd::ShowRecovery(text.to_owned()));
+            client.send(linux::LinuxOverlayCmd::ShowRecovery {
+                text: text.to_owned(),
+                paste_target: target_owned,
+            });
         }
         #[cfg(not(any(windows, target_os = "linux")))]
-        let _ = text;
+        let _ = (text, target_owned);
     }
 
     /// Hide the floating failed-paste recovery card if visible.

@@ -11,8 +11,8 @@ use windows::Win32::System::Threading::{
     PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, IsIconic, SW_RESTORE,
-    SetForegroundWindow, ShowWindow,
+    BringWindowToTop, GetClassNameW, GetForegroundWindow, GetWindowThreadProcessId, IsIconic,
+    SW_RESTORE, SetForegroundWindow, ShowWindow,
 };
 use windows::core::PWSTR;
 
@@ -152,5 +152,54 @@ impl FocusTracker for WinFocusTracker {
             .next()
             .filter(|name| !name.is_empty())
             .map(str::to_owned)
+    }
+
+    fn is_non_paste_target(&self, window: WindowHandle) -> bool {
+        if !window.is_valid() {
+            return false;
+        }
+        let target = HWND(window.0 as *mut c_void);
+        let mut pid = 0u32;
+        // SAFETY: `target` is non-null and `&raw mut pid` is a valid stack `u32`.
+        let _thread = unsafe { GetWindowThreadProcessId(target, Some(&raw mut pid)) };
+        if pid != 0 && pid == std::process::id() {
+            return true;
+        }
+        let mut cls_buf = [0u16; 128];
+        // SAFETY: `cls_buf` is a valid writable UTF-16 buffer.
+        let len = unsafe { GetClassNameW(target, &mut cls_buf) };
+        if len > 0 {
+            let class_name = from_utf16_nul(&cls_buf[..(len as usize).min(cls_buf.len())]);
+            if is_shell_non_paste_class(&class_name) {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+fn is_shell_non_paste_class(class_name: &str) -> bool {
+    matches!(
+        class_name,
+        "Progman"
+            | "WorkerW"
+            | "Shell_TrayWnd"
+            | "Shell_SecondaryTrayWnd"
+            | "NotifyIconOverflowWindow"
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_shell_non_paste_class;
+
+    #[test]
+    fn recognizes_desktop_and_taskbar_classes_only() {
+        assert!(is_shell_non_paste_class("Progman"));
+        assert!(is_shell_non_paste_class("WorkerW"));
+        assert!(is_shell_non_paste_class("Shell_TrayWnd"));
+        assert!(is_shell_non_paste_class("Shell_SecondaryTrayWnd"));
+        assert!(!is_shell_non_paste_class("CabinetWClass"));
+        assert!(!is_shell_non_paste_class("CASCADIA_HOSTING_WINDOW_CLASS"));
     }
 }

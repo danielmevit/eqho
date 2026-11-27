@@ -73,10 +73,12 @@ struct WindowCompositionAttribData {
 }
 
 const WCA_ACCENT_POLICY: u32 = 19;
+const ACCENT_DISABLED: u32 = 0;
 const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
 
-/// Enable Windows 10/11 Acrylic frosted blur (`ACCENT_ENABLE_ACRYLICBLURBEHIND`) dynamically via
-/// `user32.dll`, giving floating glass panels strong backdrop blur so text pops off any window.
+/// Enable (or disable when `tint_alpha == 0`) Windows 10/11 Acrylic frosted blur dynamically via
+/// `user32.dll`, giving floating glass panels strong backdrop blur at normal opacities and clean
+/// pure floating text at 100% see-through (`panel_opacity == 0.0`).
 fn apply_acrylic_blur_behind(hwnd: HWND, dark: bool, tint_alpha: u8) {
     let user32_name: Vec<u16> = "user32.dll\0".encode_utf16().collect();
     // SAFETY: Resolving `SetWindowCompositionAttribute` from already-loaded `user32.dll`.
@@ -91,14 +93,23 @@ fn apply_acrylic_blur_behind(hwnd: HWND, dark: bool, tint_alpha: u8) {
     type SetWcaFn = unsafe extern "system" fn(HWND, *mut WindowCompositionAttribData) -> i32;
     // SAFETY: Function pointer signature matches `SetWindowCompositionAttribute`.
     let set_wca: SetWcaFn = unsafe { std::mem::transmute(proc_ptr) };
-    // ABGR tint color (`tint_alpha` must be non-zero for Windows 11 Acrylic to engage).
-    let bgr: u32 = if dark { 0x0017_1515 } else { 0x00F8_F8FA };
-    let gradient_color = (u32::from(tint_alpha.max(1)) << 24) | bgr;
-    let mut policy = AccentPolicy {
-        accent_state: ACCENT_ENABLE_ACRYLICBLURBEHIND,
-        accent_flags: 0,
-        gradient_color,
-        animation_id: 0,
+    let mut policy = if tint_alpha == 0 {
+        AccentPolicy {
+            accent_state: ACCENT_DISABLED,
+            accent_flags: 0,
+            gradient_color: 0,
+            animation_id: 0,
+        }
+    } else {
+        // ABGR tint color (`tint_alpha` must be non-zero for Windows 11 Acrylic to engage).
+        let bgr: u32 = if dark { 0x0017_1515 } else { 0x00F8_F8FA };
+        let gradient_color = (u32::from(tint_alpha) << 24) | bgr;
+        AccentPolicy {
+            accent_state: ACCENT_ENABLE_ACRYLICBLURBEHIND,
+            accent_flags: 0,
+            gradient_color,
+            animation_id: 0,
+        }
     };
     let mut data = WindowCompositionAttribData {
         attrib: WCA_ACCENT_POLICY,
@@ -108,6 +119,15 @@ fn apply_acrylic_blur_behind(hwnd: HWND, dark: bool, tint_alpha: u8) {
     // SAFETY: `hwnd` and `data` are valid for the duration of the call.
     unsafe {
         let _ = set_wca(hwnd, &mut data);
+    }
+}
+
+fn panel_acrylic_tint_alpha(panel_opacity: f64) -> u8 {
+    let opacity = (panel_opacity as f32).clamp(0.0, 1.0);
+    if opacity <= 0.01 {
+        0
+    } else {
+        (opacity * 168.0).round().clamp(1.0, 168.0) as u8
     }
 }
 
@@ -151,7 +171,10 @@ pub(crate) enum OverlayCmd {
         recent_languages: Vec<String>,
     },
     UpdateConfig(OverlayConfig),
-    ShowRecovery(String),
+    ShowRecovery {
+        text: String,
+        paste_target: Option<String>,
+    },
     HideRecovery,
     Hide,
     Shutdown,
@@ -590,6 +613,7 @@ struct OverlayState {
     recovery_shown: bool,
     recovery_rect: OverlayRect,
     recovery_layout: RecoveryCardLayout,
+    recovery_paste_target: Option<String>,
     hovered_recovery_btn: Option<RecoveryCardButton>,
     recovery_tracking_leave: bool,
 }
@@ -724,7 +748,9 @@ impl OverlayState {
                     recent_languages,
                 } => self.cmd_update_session_meta(language, delivery_mode, pinned, recent_languages),
                 OverlayCmd::UpdateConfig(cfg) => self.cmd_update_config(cfg),
-                OverlayCmd::ShowRecovery(text) => self.cmd_show_recovery(text),
+                OverlayCmd::ShowRecovery { text, paste_target } => {
+                    self.cmd_show_recovery(text, paste_target);
+                }
                 OverlayCmd::HideRecovery => self.hide_recovery_now(),
                 OverlayCmd::Hide => self.cmd_hide(),
                 OverlayCmd::Shutdown => {
@@ -759,12 +785,14 @@ impl OverlayState {
         }
     }
 
-    fn cmd_show_recovery(&mut self, _text: String) {
+    fn cmd_show_recovery(&mut self, _text: String, paste_target: Option<String>) {
         if !self.config.enabled {
             return;
         }
         self.update_pill_geometry();
-        self.recovery_layout = RecoveryCardLayout::compute();
+        self.recovery_paste_target = paste_target;
+        self.recovery_layout =
+            RecoveryCardLayout::compute_for(self.recovery_paste_target.is_some());
         self.recovery_rect = underbar::calc_recovery_card_rect(
             self.pill_rect,
             self.recovery_layout.width,
@@ -827,53 +855,100 @@ impl OverlayState {
             None,
         );
 
-        // Top prompt
+        let title = if layout.has_paste_target {
+            "Not pasted — no text box focused"
+        } else {
+            "Couldn't paste automatically"
+        };
         self.text_mask.draw_text_into_canvas(
             &mut self.recovery_canvas,
-            "Couldn't paste automatically",
+            title,
             layout.title_rect,
             self.ui_fonts.bar_regular,
             theme.text_primary,
             DT_LEFT,
         );
 
-        // 1. Show text button (outline/subtle fill)
-        let show_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::ShowText) {
-            theme.chip_hover_bg
-        } else {
-            theme.chip_bg
-        };
-        self.recovery_canvas.fill_rounded_rect(
-            layout.show_text,
-            6.0,
-            show_bg,
-            Some(theme.bar_border),
-        );
-        self.text_mask.draw_text_into_canvas(
-            &mut self.recovery_canvas,
-            "Show text",
-            layout.show_text,
-            self.ui_fonts.bar_regular,
-            theme.text_primary,
-            DT_CENTER,
-        );
+        if layout.has_paste_target {
+            // 1. Primary Paste to <App> button (Eqho blue accent)
+            let paste_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::PastePrevious) {
+                theme.done_hover_bg
+            } else {
+                theme.done_bg
+            };
+            self.recovery_canvas
+                .fill_rounded_rect(layout.paste_previous, 6.0, paste_bg, None);
+            let paste_label = underbar::format_paste_previous_button_label(
+                self.recovery_paste_target.as_deref().unwrap_or(""),
+            );
+            self.text_mask.draw_text_into_canvas(
+                &mut self.recovery_canvas,
+                &paste_label,
+                layout.paste_previous,
+                self.ui_fonts.bar_regular,
+                theme.done_fg,
+                DT_CENTER,
+            );
 
-        // 2. Copy button (Eqho blue accent)
-        let copy_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::Copy) {
-            theme.done_hover_bg
+            // 2. Copy button (outline)
+            let copy_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::Copy) {
+                theme.chip_hover_bg
+            } else {
+                theme.chip_bg
+            };
+            self.recovery_canvas.fill_rounded_rect(
+                layout.copy,
+                6.0,
+                copy_bg,
+                Some(theme.bar_border),
+            );
+            self.text_mask.draw_text_into_canvas(
+                &mut self.recovery_canvas,
+                "Copy",
+                layout.copy,
+                self.ui_fonts.bar_regular,
+                theme.text_primary,
+                DT_CENTER,
+            );
         } else {
-            theme.done_bg
-        };
-        self.recovery_canvas
-            .fill_rounded_rect(layout.copy, 6.0, copy_bg, None);
-        self.text_mask.draw_text_into_canvas(
-            &mut self.recovery_canvas,
-            "Copy",
-            layout.copy,
-            self.ui_fonts.bar_regular,
-            theme.done_fg,
-            DT_CENTER,
-        );
+            // 1. Show text button (outline/subtle fill)
+            let show_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::ShowText) {
+                theme.chip_hover_bg
+            } else {
+                theme.chip_bg
+            };
+            self.recovery_canvas.fill_rounded_rect(
+                layout.show_text,
+                6.0,
+                show_bg,
+                Some(theme.bar_border),
+            );
+            self.text_mask.draw_text_into_canvas(
+                &mut self.recovery_canvas,
+                "Show text",
+                layout.show_text,
+                self.ui_fonts.bar_regular,
+                theme.text_primary,
+                DT_CENTER,
+            );
+
+            // 2. Copy button (Eqho blue accent)
+            let copy_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::Copy) {
+                theme.done_hover_bg
+            } else {
+                theme.done_bg
+            };
+            self.recovery_canvas
+                .fill_rounded_rect(layout.copy, 6.0, copy_bg, None);
+            self.text_mask.draw_text_into_canvas(
+                &mut self.recovery_canvas,
+                "Copy",
+                layout.copy,
+                self.ui_fonts.bar_regular,
+                theme.done_fg,
+                DT_CENTER,
+            );
+        }
 
         // 3. Discard button (muted outline)
         let disc_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::Discard) {
@@ -940,6 +1015,9 @@ impl OverlayState {
         };
         self.hide_recovery_now();
         match btn {
+            RecoveryCardButton::PastePrevious => {
+                self.emit_action(OverlayAction::RecoveryPastePrevious);
+            }
             RecoveryCardButton::ShowText => self.emit_action(OverlayAction::RecoveryShowText),
             RecoveryCardButton::Copy => self.emit_action(OverlayAction::RecoveryCopy),
             RecoveryCardButton::Discard => self.emit_action(OverlayAction::RecoveryDiscard),
@@ -1182,9 +1260,7 @@ impl OverlayState {
         let panel_opacity_changed = (self.config.panel_opacity - cfg.panel_opacity).abs() > 1e-3;
         self.config = cfg;
         if theme_changed || panel_opacity_changed {
-            let panel_tint = ((self.config.panel_opacity as f32).clamp(0.3, 1.0) * 168.0)
-                .round()
-                .clamp(48.0, 168.0) as u8;
+            let panel_tint = panel_acrylic_tint_alpha(self.config.panel_opacity);
             apply_acrylic_blur_behind(self.panel_hwnd, self.config.dark_theme, panel_tint);
         }
         if theme_changed {
@@ -1344,24 +1420,27 @@ impl OverlayState {
         let h = self.panel_rect.height.max(1);
         let dark = self.config.dark_theme;
 
-        // Keep background translucent over Windows 11 Acrylic blur so strong frosted blur
-        // pops the floating transcript box cleanly off any background, while keeping text 100% opaque.
-        let opacity = (self.config.panel_opacity as f32).clamp(0.3, 1.0);
-        let bg_alpha = if dark {
-            (opacity * 176.0).round().clamp(72.0, 176.0) as u8
-        } else {
-            (opacity * 190.0).round().clamp(88.0, 190.0) as u8
-        };
+        // Scale background and border alpha smoothly from 0 (100% see-through, Acrylic disabled)
+        // up to full opacity over Windows 11 Acrylic blur, while keeping text glyphs 100% opaque.
+        let opacity = (self.config.panel_opacity as f32).clamp(0.0, 1.0);
+        let bg_alpha = (opacity * if dark { 176.0 } else { 190.0 })
+            .round()
+            .clamp(0.0, 255.0) as u8;
+        let border_alpha = (opacity * if dark { 44.0 } else { 36.0 })
+            .round()
+            .clamp(0.0, 255.0) as u8;
         let panel_bg = if dark {
             Rgba::new(0x14, 0x14, 0x18, bg_alpha)
         } else {
             Rgba::new(0xFF, 0xFF, 0xFF, bg_alpha)
         };
-        let panel_border = if dark {
-            Rgba::new(0xFF, 0xFF, 0xFF, 44)
-        } else {
-            Rgba::new(0x1A, 0x1C, 0x1F, 36)
-        };
+        let panel_border = (border_alpha > 0).then(|| {
+            if dark {
+                Rgba::new(0xFF, 0xFF, 0xFF, border_alpha)
+            } else {
+                Rgba::new(0x1A, 0x1C, 0x1F, border_alpha)
+            }
+        });
         let fg_color = if dark {
             Rgba::rgb(0xF5, 0xF6, 0xF8)
         } else {
@@ -1369,12 +1448,14 @@ impl OverlayState {
         };
 
         self.panel_canvas.reset(w, h);
-        self.panel_canvas.fill_rounded_rect(
-            LocalRect::new(0, 0, w, h),
-            8.0,
-            panel_bg,
-            Some(panel_border),
-        );
+        if bg_alpha > 0 || panel_border.is_some() {
+            self.panel_canvas.fill_rounded_rect(
+                LocalRect::new(0, 0, w, h),
+                8.0,
+                panel_bg,
+                panel_border,
+            );
+        }
 
         if !self.panel_text.is_empty()
             && let Some(font) = self.ensure_font()
@@ -2633,7 +2714,11 @@ fn run_overlay_thread(
     apply_win11_round_corners(panel_hwnd);
     apply_win11_round_corners(popup_hwnd);
     apply_win11_round_corners(recovery_hwnd);
-    apply_acrylic_blur_behind(panel_hwnd, config.dark_theme, 0xA8);
+    apply_acrylic_blur_behind(
+        panel_hwnd,
+        config.dark_theme,
+        panel_acrylic_tint_alpha(config.panel_opacity),
+    );
     apply_acrylic_blur_behind(popup_hwnd, config.dark_theme, 0xB8);
     apply_acrylic_blur_behind(recovery_hwnd, config.dark_theme, 0xA8);
 
@@ -2705,6 +2790,7 @@ fn run_overlay_thread(
         recovery_shown: false,
         recovery_rect,
         recovery_layout,
+        recovery_paste_target: None,
         hovered_recovery_btn: None,
         recovery_tracking_leave: false,
     });

@@ -28,6 +28,8 @@ pub(crate) fn slint(tokens: &Tokens) -> String {
     out.push_str("export global Theme {\n");
     out.push_str("    // Set by the app: true switches every colour to its dark value.\n");
     out.push_str("    in-out property <bool> dark: false;\n");
+    out.push_str("    // Set by the app: UI zoom multiplier (1.0 = default 125% baseline).\n");
+    out.push_str("    in-out property <float> scale: 1.0;\n");
     for (name, pair) in tokens.colors() {
         out.push_str(&format!(
             "    out property <color> {}: dark ? {} : {};\n",
@@ -38,21 +40,21 @@ pub(crate) fn slint(tokens: &Tokens) -> String {
     }
     for (name, value) in tokens.radii() {
         out.push_str(&format!(
-            "    out property <length> radius-{}: {}px;\n",
+            "    out property <length> radius-{}: {}px * scale;\n",
             name,
             px(value)
         ));
     }
     for (name, value) in tokens.spaces() {
         out.push_str(&format!(
-            "    out property <length> space-{}: {}px;\n",
+            "    out property <length> space-{}: {}px * scale;\n",
             name,
             px(value)
         ));
     }
     for (name, value) in tokens.font_sizes() {
         out.push_str(&format!(
-            "    out property <length> font-size-{}: {}px;\n",
+            "    out property <length> font-size-{}: {}px * scale;\n",
             name,
             px(value)
         ));

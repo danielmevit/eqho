@@ -1100,12 +1100,16 @@ pub fn calc_lang_popup_rect(
 /// Interactive buttons on the floating failed-paste recovery card anchored at the pill position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RecoveryCardButton {
+    PastePrevious,
     ShowText,
     Copy,
     Discard,
 }
 
-/// Computed local geometry of the floating failed-paste recovery card (`Show text` / `Copy` / `Discard`).
+/// Computed local geometry of the floating failed-paste recovery card.
+///
+/// When `has_paste_target` is `true`, renders a primary `Paste to <App>` button alongside `Copy`
+/// and `Discard` (`304×76`); otherwise renders `Show text`, `Copy`, and `Discard` (`264×76`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RecoveryCardLayout {
     pub width: u32,
@@ -1113,43 +1117,77 @@ pub struct RecoveryCardLayout {
     pub dot_cx: i32,
     pub dot_cy: i32,
     pub title_rect: LocalRect,
+    pub has_paste_target: bool,
+    pub paste_previous: LocalRect,
     pub show_text: LocalRect,
     pub copy: LocalRect,
     pub discard: LocalRect,
 }
 
 impl RecoveryCardLayout {
-    /// Deterministic compact layout for the `264×76` floating failed-paste card.
+    /// Deterministic compact layout for the `264×76` floating failed-paste card (no previous app).
     #[must_use]
     pub const fn compute() -> Self {
-        let width = RECOVERY_CARD_WIDTH;
+        Self::compute_for(false)
+    }
+
+    /// Deterministic compact layout with or without a primary `Paste to <App>` target button.
+    #[must_use]
+    pub const fn compute_for(has_paste_target: bool) -> Self {
         let height = RECOVERY_CARD_HEIGHT;
         let pad_x = 11;
         let btn_y = 40;
         let btn_h = 26;
         let gap = 6;
-        let show_w = 82;
-        let copy_w = 74;
-        let discard_w = 74;
-        let show_text = LocalRect::new(pad_x, btn_y, show_w, btn_h);
-        let copy = LocalRect::new(show_text.right() + gap, btn_y, copy_w, btn_h);
-        let discard = LocalRect::new(copy.right() + gap, btn_y, discard_w, btn_h);
-        Self {
-            width,
-            height,
-            dot_cx: 17,
-            dot_cy: 21,
-            title_rect: LocalRect::new(26, 11, width - 36, 20),
-            show_text,
-            copy,
-            discard,
+        if has_paste_target {
+            let width = 304;
+            let paste_w = 144;
+            let copy_w = 62;
+            let discard_w = 64;
+            let paste_previous = LocalRect::new(pad_x, btn_y, paste_w, btn_h);
+            let copy = LocalRect::new(paste_previous.right() + gap, btn_y, copy_w, btn_h);
+            let discard = LocalRect::new(copy.right() + gap, btn_y, discard_w, btn_h);
+            Self {
+                width,
+                height,
+                dot_cx: 17,
+                dot_cy: 21,
+                title_rect: LocalRect::new(26, 11, width - 36, 20),
+                has_paste_target: true,
+                paste_previous,
+                show_text: LocalRect::new(0, 0, 0, 0),
+                copy,
+                discard,
+            }
+        } else {
+            let width = RECOVERY_CARD_WIDTH;
+            let show_w = 82;
+            let copy_w = 74;
+            let discard_w = 74;
+            let show_text = LocalRect::new(pad_x, btn_y, show_w, btn_h);
+            let copy = LocalRect::new(show_text.right() + gap, btn_y, copy_w, btn_h);
+            let discard = LocalRect::new(copy.right() + gap, btn_y, discard_w, btn_h);
+            Self {
+                width,
+                height,
+                dot_cx: 17,
+                dot_cy: 21,
+                title_rect: LocalRect::new(26, 11, width - 36, 20),
+                has_paste_target: false,
+                paste_previous: LocalRect::new(0, 0, 0, 0),
+                show_text,
+                copy,
+                discard,
+            }
         }
     }
 
-    /// Hit-test local coordinates `(px, py)` against the three recovery card action buttons.
+    /// Hit-test local coordinates `(px, py)` against the recovery card action buttons.
     #[must_use]
     pub const fn hit_test(&self, px: i32, py: i32) -> Option<RecoveryCardButton> {
-        if self.show_text.contains(px, py) {
+        if self.has_paste_target && self.paste_previous.contains(px, py) {
+            Some(RecoveryCardButton::PastePrevious)
+        } else if !self.has_paste_target && self.show_text.contains(px, py) {
             Some(RecoveryCardButton::ShowText)
         } else if self.copy.contains(px, py) {
             Some(RecoveryCardButton::Copy)
@@ -1159,6 +1197,21 @@ impl RecoveryCardLayout {
             None
         }
     }
+}
+
+/// Format a compact primary button label for pasting into the previous external app
+/// (e.g. `"Paste to Terminal"`, truncated cleanly to fit the `144px` button).
+#[must_use]
+pub fn format_paste_previous_button_label(app_name: &str) -> String {
+    let clean = app_name.trim();
+    if clean.is_empty() {
+        return "Paste to previous".to_owned();
+    }
+    let mut short: String = clean.chars().take(12).collect();
+    if clean.chars().count() > 12 {
+        short.push('…');
+    }
+    format!("Paste to {short}")
 }
 
 /// Position the floating failed-paste recovery card centered at the pill's screen position,
@@ -1649,5 +1702,31 @@ mod tests {
         assert_eq!(card_rect.height, RECOVERY_CARD_HEIGHT);
         assert!(card_rect.x >= AREA.left && card_rect.x + card_rect.width as i32 <= AREA.right);
         assert!(card_rect.y >= AREA.top && card_rect.y + card_rect.height as i32 <= AREA.bottom);
+
+        let rec_paste = RecoveryCardLayout::compute_for(true);
+        assert!(rec_paste.has_paste_target);
+        assert_eq!(
+            rec_paste.hit_test(
+                rec_paste.paste_previous.x + 5,
+                rec_paste.paste_previous.y + 5
+            ),
+            Some(RecoveryCardButton::PastePrevious)
+        );
+        assert_eq!(
+            rec_paste.hit_test(rec_paste.copy.x + 5, rec_paste.copy.y + 5),
+            Some(RecoveryCardButton::Copy)
+        );
+        assert_eq!(
+            rec_paste.hit_test(rec_paste.discard.x + 5, rec_paste.discard.y + 5),
+            Some(RecoveryCardButton::Discard)
+        );
+        assert_eq!(
+            format_paste_previous_button_label("Terminal"),
+            "Paste to Terminal"
+        );
+        assert_eq!(
+            format_paste_previous_button_label(""),
+            "Paste to previous"
+        );
     }
 }

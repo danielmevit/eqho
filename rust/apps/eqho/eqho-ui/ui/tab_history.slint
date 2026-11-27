@@ -11,7 +11,7 @@ component TrashButton inherits Rectangle {
     in property <int> count: 0;
     callback clicked();
 
-    property <string> label-text: root.count > 0 ? "Trash (" + root.count + ")" : "Trash";
+    property <string> label-text: root.count > 0 ? "Recently Deleted (" + root.count + ")" : "Recently Deleted";
 
     min-width: content.preferred-width + 20px;
     min-height: 31px;
@@ -69,7 +69,7 @@ export component HistoryTab inherits Rectangle {
     in-out property <string> history-status: "";
     in-out property <bool> showing-trash: false;
     in-out property <int> trash-count: 0;
-    in-out property <string> trash-retention-label: "Trash auto-clears after 30 days";
+    in-out property <string> trash-retention-label: "Recently Deleted auto-clears after 30 days";
     in-out property <string> copied-ts-key: "";
 
     callback history-filter-changed();
@@ -163,7 +163,7 @@ export component HistoryTab inherits Rectangle {
                 }
 
                 Button {
-                    text: "Empty Trash";
+                    text: "Empty Recently Deleted";
                     kind: ButtonKind.outline;
                     enabled: root.history-rows.length > 0;
                     clicked => {
@@ -173,7 +173,7 @@ export component HistoryTab inherits Rectangle {
                 }
             }
 
-            // Inline confirmation banner: Clear All -> Trash
+            // Inline confirmation banner: Clear All -> Recently Deleted
             if root.confirm-clear-all && !root.showing-trash : Rectangle {
                 background: Theme.surface;
                 border-radius: Theme.radius-card;
@@ -190,7 +190,7 @@ export component HistoryTab inherits Rectangle {
                     alignment: space-between;
 
                     Text {
-                        text: "Move all dictations to Trash? You can restore them anytime before auto-clear.";
+                        text: "Move all dictations to Recently Deleted? You can restore them anytime before auto-clear.";
                         font-size: Theme.font-size-sm;
                         color: Theme.text;
                         horizontal-stretch: 1;
@@ -202,7 +202,7 @@ export component HistoryTab inherits Rectangle {
                         spacing: Theme.space-8;
                         alignment: center;
                         Button {
-                            text: "Move to Trash";
+                            text: "Move to Recently Deleted";
                             kind: ButtonKind.accent;
                             clicked => {
                                 root.confirm-clear-all = false;
@@ -218,7 +218,7 @@ export component HistoryTab inherits Rectangle {
                 }
             }
 
-            // Inline confirmation banner: Empty Trash forever
+            // Inline confirmation banner: Empty Recently Deleted forever
             if root.confirm-empty-trash && root.showing-trash : Rectangle {
                 background: Theme.surface;
                 border-radius: Theme.radius-card;
@@ -235,7 +235,7 @@ export component HistoryTab inherits Rectangle {
                     alignment: space-between;
 
                     Text {
-                        text: "Permanently delete everything in Trash? This cannot be undone.";
+                        text: "Permanently delete everything in Recently Deleted? This cannot be undone.";
                         font-size: Theme.font-size-sm;
                         color: Theme.text;
                         horizontal-stretch: 1;
@@ -271,8 +271,8 @@ export component HistoryTab inherits Rectangle {
                         ? ""
                         : root.showing-trash
                             ? (root.history-rows.length == 1
-                                ? "1 item in Trash"
-                                : root.history-rows.length + " items in Trash")
+                                ? "1 recently deleted item"
+                                : root.history-rows.length + " recently deleted items")
                             : (root.history-rows.length == 1
                                 ? "1 transcript"
                                 : root.history-rows.length + " transcripts");
@@ -291,7 +291,7 @@ export component HistoryTab inherits Rectangle {
             if root.history-rows.length == 0 : SectionCard {
                 Text {
                     text: root.showing-trash
-                        ? "Trash is empty."
+                        ? "No recently deleted transcripts."
                         : (root.history-query != "" || root.history-period-index != 0)
                             ? "No matches."
                             : "No dictations yet — press the hotkey and speak.";
@@ -379,16 +379,16 @@ export component HistoryTab inherits Rectangle {
                             clicked => { root.copy-history-entry(row.ts_key, row.text); }
                         }
                         del-btn := CloseButton {
-                            accessible-name: "Move to Trash";
+                            accessible-name: "Move to Recently Deleted";
                             hover-changed(h) => {
                                 if (h) {
-                                    HoverTooltip.text = "Move to Trash";
+                                    HoverTooltip.text = "Move to Recently Deleted";
                                     HoverTooltip.anchor-x = self.absolute-position.x;
                                     HoverTooltip.anchor-y = self.absolute-position.y;
                                     HoverTooltip.anchor-w = self.width;
                                     HoverTooltip.anchor-h = self.height;
                                     HoverTooltip.visible = true;
-                                } else if (HoverTooltip.text == "Move to Trash") {
+                                } else if (HoverTooltip.text == "Move to Recently Deleted") {
                                     HoverTooltip.visible = false;
                                 }
                             }
@@ -405,7 +405,7 @@ export component HistoryTab inherits Rectangle {
                         alignment: start;
                         Text {
                             height: 30px;
-                            text: "Trash?";
+                            text: "Delete?";
                             font-size: Theme.font-size-xs;
                             font-weight: 600;
                             color: Theme.text-muted;

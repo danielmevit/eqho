@@ -42,7 +42,8 @@ use eqho_ui::{
     language_index_for_code, language_warning_text_for_specs, model_short_name,
     onboarding_model_copy_for_key, overlay_monitor_key, overlay_position_key,
     parse_paste_rules_text, parse_replacements_text, render_flag_rgba, split_model_cards,
-    status_summary_title, theme_mode_key, ui_scale_value, volume_duck_key, wordmark_image,
+    status_summary_title, theme_mode_key, ui_scale_value, ui_window_size_for_scale, ui_zoom_factor,
+    volume_duck_key, wordmark_image,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
@@ -232,9 +233,9 @@ fn default_cpu_threads() -> u32 {
 
 fn format_trash_retention_label(days: i32) -> String {
     if days <= 0 {
-        "Trash items stay until emptied".to_owned()
+        "Recently Deleted items stay until emptied".to_owned()
     } else {
-        format!("Trash auto-clears after {days} days")
+        format!("Recently Deleted auto-clears after {days} days")
     }
 }
 
@@ -261,6 +262,7 @@ struct UiSyncSnapshot {
     is_dictating: bool,
     dictation_allowed: bool,
     recovery_text: Option<String>,
+    recovery_paste_target: Option<String>,
     downloading_key: Option<String>,
     loading_key: Option<String>,
     download_progress: f32,
@@ -630,34 +632,74 @@ impl UiEventSink for AppUiSink {
     }
 
     fn on_recovery_available(&self, text: Option<&str>) {
+        self.on_recovery_available_with_target(text, None);
+    }
+
+    fn on_recovery_available_with_target(&self, text: Option<&str>, previous_app: Option<&str>) {
+        let target_owned = text.and_then(|_| {
+            previous_app
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned)
+        });
         {
             let mut snap = self.snapshot.lock().unwrap_or_else(|e| e.into_inner());
             snap.recovery_text = text.map(str::to_owned);
+            snap.recovery_paste_target = target_owned.clone();
         }
         self.refresh_tray();
-
-        if let Some(t) = text {
-            self.overlay.show_recovery(t);
-            self.append_step6_text(
-                t,
-                Some("✓ Dictation worked! Try another sentence or click Finish."),
-            );
-        } else {
-            self.overlay.hide_recovery();
-        }
 
         let dash_weak_opt = self
             .dash_weak
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
-        if let Some(dash_weak) = dash_weak_opt {
-            let txt = text.unwrap_or("").to_owned();
-            let _ = slint::invoke_from_event_loop(move || {
-                if let Some(dash) = dash_weak.upgrade() {
-                    dash.set_recovery_text(txt.into());
-                }
-            });
+
+        if let Some(t) = text {
+            // Check whether Onboarding Step 6 ("Try dictating here") is active; if so, populate
+            // the onboarding test box quietly without surfacing a floating recovery card over it.
+            let overlay = Arc::clone(&self.overlay);
+            if let Some(dash_weak) = dash_weak_opt {
+                let txt_for_ui = t.to_owned();
+                let target_for_ui = target_owned.unwrap_or_default();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(dash) = dash_weak.upgrade() {
+                        if dash.get_onboarding_active() && dash.get_onboarding_step() == 5 {
+                            let cur = dash.get_onboarding_try_text().to_string();
+                            if !cur.ends_with(&txt_for_ui) && !cur.contains(&txt_for_ui) {
+                                let next = if cur.trim().is_empty() {
+                                    txt_for_ui.clone()
+                                } else {
+                                    format!("{cur} {txt_for_ui}")
+                                };
+                                dash.set_onboarding_try_text(next.into());
+                            }
+                            dash.set_onboarding_try_hint(
+                                "✓ Dictation worked! Try another sentence or click Finish.".into(),
+                            );
+                            overlay.hide_recovery();
+                            return;
+                        }
+                        dash.set_recovery_text(txt_for_ui.clone().into());
+                        dash.set_recovery_paste_target(target_for_ui.clone().into());
+                    }
+                    let tgt = (!target_for_ui.is_empty()).then_some(target_for_ui.as_str());
+                    overlay.show_recovery_with_target(&txt_for_ui, tgt);
+                });
+            } else {
+                self.overlay
+                    .show_recovery_with_target(t, target_owned.as_deref());
+            }
+        } else {
+            self.overlay.hide_recovery();
+            if let Some(dash_weak) = dash_weak_opt {
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(dash) = dash_weak.upgrade() {
+                        dash.set_recovery_text("".into());
+                        dash.set_recovery_paste_target("".into());
+                    }
+                });
+            }
         }
     }
 
@@ -1434,18 +1476,24 @@ fn ensure_dashboard(ctrl: &Rc<RefCell<AppController>>, tab: Option<&str>) {
                 }
 
                 let recovery = snap.recovery_text.unwrap_or_default();
+                let recovery_target = snap.recovery_paste_target.unwrap_or_default();
                 dash.set_recovery_text(recovery.into());
+                dash.set_recovery_paste_target(recovery_target.into());
 
-                // Clamp initial logical window size to the active monitor work area so the window
-                // and onboarding footer never slip behind the Windows taskbar at high DPI scaling.
+                // Clamp initial logical window size (scaled by UI Zoom) to the active monitor work
+                // area so the window and onboarding footer never slip behind the taskbar at high DPI.
+                let (desired_w, desired_h) = ui_window_size_for_scale(s.ui_scale);
                 if let Some(work) = c.damt_platform.active_screen().active_screen_bounds() {
                     let scale = dash.window().scale_factor().max(1.0);
                     let max_w = ((work.width as f32 / scale) - 32.0).max(600.0);
                     let max_h = ((work.height as f32 / scale) - 48.0).max(420.0);
-                    let target_w = 940.0_f32.min(max_w);
-                    let target_h = 560.0_f32.min(max_h);
+                    let target_w = desired_w.min(max_w);
+                    let target_h = desired_h.min(max_h);
                     dash.window()
                         .set_size(slint::LogicalSize::new(target_w, target_h));
+                } else if (desired_w - 940.0).abs() > 1.0 || (desired_h - 560.0).abs() > 1.0 {
+                    dash.window()
+                        .set_size(slint::LogicalSize::new(desired_w, desired_h));
                 }
             }
             c.refresh_models();
@@ -1526,17 +1574,50 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     {
         let ctrl_w = Rc::clone(ctrl);
         let dash_w = dash.as_weak();
+        dash.on_paste_recovery_to_previous(move || {
+            let (coord, overlay, ui_sink) = {
+                let c = ctrl_w.borrow();
+                (
+                    c.coordinator.clone(),
+                    Arc::clone(&c.overlay),
+                    Arc::clone(&c.ui_sink),
+                )
+            };
+            overlay.hide_recovery();
+            let dash_w2 = dash_w.clone();
+            let _ = thread::Builder::new()
+                .name("eqho-paste-recovery".into())
+                .spawn(move || match coord.paste_recovery_to_previous_window() {
+                    Ok(_) => {
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(d) = dash_w2.upgrade() {
+                                d.set_recovery_text("".into());
+                                d.set_recovery_paste_target("".into());
+                            }
+                        });
+                    }
+                    Err(msg) => {
+                        ui_sink.notify(&msg);
+                    }
+                });
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
         dash.on_copy_recovery(move || {
             let c = ctrl_w.borrow();
             let _ = c.coordinator.copy_last_dictation();
             c.overlay.hide_recovery();
-            c.snapshot
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .recovery_text = None;
+            {
+                let mut snap = c.snapshot.lock().unwrap_or_else(|e| e.into_inner());
+                snap.recovery_text = None;
+                snap.recovery_paste_target = None;
+            }
             c.ui_sink.refresh_tray();
             if let Some(d) = dash_w.upgrade() {
                 d.set_recovery_text("".into());
+                d.set_recovery_paste_target("".into());
             }
         });
     }
@@ -1578,13 +1659,15 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
         dash.on_dismiss_recovery(move || {
             let c = ctrl_w.borrow();
             c.overlay.hide_recovery();
-            c.snapshot
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .recovery_text = None;
+            {
+                let mut snap = c.snapshot.lock().unwrap_or_else(|e| e.into_inner());
+                snap.recovery_text = None;
+                snap.recovery_paste_target = None;
+            }
             c.ui_sink.refresh_tray();
             if let Some(d) = dash_w.upgrade() {
                 d.set_recovery_text("".into());
+                d.set_recovery_paste_target("".into());
             }
         });
     }
@@ -2207,13 +2290,33 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     }
     {
         let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
         dash.on_ui_scale_changed(move |idx| {
+            let new_scale = ui_scale_value(idx);
             let c = ctrl_w.borrow();
             c.settings
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .ui_scale = ui_scale_value(idx);
+                .ui_scale = new_scale;
             c.save_settings(false);
+            if let Some(d) = dash_w.upgrade() {
+                d.global::<Theme>().set_scale(ui_zoom_factor(new_scale));
+                let (mut target_w, mut target_h) = ui_window_size_for_scale(new_scale);
+                if let Some(work) = c.damt_platform.active_screen().active_screen_bounds() {
+                    let dpi = d.window().scale_factor().max(1.0);
+                    let max_w = ((work.width as f32 / dpi) - 32.0).max(600.0);
+                    let max_h = ((work.height as f32 / dpi) - 48.0).max(420.0);
+                    target_w = target_w.min(max_w);
+                    target_h = target_h.min(max_h);
+                }
+                d.window()
+                    .set_size(slint::LogicalSize::new(target_w, target_h));
+                if d.get_settings_open() {
+                    d.set_settings_open(false);
+                    capture_settings_backdrop(&d);
+                    d.set_settings_open(true);
+                }
+            }
         });
     }
     {
@@ -3461,6 +3564,17 @@ pub fn run_desktop_app(
                                 });
                             }
                         }
+                        OverlayAction::RecoveryPastePrevious => {
+                            if let Some(ov) = overlay_slot.get() {
+                                ov.hide_recovery();
+                            }
+                            let coord_c = coord.clone();
+                            let _ = thread::Builder::new()
+                                .name("eqho-paste-recovery".into())
+                                .spawn(move || {
+                                    let _ = coord_c.paste_recovery_to_previous_window();
+                                });
+                        }
                         OverlayAction::RecoveryShowText => {
                             if let Some(ov) = overlay_slot.get() {
                                 ov.hide_recovery();
@@ -3497,7 +3611,9 @@ pub fn run_desktop_app(
                                 ov.hide_recovery();
                             }
                             if let Some(snap) = snapshot_slot.get() {
-                                snap.lock().unwrap_or_else(|e| e.into_inner()).recovery_text = None;
+                                let mut sg = snap.lock().unwrap_or_else(|e| e.into_inner());
+                                sg.recovery_text = None;
+                                sg.recovery_paste_target = None;
                             }
                             let dash_weak_opt = dash_weak
                                 .lock()
@@ -3509,6 +3625,7 @@ pub fn run_desktop_app(
                                     && let Some(dash) = weak.upgrade()
                                 {
                                     dash.set_recovery_text("".into());
+                                    dash.set_recovery_paste_target("".into());
                                 }
                                 if let Some(tw) = tray_w
                                     && let Some(t) = tw.upgrade()
@@ -3557,6 +3674,7 @@ pub fn run_desktop_app(
         is_dictating: false,
         dictation_allowed: true,
         recovery_text: None,
+        recovery_paste_target: None,
         downloading_key: None,
         loading_key: None,
         download_progress: 0.0,

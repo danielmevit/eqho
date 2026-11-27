@@ -63,6 +63,8 @@ struct CoordinatorState {
     running: bool,
     finishing: bool,
     target_hwnd: WindowHandle,
+    target_was_non_paste: bool,
+    last_external_target: Option<(WindowHandle, Option<String>)>,
     pending_text: Vec<String>,
     live_committed: Vec<String>,
     saved_volume: Option<f32>,
@@ -82,6 +84,8 @@ impl Default for CoordinatorState {
             running: false,
             finishing: false,
             target_hwnd: WindowHandle::NONE,
+            target_was_non_paste: false,
+            last_external_target: None,
             pending_text: Vec::new(),
             live_committed: Vec::new(),
             saved_volume: None,
@@ -92,6 +96,55 @@ impl Default for CoordinatorState {
             recovery: LastDictationBuffer::default(),
         }
     }
+}
+
+/// Convert an OS process executable name (e.g. `"WindowsTerminal.exe"`, `"Code.exe"`, `"chrome"`)
+/// into a concise, human-friendly label for recovery buttons (`"Terminal"`, `"VS Code"`, `"Chrome"`).
+#[must_use]
+pub fn friendly_app_label(process_name: Option<&str>) -> Option<String> {
+    let raw = process_name?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let stem = raw
+        .strip_suffix(".exe")
+        .or_else(|| raw.strip_suffix(".EXE"))
+        .or_else(|| raw.strip_suffix(".app"))
+        .unwrap_or(raw)
+        .trim();
+    if stem.is_empty() {
+        return None;
+    }
+    let mapped = match stem.to_ascii_lowercase().as_str() {
+        "windowsterminal" | "wt" | "alacritty" | "wezterm-gui" | "kitty" | "gnome-terminal-server"
+        | "konsole" | "xterm" | "powershell" | "pwsh" | "cmd" => Some("Terminal"),
+        "code" | "code - insiders" | "cursor" | "windsurf" => Some("Editor"),
+        "chrome" | "google-chrome" | "chromium" => Some("Chrome"),
+        "msedge" => Some("Edge"),
+        "firefox" | "firefox-esr" => Some("Firefox"),
+        "brave" => Some("Brave"),
+        "notepad" | "notepad++" => Some("Notepad"),
+        "slack" => Some("Slack"),
+        "discord" => Some("Discord"),
+        "obsidian" => Some("Obsidian"),
+        "notion" => Some("Notion"),
+        "winword" => Some("Word"),
+        "excel" => Some("Excel"),
+        "outlook" | "olk" => Some("Outlook"),
+        "teams" | "ms-teams" => Some("Teams"),
+        _ => None,
+    };
+    if let Some(m) = mapped {
+        return Some(m.to_owned());
+    }
+    let mut chars = stem.chars();
+    let first = chars.next()?;
+    let mut title = String::with_capacity(stem.len());
+    for c in first.to_uppercase() {
+        title.push(c);
+    }
+    title.extend(chars.take(15));
+    Some(title)
 }
 
 struct CoordinatorInner {
@@ -264,6 +317,59 @@ impl DictationCoordinator {
         }
     }
 
+    /// Friendly label for the last valid external target window (if any), e.g. `"Terminal"`.
+    #[must_use]
+    pub fn last_external_target_label(&self) -> Option<String> {
+        let st = lock_unpoisoned(&self.inner.state);
+        st.last_external_target
+            .as_ref()
+            .filter(|(hwnd, _)| hwnd.is_valid())
+            .map(|(_, lbl)| lbl.clone().unwrap_or_else(|| "previous app".to_owned()))
+    }
+
+    /// Restore focus to the last valid external app window and paste the stored recovery text.
+    ///
+    /// Returns `Ok(app_label)` on success and clears the recovery banner, or `Err(reason)` if
+    /// no recovery text / target window is available or focus restoration fails.
+    pub fn paste_recovery_to_previous_window(&self) -> Result<String, String> {
+        let settings = lock_unpoisoned(&self.inner.settings).clone();
+        let (text, target_hwnd, label) = {
+            let st = lock_unpoisoned(&self.inner.state);
+            let Some(text) = st.recovery.get().map(str::to_owned) else {
+                return Err("No saved dictation to paste.".to_owned());
+            };
+            if text.is_empty() {
+                return Err("No saved dictation to paste.".to_owned());
+            }
+            let Some((hwnd, lbl)) = st
+                .last_external_target
+                .as_ref()
+                .filter(|(h, _)| h.is_valid())
+                .cloned()
+            else {
+                return Err("No previous window available — use Copy instead.".to_owned());
+            };
+            let label = lbl.unwrap_or_else(|| "previous app".to_owned());
+            (text, hwnd, label)
+        };
+
+        match self.inner.inject_text_chunk(&text, target_hwnd, &settings) {
+            Ok(()) => {
+                {
+                    let mut st = lock_unpoisoned(&self.inner.state);
+                    st.last_injected = text.clone();
+                    st.recovery.clear();
+                }
+                self.inner.ui.on_recovery_available_with_target(None, None);
+                Ok(label)
+            }
+            Err(InjectError::FocusRestoreFailed) => Err(format!(
+                "Couldn't switch back to {label} — use Copy instead."
+            )),
+            Err(InjectError::Platform(err)) => Err(format!("Couldn't paste to {label}: {err}")),
+        }
+    }
+
     pub fn shutdown(&self) {
         self.inner.shutdown();
     }
@@ -296,7 +402,15 @@ impl CoordinatorInner {
                 return;
             }
 
-            st.target_hwnd = self.platform.get_foreground_window();
+            let fg = self.platform.get_foreground_window();
+            let non_paste = fg.is_valid() && self.platform.is_non_paste_target(fg);
+            st.target_hwnd = fg;
+            st.target_was_non_paste = non_paste;
+            if fg.is_valid() && !non_paste {
+                let proc_name = self.platform.get_window_process_name(fg);
+                let label = friendly_app_label(proc_name.as_deref());
+                st.last_external_target = Some((fg, label));
+            }
             st.pending_text.clear();
             st.live_committed.clear();
             st.finishing_session = 0;
@@ -825,7 +939,7 @@ impl CoordinatorInner {
                 return;
             }
             st.pending_text.push(text);
-            if is_live && st.running && !st.finishing {
+            if is_live && st.running && !st.finishing && !st.target_was_non_paste {
                 let to_flush = std::mem::take(&mut st.pending_text);
                 let prior = st.live_committed.clone();
                 let target_hwnd = st.target_hwnd;
@@ -1094,7 +1208,14 @@ impl CoordinatorInner {
 
     fn inject_pending(&self) {
         let settings = lock_unpoisoned(&self.settings).clone();
-        let (live_committed, pending_parts, target_hwnd, duration_s) = {
+        let (
+            live_committed,
+            pending_parts,
+            target_hwnd,
+            target_was_non_paste,
+            prev_target_label,
+            duration_s,
+        ) = {
             let mut st = lock_unpoisoned(&self.state);
             let live = std::mem::take(&mut st.live_committed);
             let pending = std::mem::take(&mut st.pending_text);
@@ -1103,7 +1224,12 @@ impl CoordinatorInner {
                 .take()
                 .map(|t| t.elapsed().as_secs_f64())
                 .unwrap_or(0.0);
-            (live, pending, st.target_hwnd, dur)
+            let prev_label = st.last_external_target.as_ref().map(|(_, lbl)| {
+                lbl.clone().unwrap_or_else(|| "previous app".to_owned())
+            });
+            let non_paste = st.target_was_non_paste;
+            st.target_was_non_paste = false;
+            (live, pending, st.target_hwnd, non_paste, prev_label, dur)
         };
 
         let pending_formatted = format_phrase_parts(&pending_parts, &settings);
@@ -1126,25 +1252,47 @@ impl CoordinatorInner {
         let mut paste_failed = false;
         let mut committed_text = live_text;
         if !pending_chunk.is_empty() {
-            match self.inject_text_chunk(&pending_chunk, target_hwnd, &settings) {
-                Ok(()) => {
-                    lock_unpoisoned(&self.state).last_injected = pending_chunk.clone();
-                    self.ui.on_dictation_committed(&pending_chunk);
-                    committed_text = combined_text;
-                }
-                Err(InjectError::FocusRestoreFailed) => {
-                    paste_failed = true;
-                    committed_text = combined_text;
-                    self.ui.on_recovery_available(Some(&committed_text));
-                    self.ui.notify(FOCUS_RESTORE_FAILED_TEXT);
-                }
-                Err(InjectError::Platform(err)) => {
-                    paste_failed = true;
-                    committed_text = combined_text;
-                    self.ui.on_recovery_available(Some(&committed_text));
-                    self.ui.notify(&format!(
-                        "Couldn't insert your dictation ({err}). It is saved in Eqho."
-                    ));
+            if target_was_non_paste {
+                paste_failed = true;
+                committed_text = combined_text;
+                self.ui.on_recovery_available_with_target(
+                    Some(&committed_text),
+                    prev_target_label.as_deref(),
+                );
+                let msg = match prev_target_label.as_deref() {
+                    Some(app) => format!(
+                        "No text box focused — saved in Eqho. Click Paste to {app} or Copy."
+                    ),
+                    None => "No text box focused — saved in Eqho (Copy Last Dictation).".to_owned(),
+                };
+                self.ui.notify(&msg);
+            } else {
+                match self.inject_text_chunk(&pending_chunk, target_hwnd, &settings) {
+                    Ok(()) => {
+                        lock_unpoisoned(&self.state).last_injected = pending_chunk.clone();
+                        self.ui.on_dictation_committed(&pending_chunk);
+                        committed_text = combined_text;
+                    }
+                    Err(InjectError::FocusRestoreFailed) => {
+                        paste_failed = true;
+                        committed_text = combined_text;
+                        self.ui.on_recovery_available_with_target(
+                            Some(&committed_text),
+                            prev_target_label.as_deref(),
+                        );
+                        self.ui.notify(FOCUS_RESTORE_FAILED_TEXT);
+                    }
+                    Err(InjectError::Platform(err)) => {
+                        paste_failed = true;
+                        committed_text = combined_text;
+                        self.ui.on_recovery_available_with_target(
+                            Some(&committed_text),
+                            prev_target_label.as_deref(),
+                        );
+                        self.ui.notify(&format!(
+                            "Couldn't insert your dictation ({err}). It is saved in Eqho."
+                        ));
+                    }
                 }
             }
         }
@@ -3051,5 +3199,31 @@ mod tests {
         assert_eq!(entries[0].text, "Keep this.");
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn friendly_app_label_formats_common_and_custom_processes() {
+        assert_eq!(
+            friendly_app_label(Some("WindowsTerminal.exe")).as_deref(),
+            Some("Terminal")
+        );
+        assert_eq!(
+            friendly_app_label(Some("chrome.exe")).as_deref(),
+            Some("Chrome")
+        );
+        assert_eq!(
+            friendly_app_label(Some("Code.exe")).as_deref(),
+            Some("Editor")
+        );
+        assert_eq!(
+            friendly_app_label(Some("obsidian")).as_deref(),
+            Some("Obsidian")
+        );
+        assert_eq!(
+            friendly_app_label(Some("mycustomapp.exe")).as_deref(),
+            Some("Mycustomapp")
+        );
+        assert_eq!(friendly_app_label(Some("")), None);
+        assert_eq!(friendly_app_label(None), None);
     }
 }

@@ -220,7 +220,7 @@ fn push_json_escaped(out: &mut String, s: &str) {
     out.push('"');
 }
 
-/// Build the PostHog `/capture/` JSON payload with stateless, IP-free privacy flags.
+/// Build the PostHog `/capture/` JSON payload with stateless, IP-free, GeoIP-free privacy flags.
 #[must_use]
 pub fn build_capture_payload(
     api_key: &str,
@@ -228,16 +228,18 @@ pub fn build_capture_payload(
     event: &str,
     props: &[(&str, AnalyticsProp)],
 ) -> String {
-    let mut out = String::with_capacity(256);
+    let mut out = String::with_capacity(320);
     out.push_str("{\"api_key\":");
     push_json_escaped(&mut out, api_key);
     out.push_str(",\"event\":");
     push_json_escaped(&mut out, event);
     out.push_str(",\"distinct_id\":");
     push_json_escaped(&mut out, distinct_id);
-    out.push_str(",\"properties\":{\"$process_person_profile\":false,\"$ip\":null");
+    out.push_str(
+        ",\"properties\":{\"$process_person_profile\":false,\"$ip\":null,\"$geoip_disable\":true",
+    );
     for (k, v) in props {
-        if *k == "$process_person_profile" || *k == "$ip" {
+        if *k == "$process_person_profile" || *k == "$ip" || *k == "$geoip_disable" {
             continue;
         }
         out.push(',');
@@ -253,6 +255,24 @@ pub fn build_capture_payload(
     }
     out.push_str("}}");
     out
+}
+
+fn posthog_os_label() -> &'static str {
+    match std::env::consts::OS {
+        "windows" => "Windows",
+        "linux" => "Linux",
+        "macos" => "Mac OS X",
+        "android" => "Android",
+        "ios" => "iOS",
+        other => other,
+    }
+}
+
+fn posthog_device_type() -> &'static str {
+    match std::env::consts::OS {
+        "android" | "ios" => "Mobile",
+        _ => "Desktop",
+    }
 }
 
 #[derive(Debug)]
@@ -391,7 +411,11 @@ impl AnalyticsClient {
             guard.clone()
         };
 
-        let mut props: Vec<(&str, AnalyticsProp)> = Vec::with_capacity(extra_props.len() + 5);
+        let mut props: Vec<(&str, AnalyticsProp)> = Vec::with_capacity(extra_props.len() + 9);
+        props.push(("$lib", AnalyticsProp::from("damt-analytics")));
+        props.push(("$lib_version", AnalyticsProp::from(env!("CARGO_PKG_VERSION"))));
+        props.push(("$os", AnalyticsProp::from(posthog_os_label())));
+        props.push(("$device_type", AnalyticsProp::from(posthog_device_type())));
         props.push(("app", AnalyticsProp::from(self.inner.app_name.as_str())));
         props.push((
             "app_version",
@@ -647,10 +671,13 @@ mod tests {
                 // Caller cannot override mandatory privacy flags:
                 ("$ip", AnalyticsProp::from("1.2.3.4")),
                 ("$process_person_profile", AnalyticsProp::from(true)),
+                ("$geoip_disable", AnalyticsProp::from(false)),
             ],
         );
         assert!(json.contains("\"$process_person_profile\":false"));
         assert!(json.contains("\"$ip\":null"));
+        assert!(json.contains("\"$geoip_disable\":true"));
+        assert!(!json.contains("\"$geoip_disable\":false"));
         assert!(!json.contains("1.2.3.4"));
         assert!(json.contains("\"model\":\"small.en-q5\""));
         assert!(json.contains("\"threads\":8"));

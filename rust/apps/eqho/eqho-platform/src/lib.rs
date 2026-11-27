@@ -72,6 +72,11 @@ pub trait FocusTracker: Send + Sync {
     fn restore_foreground_window(&self, window: WindowHandle) -> bool;
     /// Basename of the executable owning `window` (e.g. `"notepad.exe"`), or `None`.
     fn get_window_process_name(&self, window: WindowHandle) -> Option<String>;
+    /// Returns `true` when `window` is a known non-text surface (Eqho's own window, Desktop
+    /// wallpaper, or Taskbar) where sending `Ctrl+V` would silently vanish instead of pasting.
+    fn is_non_paste_target(&self, _window: WindowHandle) -> bool {
+        false
+    }
 }
 
 /// Modifier key identifier for selective release before paste (`EQ-MODS`).

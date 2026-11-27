@@ -247,7 +247,10 @@ pub(crate) enum LinuxOverlayCmd {
         recent_languages: Vec<String>,
     },
     UpdateConfig(OverlayConfig),
-    ShowRecovery(String),
+    ShowRecovery {
+        text: String,
+        paste_target: Option<String>,
+    },
     HideRecovery,
     Hide,
     Shutdown,
@@ -1180,6 +1183,7 @@ struct LinuxOverlayState {
     recovery_shown: bool,
     recovery_rect: OverlayRect,
     recovery_layout: RecoveryCardLayout,
+    recovery_paste_target: Option<String>,
     recovery_logical_canvas: PremulCanvas,
     recovery_phys_canvas: PremulCanvas,
     hovered_recovery_btn: Option<RecoveryCardButton>,
@@ -1524,12 +1528,14 @@ impl LinuxOverlayState {
         }
     }
 
-    fn cmd_show_recovery(&mut self, _text: String) {
+    fn cmd_show_recovery(&mut self, _text: String, paste_target: Option<String>) {
         if !self.config.enabled {
             return;
         }
         self.update_pill_geometry();
-        self.recovery_layout = RecoveryCardLayout::compute();
+        self.recovery_paste_target = paste_target;
+        self.recovery_layout =
+            RecoveryCardLayout::compute_for(self.recovery_paste_target.is_some());
         self.recovery_rect = underbar::calc_recovery_card_rect(
             self.pill_rect,
             self.recovery_layout.width,
@@ -1621,23 +1627,27 @@ impl LinuxOverlayState {
         let phys = logical_to_phys_rect(self.panel_rect, self.dpi_scale);
         let dark = self.config.dark_theme;
 
-        // Slightly higher opacity than Windows Acrylic since X11/XWayland has no DWM backdrop blur.
-        let opacity = (self.config.panel_opacity as f32).clamp(0.3, 1.0);
-        let bg_alpha = if dark {
-            (opacity * 228.0).round().clamp(140.0, 236.0) as u8
-        } else {
-            (opacity * 238.0).round().clamp(155.0, 244.0) as u8
-        };
+        // Scale background and border alpha smoothly from 0 (100% see-through) up to full opacity
+        // while keeping transcribed text glyphs 100% opaque and legible.
+        let opacity = (self.config.panel_opacity as f32).clamp(0.0, 1.0);
+        let bg_alpha = (opacity * if dark { 236.0 } else { 244.0 })
+            .round()
+            .clamp(0.0, 255.0) as u8;
+        let border_alpha = (opacity * if dark { 48.0 } else { 40.0 })
+            .round()
+            .clamp(0.0, 255.0) as u8;
         let panel_bg = if dark {
             Rgba::new(0x14, 0x14, 0x18, bg_alpha)
         } else {
             Rgba::new(0xFF, 0xFF, 0xFF, bg_alpha)
         };
-        let panel_border = if dark {
-            Rgba::new(0xFF, 0xFF, 0xFF, 48)
-        } else {
-            Rgba::new(0x1A, 0x1C, 0x1F, 40)
-        };
+        let panel_border = (border_alpha > 0).then(|| {
+            if dark {
+                Rgba::new(0xFF, 0xFF, 0xFF, border_alpha)
+            } else {
+                Rgba::new(0x1A, 0x1C, 0x1F, border_alpha)
+            }
+        });
         let fg_color = if dark {
             Rgba::rgb(0xF5, 0xF6, 0xF8)
         } else {
@@ -1645,12 +1655,14 @@ impl LinuxOverlayState {
         };
 
         self.panel_logical_canvas.reset(lw, lh);
-        self.panel_logical_canvas.fill_rounded_rect(
-            LocalRect::new(0, 0, lw, lh),
-            8.0,
-            panel_bg,
-            Some(panel_border),
-        );
+        if bg_alpha > 0 || panel_border.is_some() {
+            self.panel_logical_canvas.fill_rounded_rect(
+                LocalRect::new(0, 0, lw, lh),
+                8.0,
+                panel_bg,
+                panel_border,
+            );
+        }
 
         let fade_f = self.animator.alpha_logical.clamp(0.0, 1.0);
         self.panel_logical_canvas
@@ -2309,27 +2321,55 @@ impl LinuxOverlayState {
             None,
         );
 
-        // 1. Show text button
-        let show_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::ShowText) {
-            theme.chip_hover_bg
-        } else {
-            theme.chip_bg
-        };
-        self.recovery_logical_canvas.fill_rounded_rect(
-            layout.show_text,
-            6.0,
-            show_bg,
-            Some(theme.bar_border),
-        );
+        if layout.has_paste_target {
+            // 1. Paste to <App> button (Eqho blue accent)
+            let paste_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::PastePrevious) {
+                theme.done_hover_bg
+            } else {
+                theme.done_bg
+            };
+            self.recovery_logical_canvas.fill_rounded_rect(
+                layout.paste_previous,
+                6.0,
+                paste_bg,
+                None,
+            );
 
-        // 2. Copy button (Eqho blue accent)
-        let copy_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::Copy) {
-            theme.done_hover_bg
+            // 2. Copy button (outline)
+            let copy_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::Copy) {
+                theme.chip_hover_bg
+            } else {
+                theme.chip_bg
+            };
+            self.recovery_logical_canvas.fill_rounded_rect(
+                layout.copy,
+                6.0,
+                copy_bg,
+                Some(theme.bar_border),
+            );
         } else {
-            theme.done_bg
-        };
-        self.recovery_logical_canvas
-            .fill_rounded_rect(layout.copy, 6.0, copy_bg, None);
+            // 1. Show text button
+            let show_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::ShowText) {
+                theme.chip_hover_bg
+            } else {
+                theme.chip_bg
+            };
+            self.recovery_logical_canvas.fill_rounded_rect(
+                layout.show_text,
+                6.0,
+                show_bg,
+                Some(theme.bar_border),
+            );
+
+            // 2. Copy button (Eqho blue accent)
+            let copy_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::Copy) {
+                theme.done_hover_bg
+            } else {
+                theme.done_bg
+            };
+            self.recovery_logical_canvas
+                .fill_rounded_rect(layout.copy, 6.0, copy_bg, None);
+        }
 
         // 3. Discard button
         let disc_bg = if self.hovered_recovery_btn == Some(RecoveryCardButton::Discard) {
@@ -2351,40 +2391,80 @@ impl LinuxOverlayState {
             phys.height,
             1.0,
         );
-        let cmds = [
-            TextDrawCmd {
-                text: "Couldn't paste automatically",
-                rect: layout.title_rect,
-                font_px: 11,
-                color: theme.text_primary,
-                align: TextAlign::Left,
-                wrapped: false,
-            },
-            TextDrawCmd {
-                text: "Show text",
-                rect: layout.show_text,
-                font_px: 11,
-                color: theme.text_primary,
-                align: TextAlign::Center,
-                wrapped: false,
-            },
-            TextDrawCmd {
-                text: "Copy",
-                rect: layout.copy,
-                font_px: 11,
-                color: theme.done_fg,
-                align: TextAlign::Center,
-                wrapped: false,
-            },
-            TextDrawCmd {
-                text: "Discard",
-                rect: layout.discard,
-                font_px: 11,
-                color: theme.text_muted,
-                align: TextAlign::Center,
-                wrapped: false,
-            },
-        ];
+        let paste_label = underbar::format_paste_previous_button_label(
+            self.recovery_paste_target.as_deref().unwrap_or(""),
+        );
+        let cmds = if layout.has_paste_target {
+            [
+                TextDrawCmd {
+                    text: "Not pasted — no text box focused",
+                    rect: layout.title_rect,
+                    font_px: 11,
+                    color: theme.text_primary,
+                    align: TextAlign::Left,
+                    wrapped: false,
+                },
+                TextDrawCmd {
+                    text: &paste_label,
+                    rect: layout.paste_previous,
+                    font_px: 11,
+                    color: theme.done_fg,
+                    align: TextAlign::Center,
+                    wrapped: false,
+                },
+                TextDrawCmd {
+                    text: "Copy",
+                    rect: layout.copy,
+                    font_px: 11,
+                    color: theme.text_primary,
+                    align: TextAlign::Center,
+                    wrapped: false,
+                },
+                TextDrawCmd {
+                    text: "Discard",
+                    rect: layout.discard,
+                    font_px: 11,
+                    color: theme.text_muted,
+                    align: TextAlign::Center,
+                    wrapped: false,
+                },
+            ]
+        } else {
+            [
+                TextDrawCmd {
+                    text: "Couldn't paste automatically",
+                    rect: layout.title_rect,
+                    font_px: 11,
+                    color: theme.text_primary,
+                    align: TextAlign::Left,
+                    wrapped: false,
+                },
+                TextDrawCmd {
+                    text: "Show text",
+                    rect: layout.show_text,
+                    font_px: 11,
+                    color: theme.text_primary,
+                    align: TextAlign::Center,
+                    wrapped: false,
+                },
+                TextDrawCmd {
+                    text: "Copy",
+                    rect: layout.copy,
+                    font_px: 11,
+                    color: theme.done_fg,
+                    align: TextAlign::Center,
+                    wrapped: false,
+                },
+                TextDrawCmd {
+                    text: "Discard",
+                    rect: layout.discard,
+                    font_px: 11,
+                    color: theme.text_muted,
+                    align: TextAlign::Center,
+                    wrapped: false,
+                },
+            ]
+        };
         draw_pango_texts(
             &mut self.recovery_phys_canvas,
             layout.width,
@@ -2678,6 +2758,9 @@ impl LinuxOverlayState {
         };
         self.hide_recovery_now();
         match btn {
+            RecoveryCardButton::PastePrevious => {
+                self.emit_action(OverlayAction::RecoveryPastePrevious);
+            }
             RecoveryCardButton::ShowText => self.emit_action(OverlayAction::RecoveryShowText),
             RecoveryCardButton::Copy => self.emit_action(OverlayAction::RecoveryCopy),
             RecoveryCardButton::Discard => self.emit_action(OverlayAction::RecoveryDiscard),
@@ -2932,7 +3015,9 @@ impl LinuxOverlayState {
                 recent_languages,
             } => self.cmd_update_session_meta(language, delivery_mode, pinned, recent_languages),
             LinuxOverlayCmd::UpdateConfig(cfg) => self.cmd_update_config(cfg),
-            LinuxOverlayCmd::ShowRecovery(text) => self.cmd_show_recovery(text),
+            LinuxOverlayCmd::ShowRecovery { text, paste_target } => {
+                self.cmd_show_recovery(text, paste_target);
+            }
             LinuxOverlayCmd::HideRecovery => self.hide_recovery_now(),
             LinuxOverlayCmd::Hide => self.cmd_hide(),
             LinuxOverlayCmd::Shutdown => return true,
@@ -3109,6 +3194,7 @@ fn run_linux_overlay_thread(
             recovery_shown: false,
             recovery_rect: zero_rect,
             recovery_layout,
+            recovery_paste_target: None,
             recovery_logical_canvas: PremulCanvas::new(1, 1),
             recovery_phys_canvas: PremulCanvas::new(1, 1),
             hovered_recovery_btn: None,

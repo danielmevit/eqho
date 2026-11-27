@@ -615,6 +615,25 @@ pub fn ui_scale_value(idx: i32) -> f64 {
         .unwrap_or(1.25)
 }
 
+/// Convert `Settings::ui_scale` (`1.0..=2.0`, default `1.25`) into the `Theme.scale` multiplier
+/// relative to the `125%` baseline (`100% -> 0.80`, `125% -> 1.00`, `150% -> 1.20`, `175% -> 1.40`, `200% -> 1.60`).
+#[must_use]
+pub fn ui_zoom_factor(scale: f64) -> f32 {
+    if !scale.is_finite() {
+        return 1.0;
+    }
+    ((scale / 1.25).clamp(0.8, 1.6)) as f32
+}
+
+/// Recommended logical `(width, height)` for the dashboard window at a given `Settings::ui_scale`.
+#[must_use]
+pub fn ui_window_size_for_scale(scale: f64) -> (f32, f32) {
+    let factor = ui_zoom_factor(scale);
+    let w = (940.0 * factor).clamp(760.0, 1440.0).round();
+    let h = (560.0 * factor).clamp(480.0, 880.0).round();
+    (w, h)
+}
+
 /// Map `Settings::engine_backend` to the Models tab `TabList` index (`0` = Auto, `1` = GPU/Vulkan, `2` = CPU).
 pub fn engine_backend_index(backend: &str) -> i32 {
     match backend.trim().to_ascii_lowercase().as_str() {
@@ -773,6 +792,7 @@ pub fn apply_settings_to_window_with_specs(
 
     window.set_theme_mode_index(theme_mode_index(&settings.theme));
     window.set_ui_scale_index(ui_scale_index(settings.ui_scale));
+    window.global::<Theme>().set_scale(ui_zoom_factor(settings.ui_scale));
     window.set_history_trash_days_index(history_trash_days_index(settings.history_trash_days));
     window.set_remove_fillers(settings.remove_fillers);
     window.set_voice_commands(settings.voice_commands);

@@ -3,6 +3,8 @@
 export global Theme {
     // Set by the app: true switches every colour to its dark value.
     in-out property <bool> dark: false;
+    // Set by the app: UI zoom multiplier (1.0 = default 125% baseline).
+    in-out property <float> scale: 1.0;
     out property <color> accent: dark ? #1A489BFF : #0969DAFF;
     out property <color> accent-line: dark ? #58A6FFFF : #0969DAFF;
     out property <color> accent-muted: dark ? #16283FFF : #DBEAFEFF;
@@ -38,30 +40,30 @@ export global Theme {
     out property <color> text-subtle: dark ? #85858FFF : #74747EFF;
     out property <color> warning: dark ? #D29922FF : #9A6700FF;
     out property <color> warning-muted: dark ? #3D2E00FF : #FFF8C5FF;
-    out property <length> radius-button: 4.0px;
-    out property <length> radius-card: 8.0px;
-    out property <length> radius-lg: 8.0px;
-    out property <length> radius-md: 6.0px;
-    out property <length> radius-sm: 4.0px;
-    out property <length> radius-toggle: 10.0px;
-    out property <length> radius-xl: 12.0px;
-    out property <length> space-10: 10.0px;
-    out property <length> space-12: 12.0px;
-    out property <length> space-14: 14.0px;
-    out property <length> space-16: 16.0px;
-    out property <length> space-2: 2.0px;
-    out property <length> space-24: 24.0px;
-    out property <length> space-32: 32.0px;
-    out property <length> space-4: 4.0px;
-    out property <length> space-6: 6.0px;
-    out property <length> space-8: 8.0px;
-    out property <length> font-size-base: 13.0px;
-    out property <length> font-size-body: 13.0px;
-    out property <length> font-size-help: 11.0px;
-    out property <length> font-size-label: 13.0px;
-    out property <length> font-size-lg: 15.0px;
-    out property <length> font-size-sm: 11.0px;
-    out property <length> font-size-title: 20.0px;
-    out property <length> font-size-xl: 17.0px;
-    out property <length> font-size-xs: 10.0px;
+    out property <length> radius-button: 4.0px * scale;
+    out property <length> radius-card: 8.0px * scale;
+    out property <length> radius-lg: 8.0px * scale;
+    out property <length> radius-md: 6.0px * scale;
+    out property <length> radius-sm: 4.0px * scale;
+    out property <length> radius-toggle: 10.0px * scale;
+    out property <length> radius-xl: 12.0px * scale;
+    out property <length> space-10: 10.0px * scale;
+    out property <length> space-12: 12.0px * scale;
+    out property <length> space-14: 14.0px * scale;
+    out property <length> space-16: 16.0px * scale;
+    out property <length> space-2: 2.0px * scale;
+    out property <length> space-24: 24.0px * scale;
+    out property <length> space-32: 32.0px * scale;
+    out property <length> space-4: 4.0px * scale;
+    out property <length> space-6: 6.0px * scale;
+    out property <length> space-8: 8.0px * scale;
+    out property <length> font-size-base: 13.0px * scale;
+    out property <length> font-size-body: 13.0px * scale;
+    out property <length> font-size-help: 11.0px * scale;
+    out property <length> font-size-label: 13.0px * scale;
+    out property <length> font-size-lg: 15.0px * scale;
+    out property <length> font-size-sm: 11.0px * scale;
+    out property <length> font-size-title: 20.0px * scale;
+    out property <length> font-size-xl: 17.0px * scale;
+    out property <length> font-size-xs: 10.0px * scale;
 }

@@ -36,6 +36,8 @@ export component DashboardWindow inherits Window {
 
     // Recovery banner
     in-out property <string> recovery-text: "";
+    in-out property <string> recovery-paste-target: "";
+    callback paste-recovery-to-previous();
     callback copy-recovery();
     callback view-recovery-in-history();
     callback dismiss-recovery();
@@ -119,7 +121,7 @@ export component DashboardWindow inherits Window {
     in-out property <string> history-status: "";
     in-out property <bool> showing-trash: false;
     in-out property <int> trash-count: 0;
-    in-out property <string> trash-retention-label: "Trash auto-clears after 30 days";
+    in-out property <string> trash-retention-label: "Recently Deleted auto-clears after 30 days";
     in-out property <string> copied-ts-key: "";
 
     callback history-filter-changed();
@@ -320,6 +322,8 @@ export component DashboardWindow inherits Window {
             padding-top: Theme.space-12;
             RecoveryBanner {
                 text: root.recovery-text;
+                paste-target-label: root.recovery-paste-target;
+                paste-previous-clicked => { root.paste-recovery-to-previous(); }
                 copy-clicked => { root.copy-recovery(); }
                 view-history-clicked => { root.view-recovery-in-history(); }
                 dismiss-clicked => { root.dismiss-recovery(); }

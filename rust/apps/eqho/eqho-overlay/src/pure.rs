@@ -84,7 +84,7 @@ impl OverlayConfig {
             0.85
         };
         let panel_opacity = if settings.overlay_panel_opacity.is_finite() {
-            settings.overlay_panel_opacity.clamp(0.3, 1.0)
+            settings.overlay_panel_opacity.clamp(0.0, 1.0)
         } else {
             0.85
         };

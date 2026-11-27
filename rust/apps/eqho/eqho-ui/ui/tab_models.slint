@@ -169,6 +169,24 @@ component ModelCard inherits Rectangle {
                 vertical-alignment: center;
             }
 
+            if root.is-active : VerticalLayout {
+                horizontal-stretch: 0;
+                alignment: center;
+                Rectangle {
+                    width: 28px;
+                    height: 28px;
+                    border-radius: 8px;
+                    background: Theme.accent-muted;
+                    accessible-role: none;
+
+                    PhIcon {
+                        glyph: Icons.check-circle;
+                        size: 16px;
+                        icon-color: Theme.accent-text;
+                    }
+                }
+            }
+
             if !root.item.is_cached || root.item.is_downloading : VerticalLayout {
                 horizontal-stretch: 0;
                 alignment: center;
@@ -247,8 +265,8 @@ component ModelCard inherits Rectangle {
             }
 
             if root.is-active : Rectangle {
-                min-width: active-state-label.preferred-width + 24px;
-                min-height: active-state-label.preferred-height + 12px;
+                min-width: active-state-row.preferred-width + 20px;
+                min-height: active-state-row.preferred-height + 12px;
                 max-height: self.min-height;
                 horizontal-stretch: 0;
                 vertical-stretch: 0;
@@ -258,13 +276,27 @@ component ModelCard inherits Rectangle {
                 accessible-role: text;
                 accessible-label: root.item.is_loading ? "Loading model" : "Active model";
 
-                active-state-label := Text {
-                    text: root.item.is_loading ? "Loading…" : "Active";
-                    font-size: Theme.font-size-label;
-                    font-weight: 500;
-                    color: root.item.is_loading ? Theme.accent-text : Theme.on-accent;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
+                active-state-row := HorizontalLayout {
+                    spacing: 5px;
+                    alignment: center;
+
+                    if !root.item.is_loading : VerticalLayout {
+                        alignment: center;
+                        PhIcon {
+                            glyph: Icons.check-circle;
+                            size: 13px;
+                            icon-color: Theme.on-accent;
+                        }
+                    }
+
+                    Text {
+                        text: root.item.is_loading ? "Loading…" : "Active";
+                        font-size: Theme.font-size-label;
+                        font-weight: 500;
+                        color: root.item.is_loading ? Theme.accent-text : Theme.on-accent;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
                 }
             }
         }

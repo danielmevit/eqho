@@ -146,7 +146,78 @@ WRAPPER
 
   sed 's|^Exec=Eqho|Exec=/usr/bin/eqho|' "$ROOT/packaging/linux/eqho.desktop" \
     > "$DEB_STAGE/usr/share/applications/eqho.desktop"
-  cp "$ROOT/assets/logo_64_dark.png" "$DEB_STAGE/usr/share/icons/hicolor/64x64/apps/eqho.png"
+  # Pad the 62x62 logo_64_dark.png to exact 64x64 for strict hicolor/64x64 icon compliance (fallback to cp).
+  ICON_DST="$DEB_STAGE/usr/share/icons/hicolor/64x64/apps/eqho.png"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$ROOT/assets/logo_64_dark.png" "$ICON_DST" <<'PY' || cp "$ROOT/assets/logo_64_dark.png" "$ICON_DST"
+import struct, sys, zlib
+src, dst = sys.argv[1], sys.argv[2]
+data = open(src, "rb").read()
+if data[:8] != b"\x89PNG\r\n\x1a\n":
+    raise RuntimeError("not png")
+pos = 8
+w = h = bd = ct = 0
+idat = bytearray()
+while pos < len(data):
+    ln = struct.unpack(">I", data[pos:pos+4])[0]
+    tag = data[pos+4:pos+8]
+    body = data[pos+8:pos+8+ln]
+    pos += 12 + ln
+    if tag == b"IHDR":
+        w, h, bd, ct, _, _, _ = struct.unpack(">IIBBBBB", body)
+    elif tag == b"IDAT":
+        idat.extend(body)
+if (w, h) == (64, 64) or bd != 8 or ct != 6 or w > 64 or h > 64:
+    open(dst, "wb").write(data)
+    sys.exit(0)
+raw = zlib.decompress(bytes(idat))
+bpp = 4
+stride = w * bpp
+rows = []
+prev = bytearray(stride)
+i = 0
+for _ in range(h):
+    ft = raw[i]; i += 1
+    row = bytearray(raw[i:i+stride]); i += stride
+    if ft == 1:
+        for x in range(bpp, stride): row[x] = (row[x] + row[x-bpp]) & 0xFF
+    elif ft == 2:
+        for x in range(stride): row[x] = (row[x] + prev[x]) & 0xFF
+    elif ft == 3:
+        for x in range(stride):
+            a = row[x-bpp] if x >= bpp else 0
+            row[x] = (row[x] + ((a + prev[x]) >> 1)) & 0xFF
+    elif ft == 4:
+        for x in range(stride):
+            a = row[x-bpp] if x >= bpp else 0
+            b = prev[x]
+            c = prev[x-bpp] if x >= bpp else 0
+            p = a + b - c
+            pa, pb, pc = abs(p-a), abs(p-b), abs(p-c)
+            pr = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+            row[x] = (row[x] + pr) & 0xFF
+    rows.append(bytes(row)); prev = row
+ox = (64 - w) // 2
+oy = (64 - h) // 2
+out = bytearray()
+blank = bytes(64 * 4)
+for y in range(64):
+    out.append(0)
+    if oy <= y < oy + h:
+        out.extend(bytes(ox * 4))
+        out.extend(rows[y - oy])
+        out.extend(bytes((64 - ox - w) * 4))
+    else:
+        out.extend(blank)
+def chunk(tag, body):
+    return struct.pack(">I", len(body)) + tag + body + struct.pack(">I", zlib.crc32(tag + body) & 0xFFFFFFFF)
+ihdr = struct.pack(">IIBBBBB", 64, 64, 8, 6, 0, 0, 0)
+png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(bytes(out), 9)) + chunk(b"IEND", b"")
+open(dst, "wb").write(png)
+PY
+  else
+    cp "$ROOT/assets/logo_64_dark.png" "$ICON_DST"
+  fi
   cp "$ROOT/LICENSE" "$DEB_STAGE/usr/share/doc/eqho/LICENSE"
   cp "$ROOT/THIRD_PARTY_NOTICES.txt" "$DEB_STAGE/usr/share/doc/eqho/THIRD_PARTY_NOTICES.txt"
 
@@ -160,8 +231,8 @@ Architecture: ${DEB_ARCH}
 Installed-Size: ${INSTALLED_KB}
 Maintainer: Daniel Mitev <support@damt.xyz>
 Homepage: https://eqho.damt.xyz/
-Depends: libc6, libfontconfig1, libfreetype6, libpulse0, libxkbcommon0, libxkbcommon-x11-0
-Recommends: libvulkan1, xclip, wl-clipboard, wtype
+Depends: libc6, libstdc++6, curl, libfontconfig1, libfreetype6, libpulse0, libxkbcommon0, libxkbcommon-x11-0
+Recommends: libvulkan1, libdbus-1-3, libcairo2, libpangocairo-1.0-0, xclip, wl-clipboard, wtype
 Description: Calm, 100% offline local voice-to-text dictation
  Press a hotkey, speak, and your words appear in any focused app.
  Runs locally via whisper.cpp with Vulkan GPU and multi-ISA CPU support.

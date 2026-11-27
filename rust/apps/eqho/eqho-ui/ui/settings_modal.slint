@@ -151,7 +151,7 @@ export component SettingsModal inherits Rectangle {
         : root.active-section == "dictation" ? "Dictation"
         : root.active-section == "overlay" ? "Overlay"
         : root.active-section == "system" ? "System"
-        : root.active-section == "data" ? "Data & Trash"
+        : root.active-section == "data" ? "Data & Storage"
         : root.active-section == "license" ? "License"
         : "About";
 
@@ -193,10 +193,10 @@ export component SettingsModal inherits Rectangle {
         }
     }
 
-    // Centered rounded Settings modal dialog
+    // Centered rounded Settings modal dialog (scales proportionally with Theme.scale while staying inside viewport)
     dialog := Rectangle {
-        width: Math.min(760px, Math.max(540px, root.width - 48px));
-        height: Math.min(488px, Math.max(360px, root.height - 44px));
+        width: Math.min(760px * Theme.scale, Math.max(540px, root.width - 48px));
+        height: Math.min(488px * Theme.scale, Math.max(360px, root.height - 44px));
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         border-radius: 16px;
@@ -218,7 +218,7 @@ export component SettingsModal inherits Rectangle {
 
             // Left Icon-Tab Sidebar (GatherOS 05-settings-account.png style)
             Rectangle {
-                width: 176px;
+                width: Math.min(230px, Math.max(156px, 176px * Theme.scale));
                 horizontal-stretch: 0;
                 background: Theme.dark ? #121215 : Theme.bg;
 
@@ -277,7 +277,7 @@ export component SettingsModal inherits Rectangle {
                     }
                     ModalSidebarItem {
                         glyph: Icons.database;
-                        label: "Data & Trash";
+                        label: "Data & Storage";
                         selected: root.active-section == "data";
                         clicked => {
                             root.active-section = "data";
@@ -448,11 +448,11 @@ export component SettingsModal inherits Rectangle {
                                 Rectangle { height: 1px; background: Theme.border-subtle; }
                                 StackedSettingRow {
                                     label: "Per-App Paste Rules";
-                                    help: "One rule per line: app.exe = typing (or = clipboard)";
+                                    help: "One rule per line: app_name = typing (or = clipboard)";
                                     ThemedTextEdit {
                                         height: 76px;
                                         text <=> root.paste-rules-text;
-                                        placeholder-text: "e.g. notepad.exe = typing";
+                                        placeholder-text: "e.g. code = typing";
                                         font-size: Theme.font-size-sm;
                                     }
                                     HorizontalLayout {
@@ -590,7 +590,7 @@ export component SettingsModal inherits Rectangle {
                                     value-text: root.overlay-panel-see-through-pct + "%";
                                     value <=> root.overlay-panel-see-through-pct;
                                     minimum: 0;
-                                    maximum: 70;
+                                    maximum: 100;
                                     step: 5;
                                     edited(v) => { root.overlay-panel-see-through-changed(v); }
                                 }
@@ -648,25 +648,25 @@ export component SettingsModal inherits Rectangle {
                             }
                         }
 
-                        // --- DATA & TRASH ---
+                        // --- DATA & STORAGE ---
                         if root.active-section == "data" : VerticalLayout {
                             spacing: Theme.space-12;
 
                             SettingsGroup {
                                 StackedSettingRow {
-                                    label: "Trashed Data Retention";
-                                    help: "How long deleted transcripts stay in Trash before permanent removal";
+                                    label: "Keep Deleted History For";
+                                    help: "How long deleted transcripts stay in Recently Deleted before permanent removal";
                                     Dropdown {
                                         model: ["7 days", "14 days", "30 days", "90 days", "Never"];
                                         current-index <=> root.history-trash-days-index;
                                         window-height: root.window-height;
-                                        accessible-name: "Trashed Data Retention";
+                                        accessible-name: "Keep Deleted History For";
                                         selected(i) => { root.history-trash-days-selected(i); }
                                     }
                                     HorizontalLayout {
                                         alignment: start;
                                         LinkButton {
-                                            text: "Open Trash →";
+                                            text: "Open Recently Deleted →";
                                             font-size: Theme.font-size-sm;
                                             padding-y: 2px;
                                             clicked => { root.open-trash(); }

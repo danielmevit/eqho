@@ -179,4 +179,15 @@ impl FocusTracker for LinuxFocusTracker {
             Some(name.to_owned())
         }
     }
+
+    fn is_non_paste_target(&self, window: WindowHandle) -> bool {
+        if !window.is_valid() {
+            return false;
+        }
+        if let Some(name) = self.get_window_process_name(window) {
+            let lower = name.to_ascii_lowercase();
+            return matches!(lower.as_str(), "eqho" | "gnome-shell" | "plasmashell");
+        }
+        false
+    }
 }

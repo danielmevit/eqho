@@ -24,6 +24,7 @@ export global Icons {
     out property <string> license: "\u{e606}";          // seal-check
     out property <string> info: "\u{e2ce}";             // info
     out property <string> folder: "\u{e24a}";           // folder
+    out property <string> check-circle: "\u{e184}";     // check-circle
 }
 
 export component PhIcon inherits Text {
@@ -33,7 +34,7 @@ export component PhIcon inherits Text {
 
     text: root.glyph;
     font-family: "Phosphor";
-    font-size: root.size;
+    font-size: root.size * Theme.scale;
     color: root.icon-color;
     horizontal-alignment: center;
     vertical-alignment: center;

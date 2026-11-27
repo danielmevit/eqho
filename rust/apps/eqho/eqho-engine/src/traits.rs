@@ -53,6 +53,11 @@ pub trait UiEventSink: Send + Sync + 'static {
     fn notify(&self, message: &str);
     fn on_model_progress(&self, model_key: &str, message: &str, fraction: Option<f32>);
     fn on_recovery_available(&self, text: Option<&str>);
+    /// Recovery callback carrying an optional friendly label for the previous external app
+    /// window (e.g. `"Terminal"`) when dictation wasn't pasted because focus was elsewhere.
+    fn on_recovery_available_with_target(&self, text: Option<&str>, _previous_app: Option<&str>) {
+        self.on_recovery_available(text);
+    }
     fn on_dictation_committed(&self, _text: &str) {}
     fn on_history_changed(&self);
     fn on_settings_changed(&self, _settings: &eqho_core::settings::Settings) {}
