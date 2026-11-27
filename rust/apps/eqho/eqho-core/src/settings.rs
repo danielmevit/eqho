@@ -32,8 +32,6 @@ pub const OVERLAY_POSITIONS: [&str; 6] = [
 
 pub const OVERLAY_MONITORS: [&str; 3] = ["active", "cursor", "primary"];
 
-pub const OVERLAY_PANEL_BLUR_MODES: [&str; 3] = ["off", "soft", "frosted"];
-
 pub const OVERLAY_FONT_FAMILIES: [&str; 6] = [
     "segoe",
     "bahnschrift",
@@ -45,12 +43,49 @@ pub const OVERLAY_FONT_FAMILIES: [&str; 6] = [
 
 pub const OVERLAY_FONT_STYLES: [&str; 4] = ["regular", "bold", "italic", "bold-italic"];
 
-/// Normalize a text-box blur mode string (`"off"`, `"soft"`, `"frosted"`).
-pub fn normalize_overlay_panel_blur(raw: &str) -> &'static str {
-    match raw.trim().to_ascii_lowercase().as_str() {
-        "off" | "none" | "0" => "off",
-        "frosted" | "acrylic" | "strong" | "high" => "frosted",
-        _ => "soft",
+/// Default text-box Apple-glass blur strength percentage (`0..=100`).
+pub const DEFAULT_OVERLAY_PANEL_BLUR: i32 = 45;
+
+/// Parse a legacy text-box blur label (`"off"` / `"soft"` / `"frosted"`) or numeric string into `0..=100`.
+pub fn parse_overlay_panel_blur_str(raw: &str) -> i32 {
+    let trimmed = raw.trim().to_ascii_lowercase();
+    if let Ok(n) = trimmed.parse::<i32>() {
+        return n.clamp(0, 100);
+    }
+    if let Ok(f) = trimmed.parse::<f64>()
+        && f.is_finite()
+    {
+        return (f.round() as i32).clamp(0, 100);
+    }
+    match trimmed.as_str() {
+        "off" | "none" => 0,
+        "soft" | "light" => 45,
+        "frosted" | "acrylic" | "strong" | "high" | "glass" => 80,
+        _ => DEFAULT_OVERLAY_PANEL_BLUR,
+    }
+}
+
+fn deserialize_panel_blur<'de, D>(deserializer: D) -> Result<i32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let val = Value::deserialize(deserializer)?;
+    Ok(coerce_panel_blur(&val, DEFAULT_OVERLAY_PANEL_BLUR))
+}
+
+fn coerce_panel_blur(val: &Value, default: i32) -> i32 {
+    match val {
+        Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                (i as i32).clamp(0, 100)
+            } else if let Some(f) = n.as_f64().filter(|f| f.is_finite()) {
+                (f.round() as i32).clamp(0, 100)
+            } else {
+                default
+            }
+        }
+        Value::String(s) => parse_overlay_panel_blur_str(s),
+        _ => default,
     }
 }
 
@@ -90,7 +125,8 @@ pub struct OverlayPreset {
     pub overlay_pill_scale: f64,
     pub overlay_opacity: f64,
     pub overlay_panel_opacity: f64,
-    pub overlay_panel_blur: String,
+    #[serde(deserialize_with = "deserialize_panel_blur")]
+    pub overlay_panel_blur: i32,
     pub overlay_font_size: i32,
     pub overlay_font_family: String,
     pub overlay_font_style: String,
@@ -108,8 +144,8 @@ impl Default for OverlayPreset {
             overlay_position: "bottom-center".to_owned(),
             overlay_pill_scale: 0.8,
             overlay_opacity: 0.95,
-            overlay_panel_opacity: 0.78,
-            overlay_panel_blur: "soft".to_owned(),
+            overlay_panel_opacity: 0.65,
+            overlay_panel_blur: DEFAULT_OVERLAY_PANEL_BLUR,
             overlay_font_size: 14,
             overlay_font_family: "segoe".to_owned(),
             overlay_font_style: "regular".to_owned(),
@@ -146,9 +182,9 @@ impl OverlayPreset {
         self.overlay_panel_opacity = if self.overlay_panel_opacity.is_finite() {
             self.overlay_panel_opacity.clamp(0.0, 1.0)
         } else {
-            0.78
+            0.65
         };
-        self.overlay_panel_blur = normalize_overlay_panel_blur(&self.overlay_panel_blur).to_owned();
+        self.overlay_panel_blur = self.overlay_panel_blur.clamp(0, 100);
         self.overlay_font_size = self.overlay_font_size.clamp(10, 28);
         self.overlay_font_family =
             normalize_overlay_font_family(&self.overlay_font_family).to_owned();
@@ -165,8 +201,8 @@ impl OverlayPreset {
             "glass" => Some(Self {
                 overlay_pill_scale: 0.8,
                 overlay_opacity: 0.90,
-                overlay_panel_opacity: 0.55,
-                overlay_panel_blur: "frosted".to_owned(),
+                overlay_panel_opacity: 0.30,
+                overlay_panel_blur: 80,
                 overlay_font_size: 15,
                 overlay_font_family: "segoe".to_owned(),
                 overlay_font_style: "regular".to_owned(),
@@ -176,7 +212,7 @@ impl OverlayPreset {
                 overlay_pill_scale: 0.7,
                 overlay_opacity: 0.95,
                 overlay_panel_opacity: 0.0,
-                overlay_panel_blur: "off".to_owned(),
+                overlay_panel_blur: 0,
                 overlay_font_size: 18,
                 overlay_font_family: "verdana".to_owned(),
                 overlay_font_style: "bold".to_owned(),
@@ -186,7 +222,7 @@ impl OverlayPreset {
                 overlay_pill_scale: 0.6,
                 overlay_opacity: 0.95,
                 overlay_panel_opacity: 0.85,
-                overlay_panel_blur: "off".to_owned(),
+                overlay_panel_blur: 0,
                 overlay_font_size: 12,
                 overlay_font_family: "consolas".to_owned(),
                 overlay_font_style: "regular".to_owned(),
@@ -394,7 +430,8 @@ pub struct Settings {
     pub overlay_show_level: bool,
     pub overlay_pill_scale: f64,
     pub overlay_panel_opacity: f64,
-    pub overlay_panel_blur: String,
+    #[serde(deserialize_with = "deserialize_panel_blur")]
+    pub overlay_panel_blur: i32,
     pub overlay_custom_preset: Option<OverlayPreset>,
     pub volume_duck: String,
     pub start_with_windows: bool,
@@ -448,8 +485,8 @@ impl Default for Settings {
             overlay_position: "bottom-center".to_owned(),
             overlay_show_level: true,
             overlay_pill_scale: 0.8,
-            overlay_panel_opacity: 0.78,
-            overlay_panel_blur: "soft".to_owned(),
+            overlay_panel_opacity: 0.65,
+            overlay_panel_blur: DEFAULT_OVERLAY_PANEL_BLUR,
             overlay_custom_preset: None,
             volume_duck: "off".to_owned(),
             start_with_windows: false,
@@ -596,8 +633,7 @@ impl Settings {
             s.overlay_panel_opacity = s.overlay_opacity;
         }
         if let Some(v) = obj.get("overlay_panel_blur") {
-            let blur = coerce_string(v, &s.overlay_panel_blur);
-            s.overlay_panel_blur = normalize_overlay_panel_blur(&blur).to_owned();
+            s.overlay_panel_blur = coerce_panel_blur(v, s.overlay_panel_blur);
         }
         if let Some(v) = obj.get("overlay_custom_preset")
             && !v.is_null()
@@ -723,7 +759,7 @@ impl Settings {
         self.overlay_pill_scale = self.overlay_pill_scale.clamp(0.6, 1.4);
         self.overlay_opacity = self.overlay_opacity.clamp(0.3, 1.0);
         self.overlay_panel_opacity = self.overlay_panel_opacity.clamp(0.0, 1.0);
-        self.overlay_panel_blur = normalize_overlay_panel_blur(&self.overlay_panel_blur).to_owned();
+        self.overlay_panel_blur = self.overlay_panel_blur.clamp(0, 100);
         self.overlay_font_size = self.overlay_font_size.clamp(10, 28);
         self.overlay_font_family =
             normalize_overlay_font_family(&self.overlay_font_family).to_owned();
@@ -751,7 +787,7 @@ impl Settings {
             overlay_pill_scale: self.overlay_pill_scale,
             overlay_opacity: self.overlay_opacity,
             overlay_panel_opacity: self.overlay_panel_opacity,
-            overlay_panel_blur: self.overlay_panel_blur.clone(),
+            overlay_panel_blur: self.overlay_panel_blur,
             overlay_font_size: self.overlay_font_size,
             overlay_font_family: self.overlay_font_family.clone(),
             overlay_font_style: self.overlay_font_style.clone(),
@@ -1241,7 +1277,7 @@ mod tests {
         assert_eq!(s.audio_device, Some(3));
         assert!((s.overlay_pill_scale - 1.4).abs() < 1e-9);
         assert!((s.overlay_opacity - 0.3).abs() < 1e-9);
-        assert!((s.overlay_panel_opacity - 0.78).abs() < 1e-9);
+        assert!((s.overlay_panel_opacity - 0.65).abs() < 1e-9);
         assert!((s.vad_sensitivity - 1.0).abs() < 1e-9);
         assert!((s.ui_scale - 2.0).abs() < 1e-9);
         assert!(!s.onboarding_done);
@@ -1460,7 +1496,7 @@ mod tests {
         let path = dir.join("settings.json");
 
         let mut s = Settings::default();
-        assert_eq!(s.overlay_panel_blur, "soft");
+        assert_eq!(s.overlay_panel_blur, DEFAULT_OVERLAY_PANEL_BLUR);
         assert_eq!(s.overlay_font_family, "segoe");
         assert_eq!(s.overlay_font_style, "regular");
         assert!(s.overlay_custom_preset.is_none());
@@ -1468,7 +1504,7 @@ mod tests {
         s.overlay_position = "top-right".to_owned();
         s.overlay_monitor = "cursor".to_owned();
         s.overlay_panel_opacity = 0.0;
-        s.overlay_panel_blur = "off".to_owned();
+        s.overlay_panel_blur = 0;
         s.overlay_font_family = "consolas".to_owned();
         s.overlay_font_style = "bold-italic".to_owned();
         s.overlay_font_size = 20;
@@ -1479,14 +1515,15 @@ mod tests {
         assert!(s.apply_builtin_overlay_preset("glass"));
         assert_eq!(s.overlay_position, "top-right");
         assert_eq!(s.overlay_monitor, "cursor");
-        assert_eq!(s.overlay_panel_blur, "frosted");
+        assert_eq!(s.overlay_panel_blur, 80);
+        assert!((s.overlay_panel_opacity - 0.30).abs() < 1e-9);
         assert_eq!(s.overlay_font_size, 15);
 
         // Reset to defaults resets everything (including position & monitor) while keeping saved custom preset.
         s.reset_overlay_defaults();
         assert_eq!(s.overlay_position, "bottom-center");
         assert_eq!(s.overlay_monitor, "active");
-        assert_eq!(s.overlay_panel_blur, "soft");
+        assert_eq!(s.overlay_panel_blur, DEFAULT_OVERLAY_PANEL_BLUR);
         assert_eq!(s.overlay_font_family, "segoe");
         assert_eq!(s.overlay_font_style, "regular");
         assert!(s.overlay_custom_preset.is_some());
@@ -1498,6 +1535,10 @@ mod tests {
         assert_eq!(s.overlay_font_family, "consolas");
         assert_eq!(s.overlay_font_style, "bold-italic");
         assert_eq!(s.overlay_font_size, 20);
+
+        // Legacy string blur values ("off" / "soft" / "frosted") coerce cleanly to 0..=100.
+        let legacy: Value = serde_json::from_str(r#"{"overlay_panel_blur": "frosted"}"#).unwrap();
+        assert_eq!(Settings::from_json_object(legacy.as_object().unwrap()).overlay_panel_blur, 80);
 
         s.save_to_path(&path).unwrap();
         let reloaded = Settings::load_from_path(&path);

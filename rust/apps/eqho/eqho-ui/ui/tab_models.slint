@@ -173,7 +173,7 @@ component ModelCard inherits Rectangle {
                     vertical-alignment: center;
                 }
 
-                // Subtle Eqho-blue sparkle badge right next to the title for PC-recommended models;
+                // Subtle Eqho-blue seal-check badge right next to the title for PC-recommended models;
                 // hovering displays "Recommended for this PC" without cluttering the card body.
                 if root.item.recommendation != "" : VerticalLayout {
                     horizontal-stretch: 0;
@@ -187,8 +187,8 @@ component ModelCard inherits Rectangle {
                         accessible-label: root.item.recommendation;
 
                         PhIcon {
-                            glyph: Icons.sparkle;
-                            size: 14px;
+                            glyph: Icons.seal-check;
+                            size: 15px;
                             icon-color: Theme.accent-text;
                         }
 
@@ -210,8 +210,8 @@ component ModelCard inherits Rectangle {
                 }
             }
 
-            // Active card top-right: signature Eqho waveform icon (distinct from the check-circle
-            // inside the bottom Active pill — zero duplicate checkmarks).
+            // Active card top-right: plugs-connected icon (signals connected/active model cleanly
+            // without duplicating the check-circle inside the bottom Active pill).
             if root.is-active : VerticalLayout {
                 horizontal-stretch: 0;
                 alignment: center;
@@ -223,7 +223,7 @@ component ModelCard inherits Rectangle {
                     accessible-role: none;
 
                     PhIcon {
-                        glyph: Icons.waveform;
+                        glyph: Icons.plugs-connected;
                         size: 15px;
                         icon-color: Theme.accent-text;
                     }

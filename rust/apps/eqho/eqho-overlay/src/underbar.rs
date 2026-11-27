@@ -52,11 +52,13 @@ pub const FINISHING_LABEL: &str = "Writing…";
 pub const UNDERBAR_REST_ALPHA_RATIO: f32 = 0.72;
 /// Elevated opacity multiplier for the under-pill bar while hovered/interacting (never 100%).
 pub const UNDERBAR_HOVER_ALPHA_RATIO: f32 = 0.88;
+/// Corner radius of the searchable 99-language popup card (matches Eqho UI cards).
+pub const POPUP_RADIUS: f32 = 14.0;
 /// Dimensions of the floating failed-paste recovery card anchored at the pill's screen position.
-/// Corner radius matches Windows 11 `DWMWCP_ROUND` (`8 px`) so Acrylic backdrop clips flush.
+/// Corner radius matches Eqho's `16 px` modal / Apple-glass overlay roundness.
 pub const RECOVERY_CARD_WIDTH: u32 = 264;
 pub const RECOVERY_CARD_HEIGHT: u32 = 76;
-pub const RECOVERY_CARD_RADIUS: f32 = 8.0;
+pub const RECOVERY_CARD_RADIUS: f32 = 16.0;
 
 /// RGBA color tuple `(r, g, b, a)` in straight 8-bit channels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

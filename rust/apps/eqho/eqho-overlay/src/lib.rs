@@ -13,6 +13,8 @@ pub mod pure;
 pub mod underbar;
 #[cfg(windows)]
 mod win;
+#[cfg(windows)]
+mod win_glass;
 
 #[cfg(not(windows))]
 use std::fmt;

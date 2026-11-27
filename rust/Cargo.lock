@@ -1281,6 +1281,8 @@ dependencies = [
  "eqho-core",
  "libloading",
  "windows",
+ "windows-core",
+ "windows-numerics",
 ]
 
 [[package]]

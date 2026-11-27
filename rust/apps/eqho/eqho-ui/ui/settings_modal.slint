@@ -69,6 +69,13 @@ component SettingsGroup inherits Rectangle {
     }
 }
 
+component SettingsSubHeader inherits Text {
+    font-size: Theme.font-size-xs;
+    font-weight: 700;
+    letter-spacing: 0.7px;
+    color: Theme.text-muted;
+}
+
 export component SettingsModal inherits Rectangle {
     in property <length> window-height: 560px;
     in property <image> backdrop-image;
@@ -103,8 +110,8 @@ export component SettingsModal inherits Rectangle {
     in-out property <int> overlay-position-index: 0;
     in-out property <int> overlay-pill-scale-pct: 80;
     in-out property <int> overlay-see-through-pct: 5;
-    in-out property <int> overlay-panel-see-through-pct: 22;
-    in-out property <int> overlay-panel-blur-index: 1;
+    in-out property <int> overlay-panel-see-through-pct: 35;
+    in-out property <int> overlay-panel-blur-pct: 45;
     in-out property <int> overlay-font-size: 14;
     in-out property <int> overlay-font-family-index: 0;
     in-out property <int> overlay-font-style-index: 0;
@@ -581,6 +588,8 @@ export component SettingsModal inherits Rectangle {
                                 }
                             }
 
+                            // --- PLACEMENT ---
+                            SettingsSubHeader { text: "PLACEMENT"; }
                             SettingsGroup {
                                 CompactRow {
                                     label: "Show Overlay";
@@ -592,16 +601,33 @@ export component SettingsModal inherits Rectangle {
                                     }
                                 }
                                 Rectangle { height: 1px; background: Theme.border-subtle; }
-                                CompactRow {
-                                    label: "Live Text Preview";
-                                    help: "Real-time on GPU; updates after pauses on CPU.";
-                                    Toggle {
-                                        checked <=> root.overlay-show-text;
-                                        accessible-name: "Live Text Preview";
-                                        toggled(v) => { root.overlay-show-text-toggled(v); }
+                                StackedSettingRow {
+                                    label: "Display Monitor";
+                                    help: "Which screen shows the dictation overlay";
+                                    Dropdown {
+                                        model: ["Follow active window", "Follow mouse cursor", "Primary monitor"];
+                                        current-index <=> root.overlay-monitor-index;
+                                        window-height: root.window-height;
+                                        accessible-name: "Display Monitor";
+                                        selected(i) => { root.overlay-monitor-selected(i); }
                                     }
                                 }
-                                Rectangle { height: 1px; background: Theme.border-subtle; }
+                                StackedSettingRow {
+                                    label: "Screen Position";
+                                    help: "Where the overlay appears";
+                                    Dropdown {
+                                        model: ["Bottom Center", "Top Center", "Top Left", "Top Right", "Bottom Left", "Bottom Right"];
+                                        current-index <=> root.overlay-position-index;
+                                        window-height: root.window-height;
+                                        accessible-name: "Screen Position";
+                                        selected(i) => { root.overlay-position-selected(i); }
+                                    }
+                                }
+                            }
+
+                            // --- PILL SETTINGS ---
+                            SettingsSubHeader { text: "PILL"; }
+                            SettingsGroup {
                                 CompactRow {
                                     label: "Audio Level Indicator";
                                     help: "Voice-reactive motion inside the pill";
@@ -631,31 +657,6 @@ export component SettingsModal inherits Rectangle {
                                         toggled(v) => { root.overlay-controls-pinned-toggled(v); }
                                     }
                                 }
-                            }
-
-                            SettingsGroup {
-                                StackedSettingRow {
-                                    label: "Display Monitor";
-                                    help: "Which screen shows the dictation pill";
-                                    Dropdown {
-                                        model: ["Follow active window", "Follow mouse cursor", "Primary monitor"];
-                                        current-index <=> root.overlay-monitor-index;
-                                        window-height: root.window-height;
-                                        accessible-name: "Display Monitor";
-                                        selected(i) => { root.overlay-monitor-selected(i); }
-                                    }
-                                }
-                                StackedSettingRow {
-                                    label: "Screen Position";
-                                    help: "Where the overlay appears";
-                                    Dropdown {
-                                        model: ["Bottom Center", "Top Center", "Top Left", "Top Right", "Bottom Left", "Bottom Right"];
-                                        current-index <=> root.overlay-position-index;
-                                        window-height: root.window-height;
-                                        accessible-name: "Screen Position";
-                                        selected(i) => { root.overlay-position-selected(i); }
-                                    }
-                                }
                                 Rectangle { height: 1px; background: Theme.border-subtle; }
                                 Slider {
                                     label: "Pill Size";
@@ -675,6 +676,21 @@ export component SettingsModal inherits Rectangle {
                                     step: 5;
                                     edited(v) => { root.overlay-see-through-changed(v); }
                                 }
+                            }
+
+                            // --- TEXT BOX SETTINGS ---
+                            SettingsSubHeader { text: "TEXT BOX"; }
+                            SettingsGroup {
+                                CompactRow {
+                                    label: "Live Text Preview";
+                                    help: "Show the live transcript box next to the pill (real-time on GPU)";
+                                    Toggle {
+                                        checked <=> root.overlay-show-text;
+                                        accessible-name: "Live Text Preview";
+                                        toggled(v) => { root.overlay-show-text-toggled(v); }
+                                    }
+                                }
+                                Rectangle { height: 1px; background: Theme.border-subtle; }
                                 Slider {
                                     label: "Text Box See-Through";
                                     value-text: root.overlay-panel-see-through-pct + "%";
@@ -684,15 +700,14 @@ export component SettingsModal inherits Rectangle {
                                     step: 5;
                                     edited(v) => { root.overlay-panel-see-through-changed(v); }
                                 }
-                                StackedSettingRow {
+                                Slider {
                                     label: "Text Box Blur";
-                                    help: "Backdrop blur behind the text box only (not the pill)";
-                                    TabList {
-                                        items: ["Off", "Soft", "Frosted"];
-                                        selected <=> root.overlay-panel-blur-index;
-                                        accessible-name: "Text Box Blur";
-                                        picked(i) => { root.overlay-panel-blur-changed(i); }
-                                    }
+                                    value-text: root.overlay-panel-blur-pct == 0 ? "Off" : (root.overlay-panel-blur-pct + "%");
+                                    value <=> root.overlay-panel-blur-pct;
+                                    minimum: 0;
+                                    maximum: 100;
+                                    step: 5;
+                                    edited(v) => { root.overlay-panel-blur-changed(v); }
                                 }
                                 Rectangle { height: 1px; background: Theme.border-subtle; }
                                 Slider {

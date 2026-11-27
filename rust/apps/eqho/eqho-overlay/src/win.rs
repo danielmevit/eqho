@@ -10,9 +10,6 @@ use std::thread::JoinHandle;
 use std::time::Instant;
 
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, SIZE, WPARAM};
-use windows::Win32::Graphics::Dwm::{
-    DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DwmSetWindowAttribute,
-};
 use windows::Win32::Graphics::Gdi::{
     AC_SRC_ALPHA, AC_SRC_OVER, ANTIALIASED_QUALITY, BI_RGB, BITMAPINFO, BITMAPINFOHEADER,
     BLENDFUNCTION, CLIP_DEFAULT_PRECIS, CreateCompatibleDC, CreateDIBSection, CreateFontW,
@@ -24,7 +21,7 @@ use windows::Win32::Graphics::Gdi::{
     MONITORINFO, MonitorFromPoint, MonitorFromWindow, OUT_DEFAULT_PRECIS, ReleaseDC, SelectObject,
     SetBkMode, SetTextColor, TRANSPARENT,
 };
-use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyState, GetKeyboardState, TME_LEAVE, TRACKMOUSEEVENT, ToUnicode,
     TrackMouseEvent, VK_BACK, VK_CAPITAL, VK_CONTROL, VK_DOWN, VK_ESCAPE, VK_LBUTTON, VK_LWIN,
@@ -43,150 +40,22 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_SYSKEYDOWN, WM_TIMER, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
     WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
-use windows::core::{PCSTR, PCWSTR};
+use windows::core::PCWSTR;
 
 use crate::canvas::PremulCanvas;
 use crate::pure::{
     self, FRAME_MS, OverlayConfig, OverlayRect, PANEL_MAX_W, PANEL_PADDING_X, PANEL_PADDING_Y,
-    PillAnimator, WorkArea,
+    PANEL_RADIUS, PillAnimator, WorkArea,
 };
 use crate::underbar::{
-    self, FINISHING_LABEL, LANG_ROW_HEIGHT, LangPopupLayout, LocalRect, POPUP_PADDING_X, PopupHit,
-    RECENT_FADE_WIDTH, RECOVERY_CARD_RADIUS, RecoveryCardButton, RecoveryCardLayout, Rgba,
-    UNDERBAR_HOVER_ALPHA_RATIO, UNDERBAR_RADIUS, UNDERBAR_REST_ALPHA_RATIO, UnderbarControl,
-    UnderbarLayout, UnderbarPlacement, UnderbarTheme, UnderbarVisibility,
+    self, FINISHING_LABEL, LANG_ROW_HEIGHT, LangPopupLayout, LocalRect, POPUP_PADDING_X,
+    POPUP_RADIUS, PopupHit, RECENT_FADE_WIDTH, RECOVERY_CARD_RADIUS, RecoveryCardButton,
+    RecoveryCardLayout, Rgba, UNDERBAR_HOVER_ALPHA_RATIO, UNDERBAR_RADIUS,
+    UNDERBAR_REST_ALPHA_RATIO, UnderbarControl, UnderbarLayout, UnderbarPlacement, UnderbarTheme,
+    UnderbarVisibility,
 };
+use crate::win_glass::{GlassCompositor, GlassWindow};
 use crate::{FlagBitmapProvider, OverlayAction, OverlayActionCallback};
-
-#[repr(C)]
-struct AccentPolicy {
-    accent_state: u32,
-    accent_flags: u32,
-    gradient_color: u32,
-    animation_id: u32,
-}
-
-#[repr(C)]
-struct WindowCompositionAttribData {
-    attrib: u32,
-    pv_data: *mut c_void,
-    cb_data: usize,
-}
-
-const WCA_ACCENT_POLICY: u32 = 19;
-const ACCENT_DISABLED: u32 = 0;
-const ACCENT_ENABLE_BLURBEHIND: u32 = 3;
-const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
-
-fn set_window_accent_policy(hwnd: HWND, mut policy: AccentPolicy) {
-    let user32_name: Vec<u16> = "user32.dll\0".encode_utf16().collect();
-    // SAFETY: Resolving `SetWindowCompositionAttribute` from already-loaded `user32.dll`.
-    let Ok(hmod) = (unsafe { GetModuleHandleW(PCWSTR(user32_name.as_ptr())) }) else {
-        return;
-    };
-    let proc_name = b"SetWindowCompositionAttribute\0";
-    // SAFETY: Looking up Win10/11 accent policy entrypoint on `user32.dll`.
-    let Some(proc_ptr) = (unsafe { GetProcAddress(hmod, PCSTR(proc_name.as_ptr())) }) else {
-        return;
-    };
-    type SetWcaFn = unsafe extern "system" fn(HWND, *mut WindowCompositionAttribData) -> i32;
-    // SAFETY: Function pointer signature matches `SetWindowCompositionAttribute`.
-    let set_wca: SetWcaFn = unsafe { std::mem::transmute(proc_ptr) };
-    let mut data = WindowCompositionAttribData {
-        attrib: WCA_ACCENT_POLICY,
-        pv_data: (&mut policy as *mut AccentPolicy).cast::<c_void>(),
-        cb_data: std::mem::size_of::<AccentPolicy>(),
-    };
-    // SAFETY: `hwnd` and `data` are valid for the duration of the call.
-    unsafe {
-        let _ = set_wca(hwnd, &mut data);
-    }
-}
-
-/// Enable (or disable when `tint_alpha == 0`) Windows 10/11 Acrylic frosted blur dynamically via
-/// `user32.dll` for floating popup / recovery glass cards.
-fn apply_acrylic_blur_behind(hwnd: HWND, dark: bool, tint_alpha: u8) {
-    let policy = if tint_alpha == 0 {
-        AccentPolicy {
-            accent_state: ACCENT_DISABLED,
-            accent_flags: 0,
-            gradient_color: 0,
-            animation_id: 0,
-        }
-    } else {
-        // ABGR tint color (`tint_alpha` must be non-zero for Windows 11 Acrylic to engage).
-        let bgr: u32 = if dark { 0x0017_1515 } else { 0x00F8_F8FA };
-        let gradient_color = (u32::from(tint_alpha) << 24) | bgr;
-        AccentPolicy {
-            accent_state: ACCENT_ENABLE_ACRYLICBLURBEHIND,
-            accent_flags: 0,
-            gradient_color,
-            animation_id: 0,
-        }
-    };
-    set_window_accent_policy(hwnd, policy);
-}
-
-/// Apply user-selected backdrop blur (`"off"` / `"soft"` / `"frosted"`) to the transcription
-/// text box ONLY (never the pill). Disables blur cleanly at `100%` see-through (`panel_opacity <= 0.01`).
-fn apply_panel_blur_behind(hwnd: HWND, dark: bool, blur_mode: &str, panel_opacity: f64) {
-    let opacity = (panel_opacity as f32).clamp(0.0, 1.0);
-    if opacity <= 0.01 || blur_mode == "off" {
-        set_window_accent_policy(
-            hwnd,
-            AccentPolicy {
-                accent_state: ACCENT_DISABLED,
-                accent_flags: 0,
-                gradient_color: 0,
-                animation_id: 0,
-            },
-        );
-        return;
-    }
-    match blur_mode {
-        "frosted" => {
-            let tint = panel_acrylic_tint_alpha(panel_opacity);
-            apply_acrylic_blur_behind(hwnd, dark, tint);
-        }
-        _ => {
-            // `"soft"` uses Windows DWM BlurBehind without Acrylic's heavy milky opacity floor,
-            // so `panel_opacity` smoothly controls tint transparency across 0%–95%.
-            set_window_accent_policy(
-                hwnd,
-                AccentPolicy {
-                    accent_state: ACCENT_ENABLE_BLURBEHIND,
-                    accent_flags: 0,
-                    gradient_color: 0,
-                    animation_id: 0,
-                },
-            );
-        }
-    }
-}
-
-fn panel_acrylic_tint_alpha(panel_opacity: f64) -> u8 {
-    let opacity = (panel_opacity as f32).clamp(0.0, 1.0);
-    if opacity <= 0.01 {
-        0
-    } else {
-        (opacity.powf(1.25) * 148.0).round().clamp(1.0, 148.0) as u8
-    }
-}
-
-/// Apply native Windows 11 8px hardware-antialiased rounded corners (`DWMWCP_ROUND`) so DWM
-/// Acrylic blur clips cleanly flush with our drawn 8px border (zero rectangular corner bleed).
-fn apply_win11_round_corners(hwnd: HWND) {
-    let corner_pref = DWMWCP_ROUND.0;
-    // SAFETY: `corner_pref` is a valid `i32` for `DWMWA_WINDOW_CORNER_PREFERENCE`.
-    unsafe {
-        let _ = DwmSetWindowAttribute(
-            hwnd,
-            DWMWA_WINDOW_CORNER_PREFERENCE,
-            (&corner_pref as *const i32).cast::<c_void>(),
-            std::mem::size_of::<i32>() as u32,
-        );
-    }
-}
 
 const WM_APP_CMD: u32 = WM_APP + 1;
 const WM_APP_POPUP_VKEY: u32 = WM_APP + 2;
@@ -599,6 +468,10 @@ struct OverlayState {
     bar_hwnd: HWND,
     popup_hwnd: HWND,
     recovery_hwnd: HWND,
+    glass_comp: Option<GlassCompositor>,
+    panel_glass: Option<GlassWindow>,
+    popup_glass: Option<GlassWindow>,
+    recovery_glass: Option<GlassWindow>,
     animator: PillAnimator,
     pill_dib: LayeredDib,
     panel_dib: LayeredDib,
@@ -827,6 +700,9 @@ impl OverlayState {
     }
 
     fn hide_panel_now(&mut self) {
+        if let Some(glass) = self.panel_glass.as_mut() {
+            glass.hide();
+        }
         if self.panel_shown {
             // SAFETY: Hiding panel window without activating.
             unsafe {
@@ -838,6 +714,9 @@ impl OverlayState {
     }
 
     fn hide_recovery_now(&mut self) {
+        if let Some(glass) = self.recovery_glass.as_mut() {
+            glass.hide();
+        }
         if self.recovery_shown {
             // SAFETY: Hiding recovery card window without activating.
             unsafe {
@@ -879,6 +758,17 @@ impl OverlayState {
                 SWP_NOACTIVATE | SWP_SHOWWINDOW,
             );
         }
+        if let (Some(comp), Some(glass)) = (self.glass_comp.as_ref(), self.recovery_glass.as_mut())
+        {
+            glass.sync(
+                comp,
+                self.recovery_hwnd,
+                self.recovery_rect,
+                RECOVERY_CARD_RADIUS,
+                70,
+                1.0,
+            );
+        }
     }
 
     fn render_recovery_frame(&mut self) {
@@ -886,16 +776,16 @@ impl OverlayState {
         let theme = UnderbarTheme::for_theme(self.config.dark_theme);
         let dark = self.config.dark_theme;
 
-        // Subtle neutral-warm translucent notification surface (no heavy brown fill, no left rail).
+        // Translucent frosted glass notification card matching Eqho's 16px UI roundness.
         let card_bg = if dark {
-            Rgba::new(0x1B, 0x1A, 0x16, 224)
+            Rgba::new(0x16, 0x16, 0x1B, 184)
         } else {
-            Rgba::new(0xFB, 0xF9, 0xF3, 232)
+            Rgba::new(0xFC, 0xFC, 0xFE, 196)
         };
         let card_border = if dark {
-            Rgba::new(0x3D, 0x3A, 0x30, 230)
+            Rgba::new(0xFF, 0xFF, 0xFF, 44)
         } else {
-            Rgba::new(0xD8, 0xD2, 0xC0, 235)
+            Rgba::new(0x1A, 0x1C, 0x1F, 34)
         };
         let dot_yellow = if dark {
             Rgba::rgb(0xD2, 0x99, 0x22)
@@ -941,7 +831,7 @@ impl OverlayState {
                 theme.done_bg
             };
             self.recovery_canvas
-                .fill_rounded_rect(layout.paste_previous, 6.0, paste_bg, None);
+                .fill_rounded_rect(layout.paste_previous, 9.0, paste_bg, None);
             let paste_label = underbar::format_paste_previous_button_label(
                 self.recovery_paste_target.as_deref().unwrap_or(""),
             );
@@ -962,7 +852,7 @@ impl OverlayState {
             };
             self.recovery_canvas.fill_rounded_rect(
                 layout.copy,
-                6.0,
+                9.0,
                 copy_bg,
                 Some(theme.bar_border),
             );
@@ -983,7 +873,7 @@ impl OverlayState {
             };
             self.recovery_canvas.fill_rounded_rect(
                 layout.show_text,
-                6.0,
+                9.0,
                 show_bg,
                 Some(theme.bar_border),
             );
@@ -1003,7 +893,7 @@ impl OverlayState {
                 theme.done_bg
             };
             self.recovery_canvas
-                .fill_rounded_rect(layout.copy, 6.0, copy_bg, None);
+                .fill_rounded_rect(layout.copy, 9.0, copy_bg, None);
             self.text_mask.draw_text_into_canvas(
                 &mut self.recovery_canvas,
                 "Copy",
@@ -1022,7 +912,7 @@ impl OverlayState {
         };
         self.recovery_canvas.fill_rounded_rect(
             layout.discard,
-            6.0,
+            9.0,
             disc_bg,
             Some(theme.bar_border),
         );
@@ -1035,12 +925,12 @@ impl OverlayState {
             DT_CENTER,
         );
 
-        // Keep slightly translucent (~90% max) so subtle blur stays visible behind card.
+        // Present foreground text/buttons at full alpha while card_bg stays translucent over Apple Glass blur.
         self.recovery_dib.present(
             self.recovery_hwnd,
             self.recovery_rect,
             &self.recovery_canvas.pixels,
-            232,
+            255,
         );
     }
 
@@ -1104,6 +994,9 @@ impl OverlayState {
     fn close_lang_popup(&mut self) {
         self.uninstall_kb_hook();
         self.visibility.set_lang_menu_open(false);
+        if let Some(glass) = self.popup_glass.as_mut() {
+            glass.hide();
+        }
         if self.popup_shown {
             // SAFETY: Hiding language popup window without activating.
             unsafe {
@@ -1146,6 +1039,9 @@ impl OverlayState {
                 self.popup_rect.height as i32,
                 SWP_NOACTIVATE | SWP_SHOWWINDOW,
             );
+        }
+        if let (Some(comp), Some(glass)) = (self.glass_comp.as_ref(), self.popup_glass.as_mut()) {
+            glass.sync(comp, self.popup_hwnd, self.popup_rect, POPUP_RADIUS, 72, 1.0);
         }
         self.popup_shown = true;
         self.prev_mouse_down = is_mouse_button_down();
@@ -1320,22 +1216,7 @@ impl OverlayState {
 
     fn cmd_update_config(&mut self, cfg: OverlayConfig) {
         let was_enabled = self.config.enabled;
-        let theme_changed = self.config.dark_theme != cfg.dark_theme;
-        let panel_opacity_changed = (self.config.panel_opacity - cfg.panel_opacity).abs() > 1e-3;
-        let panel_blur_changed = self.config.panel_blur != cfg.panel_blur;
         self.config = cfg;
-        if theme_changed || panel_opacity_changed || panel_blur_changed {
-            apply_panel_blur_behind(
-                self.panel_hwnd,
-                self.config.dark_theme,
-                &self.config.panel_blur,
-                self.config.panel_opacity,
-            );
-        }
-        if theme_changed {
-            apply_acrylic_blur_behind(self.popup_hwnd, self.config.dark_theme, 0xB8);
-            apply_acrylic_blur_behind(self.recovery_hwnd, self.config.dark_theme, 0xA8);
-        }
         self.visibility
             .set_controls_enabled(self.config.controls_enabled);
         self.visibility.set_pinned(self.config.controls_pinned);
@@ -1359,9 +1240,29 @@ impl OverlayState {
             if self.popup_shown {
                 self.recompute_popup_layout();
                 self.render_popup_frame();
+                if let (Some(comp), Some(glass)) =
+                    (self.glass_comp.as_ref(), self.popup_glass.as_mut())
+                {
+                    glass.sync(comp, self.popup_hwnd, self.popup_rect, POPUP_RADIUS, 72, 1.0);
+                }
             }
             if self.panel_shown {
                 self.layout_and_show_panel();
+            }
+        }
+        if self.recovery_shown {
+            self.render_recovery_frame();
+            if let (Some(comp), Some(glass)) =
+                (self.glass_comp.as_ref(), self.recovery_glass.as_mut())
+            {
+                glass.sync(
+                    comp,
+                    self.recovery_hwnd,
+                    self.recovery_rect,
+                    RECOVERY_CARD_RADIUS,
+                    70,
+                    1.0,
+                );
             }
         }
     }
@@ -1481,6 +1382,17 @@ impl OverlayState {
                 SWP_NOACTIVATE | SWP_SHOWWINDOW,
             );
         }
+        let fade_f = self.animator.alpha_logical.clamp(0.0, 1.0);
+        if let (Some(comp), Some(glass)) = (self.glass_comp.as_ref(), self.panel_glass.as_mut()) {
+            glass.sync(
+                comp,
+                self.panel_hwnd,
+                self.panel_rect,
+                PANEL_RADIUS,
+                self.config.panel_blur,
+                fade_f,
+            );
+        }
         self.panel_shown = true;
     }
 
@@ -1489,21 +1401,31 @@ impl OverlayState {
         let h = self.panel_rect.height.max(1);
         let dark = self.config.dark_theme;
 
-        // Scale background and border alpha smoothly from 0 (100% see-through) up to full opacity
-        // according to the selected text-box blur mode (`off` / `soft` / `frosted`), while keeping
-        // text glyphs 100% opaque (with a gentle subtitle drop-shadow when nearly transparent).
+        // Smooth independent tint opacity (0%..100% see-through) over optional real Apple-glass
+        // GPU blur (`panel_glass`). When blur > 0%, keep a whisper-thin specular glass rim even at
+        // 100% see-through so clear frosted glass stays defined; when blur == 0% and see-through == 100%,
+        // both fill and border disappear completely for pure floating subtitles.
         let opacity = (self.config.panel_opacity as f32).clamp(0.0, 1.0);
-        let max_bg_alpha: f32 = match self.config.panel_blur.as_str() {
-            "off" => if dark { 232.0 } else { 244.0 },
-            "frosted" => if dark { 176.0 } else { 190.0 },
-            _ => if dark { 196.0 } else { 210.0 },
+        let has_blur = self.config.panel_blur > 0;
+        let max_bg_alpha: f32 = if has_blur {
+            if dark { 205.0 } else { 218.0 }
+        } else if dark {
+            232.0
+        } else {
+            244.0
         };
         let bg_alpha = (opacity * max_bg_alpha).round().clamp(0.0, 255.0) as u8;
-        let border_alpha = (opacity * if dark { 44.0 } else { 36.0 })
-            .round()
-            .clamp(0.0, 255.0) as u8;
+        let border_alpha = if has_blur {
+            let base = if dark { 34.0 } else { 28.0 };
+            let extra = if dark { 28.0 } else { 24.0 };
+            (base + opacity * extra).round().clamp(0.0, 255.0) as u8
+        } else {
+            (opacity * if dark { 44.0 } else { 36.0 })
+                .round()
+                .clamp(0.0, 255.0) as u8
+        };
         let panel_bg = if dark {
-            Rgba::new(0x14, 0x14, 0x18, bg_alpha)
+            Rgba::new(0x14, 0x15, 0x1B, bg_alpha)
         } else {
             Rgba::new(0xFF, 0xFF, 0xFF, bg_alpha)
         };
@@ -1524,7 +1446,7 @@ impl OverlayState {
         if bg_alpha > 0 || panel_border.is_some() {
             self.panel_canvas.fill_rounded_rect(
                 LocalRect::new(0, 0, w, h),
-                8.0,
+                PANEL_RADIUS,
                 panel_bg,
                 panel_border,
             );
@@ -1655,6 +1577,9 @@ impl OverlayState {
         if !self.visible && self.animator.alpha_logical <= 0.0 {
             self.stop_timer();
             self.hide_bar_now();
+            if let Some(glass) = self.panel_glass.as_mut() {
+                glass.hide();
+            }
             // SAFETY: Hiding overlay windows once fade-out completes.
             unsafe {
                 let _ = ShowWindow(self.pill_hwnd, SW_HIDE);
@@ -1701,7 +1626,8 @@ impl OverlayState {
         );
 
         if self.panel_shown {
-            let fade_alpha = (self.animator.alpha_logical.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let fade_f = self.animator.alpha_logical.clamp(0.0, 1.0);
+            let fade_alpha = (fade_f * 255.0).round() as u8;
             if fade_alpha != self.last_panel_alpha {
                 self.panel_dib.present(
                     self.panel_hwnd,
@@ -1709,6 +1635,22 @@ impl OverlayState {
                     &self.panel_canvas.pixels,
                     fade_alpha,
                 );
+                if let (Some(comp), Some(glass)) =
+                    (self.glass_comp.as_ref(), self.panel_glass.as_mut())
+                {
+                    if fade_f > 0.005 && self.config.panel_blur > 0 {
+                        glass.sync(
+                            comp,
+                            self.panel_hwnd,
+                            self.panel_rect,
+                            PANEL_RADIUS,
+                            self.config.panel_blur,
+                            fade_f,
+                        );
+                    } else {
+                        glass.set_opacity(fade_f);
+                    }
+                }
                 self.last_panel_alpha = fade_alpha;
             }
         }
@@ -1920,10 +1862,10 @@ impl OverlayState {
 
         self.popup_canvas.reset(layout.width, layout.height);
 
-        // Outer rounded card + 1px neutral border (8px radius matches Win11 DWMWCP_ROUND).
+        // Outer rounded card matching Eqho's 14px UI card radius over Apple Glass backdrop.
         self.popup_canvas.fill_rounded_rect(
             LocalRect::new(0, 0, layout.width, layout.height),
-            8.0,
+            POPUP_RADIUS,
             theme.popup_bg,
             Some(theme.popup_border),
         );
@@ -1931,7 +1873,7 @@ impl OverlayState {
         // Top search input bar (accent border indicates active search typing without focus steal).
         self.popup_canvas.fill_rounded_rect(
             layout.search_rect,
-            6.0,
+            8.0,
             theme.search_bg,
             Some(if has_query {
                 theme.accent_text
@@ -2801,21 +2743,12 @@ fn run_overlay_thread(
         return;
     };
 
-    // Best-effort Windows 11 8px hardware-rounded corners + strong Acrylic frosted blur on
-    // rectangular floating panels (live transcript box, language popup, recovery card).
-    // Note: `bar_hwnd` is a 13px full pill capsule and renders purely via per-pixel alpha
-    // `UpdateLayeredWindow` (NO Acrylic) so square DWM corners never bleed outside the pill.
-    apply_win11_round_corners(panel_hwnd);
-    apply_win11_round_corners(popup_hwnd);
-    apply_win11_round_corners(recovery_hwnd);
-    apply_panel_blur_behind(
-        panel_hwnd,
-        config.dark_theme,
-        &config.panel_blur,
-        config.panel_opacity,
-    );
-    apply_acrylic_blur_behind(popup_hwnd, config.dark_theme, 0xB8);
-    apply_acrylic_blur_behind(recovery_hwnd, config.dark_theme, 0xA8);
+    // Hardware-accelerated Windows 10/11 Composition Apple-glass backdrop windows (placed 1 Z-order
+    // step beneath the layered foreground text box, language popup, and recovery card).
+    let glass_comp = GlassCompositor::new(hinstance.into());
+    let panel_glass = glass_comp.as_ref().and_then(GlassCompositor::create_window);
+    let popup_glass = glass_comp.as_ref().and_then(GlassCompositor::create_window);
+    let recovery_glass = glass_comp.as_ref().and_then(GlassCompositor::create_window);
 
     let visibility = UnderbarVisibility::new(config.controls_enabled, config.controls_pinned);
     let now = Instant::now();
@@ -2830,6 +2763,10 @@ fn run_overlay_thread(
         bar_hwnd,
         popup_hwnd,
         recovery_hwnd,
+        glass_comp,
+        panel_glass,
+        popup_glass,
+        recovery_glass,
         animator: PillAnimator::new(),
         pill_dib: LayeredDib::new(),
         panel_dib: LayeredDib::new(),

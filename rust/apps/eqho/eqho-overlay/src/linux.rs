@@ -25,13 +25,14 @@ use libloading::Library;
 use crate::canvas::PremulCanvas;
 use crate::pure::{
     self, FRAME_MS, OverlayConfig, OverlayRect, PANEL_MAX_W, PANEL_PADDING_X, PANEL_PADDING_Y,
-    PillAnimator, WorkArea,
+    PANEL_RADIUS, PillAnimator, WorkArea,
 };
 use crate::underbar::{
-    self, FINISHING_LABEL, LANG_ROW_HEIGHT, LangPopupLayout, LocalRect, POPUP_PADDING_X, PopupHit,
-    RECENT_FADE_WIDTH, RECOVERY_CARD_RADIUS, RecoveryCardButton, RecoveryCardLayout, Rgba,
-    UNDERBAR_HOVER_ALPHA_RATIO, UNDERBAR_RADIUS, UNDERBAR_REST_ALPHA_RATIO, UnderbarControl,
-    UnderbarLayout, UnderbarPlacement, UnderbarTheme, UnderbarVisibility,
+    self, FINISHING_LABEL, LANG_ROW_HEIGHT, LangPopupLayout, LocalRect, POPUP_PADDING_X,
+    POPUP_RADIUS, PopupHit, RECENT_FADE_WIDTH, RECOVERY_CARD_RADIUS, RecoveryCardButton,
+    RecoveryCardLayout, Rgba, UNDERBAR_HOVER_ALPHA_RATIO, UNDERBAR_RADIUS,
+    UNDERBAR_REST_ALPHA_RATIO, UnderbarControl, UnderbarLayout, UnderbarPlacement, UnderbarTheme,
+    UnderbarVisibility,
 };
 use crate::{FlagBitmapProvider, OverlayAction, OverlayActionCallback};
 
@@ -1697,7 +1698,7 @@ impl LinuxOverlayState {
         if bg_alpha > 0 || panel_border.is_some() {
             self.panel_logical_canvas.fill_rounded_rect(
                 LocalRect::new(0, 0, lw, lh),
-                8.0,
+                PANEL_RADIUS,
                 panel_bg,
                 panel_border,
             );
@@ -2021,7 +2022,7 @@ impl LinuxOverlayState {
         // Outer rounded card + 1px neutral border.
         self.popup_logical_canvas.fill_rounded_rect(
             LocalRect::new(0, 0, layout.width, layout.height),
-            8.0,
+            POPUP_RADIUS,
             theme.popup_bg,
             Some(theme.popup_border),
         );
@@ -2029,7 +2030,7 @@ impl LinuxOverlayState {
         // Top search input bar.
         self.popup_logical_canvas.fill_rounded_rect(
             layout.search_rect,
-            6.0,
+            8.0,
             theme.search_bg,
             Some(if has_query {
                 theme.accent_text
@@ -2399,7 +2400,7 @@ impl LinuxOverlayState {
             };
             self.recovery_logical_canvas.fill_rounded_rect(
                 layout.paste_previous,
-                6.0,
+                9.0,
                 paste_bg,
                 None,
             );
@@ -2412,7 +2413,7 @@ impl LinuxOverlayState {
             };
             self.recovery_logical_canvas.fill_rounded_rect(
                 layout.copy,
-                6.0,
+                9.0,
                 copy_bg,
                 Some(theme.bar_border),
             );
@@ -2425,7 +2426,7 @@ impl LinuxOverlayState {
             };
             self.recovery_logical_canvas.fill_rounded_rect(
                 layout.show_text,
-                6.0,
+                9.0,
                 show_bg,
                 Some(theme.bar_border),
             );
@@ -2437,7 +2438,7 @@ impl LinuxOverlayState {
                 theme.done_bg
             };
             self.recovery_logical_canvas
-                .fill_rounded_rect(layout.copy, 6.0, copy_bg, None);
+                .fill_rounded_rect(layout.copy, 9.0, copy_bg, None);
         }
 
         // 3. Discard button
@@ -2448,7 +2449,7 @@ impl LinuxOverlayState {
         };
         self.recovery_logical_canvas.fill_rounded_rect(
             layout.discard,
-            6.0,
+            9.0,
             disc_bg,
             Some(theme.bar_border),
         );

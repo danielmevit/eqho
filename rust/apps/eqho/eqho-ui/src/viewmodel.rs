@@ -10,9 +10,8 @@ use eqho_core::modelpick::{
 use eqho_core::modelstore::{MODELS, model_info};
 use eqho_core::settings::{
     HISTORY_TRASH_OPTIONS, LANGUAGE_TIERS, OVERLAY_FONT_FAMILIES, OVERLAY_FONT_STYLES,
-    OVERLAY_MONITORS, OVERLAY_PANEL_BLUR_MODES, OVERLAY_POSITIONS, Settings, VOLUME_DUCK_OPTIONS,
-    is_english_only_model, normalize_overlay_font_family, normalize_overlay_font_style,
-    normalize_overlay_panel_blur, supported_language_name,
+    OVERLAY_MONITORS, OVERLAY_POSITIONS, Settings, VOLUME_DUCK_OPTIONS, is_english_only_model,
+    normalize_overlay_font_family, normalize_overlay_font_style, supported_language_name,
 };
 use slint::{ComponentHandle, ModelRc, VecModel};
 
@@ -575,21 +574,6 @@ pub fn overlay_monitor_key(idx: i32) -> &'static str {
         .unwrap_or("active")
 }
 
-pub fn overlay_panel_blur_index(mode: &str) -> i32 {
-    let norm = normalize_overlay_panel_blur(mode);
-    OVERLAY_PANEL_BLUR_MODES
-        .iter()
-        .position(|&m| m == norm)
-        .unwrap_or(1) as i32
-}
-
-pub fn overlay_panel_blur_key(idx: i32) -> &'static str {
-    OVERLAY_PANEL_BLUR_MODES
-        .get(idx.max(0) as usize)
-        .copied()
-        .unwrap_or("soft")
-}
-
 pub fn overlay_font_family_index(family: &str) -> i32 {
     let norm = normalize_overlay_font_family(family);
     OVERLAY_FONT_FAMILIES
@@ -634,7 +618,7 @@ pub fn sync_overlay_settings_to_window(window: &DashboardWindow, settings: &Sett
     window.set_overlay_panel_see_through_pct(
         ((1.0 - settings.overlay_panel_opacity) * 100.0).round() as i32,
     );
-    window.set_overlay_panel_blur_index(overlay_panel_blur_index(&settings.overlay_panel_blur));
+    window.set_overlay_panel_blur_pct(settings.overlay_panel_blur.clamp(0, 100));
     window.set_overlay_font_size(settings.overlay_font_size);
     window.set_overlay_font_family_index(overlay_font_family_index(&settings.overlay_font_family));
     window.set_overlay_font_style_index(overlay_font_style_index(&settings.overlay_font_style));

@@ -157,8 +157,8 @@ export component DashboardWindow inherits Window {
     in-out property <int> overlay-position-index: 0;
     in-out property <int> overlay-pill-scale-pct: 80;
     in-out property <int> overlay-see-through-pct: 5;
-    in-out property <int> overlay-panel-see-through-pct: 22;
-    in-out property <int> overlay-panel-blur-index: 1;
+    in-out property <int> overlay-panel-see-through-pct: 35;
+    in-out property <int> overlay-panel-blur-pct: 45;
     in-out property <int> overlay-font-size: 14;
     in-out property <int> overlay-font-family-index: 0;
     in-out property <int> overlay-font-style-index: 0;
@@ -479,7 +479,7 @@ export component DashboardWindow inherits Window {
         overlay-pill-scale-pct <=> root.overlay-pill-scale-pct;
         overlay-see-through-pct <=> root.overlay-see-through-pct;
         overlay-panel-see-through-pct <=> root.overlay-panel-see-through-pct;
-        overlay-panel-blur-index <=> root.overlay-panel-blur-index;
+        overlay-panel-blur-pct <=> root.overlay-panel-blur-pct;
         overlay-font-size <=> root.overlay-font-size;
         overlay-font-family-index <=> root.overlay-font-family-index;
         overlay-font-style-index <=> root.overlay-font-style-index;

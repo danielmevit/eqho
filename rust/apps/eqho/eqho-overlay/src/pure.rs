@@ -14,6 +14,8 @@ pub const PANEL_MAX_W: u32 = 640;
 pub const PANEL_PADDING_X: i32 = 18;
 /// Vertical padding in pixels inside the transcription panel.
 pub const PANEL_PADDING_Y: i32 = 12;
+/// Rounded corner radius of the floating transcription text box (matches Eqho UI cards & modals).
+pub const PANEL_RADIUS: f32 = 16.0;
 /// Maximum number of characters shown in the transcription panel tail.
 pub const MAX_TEXT_CHARS: usize = 220;
 /// Placeholder text shown while listening before real words arrive.
@@ -37,7 +39,8 @@ pub struct OverlayConfig {
     pub pill_scale: f64,
     pub pill_opacity: f64,
     pub panel_opacity: f64,
-    pub panel_blur: String,
+    /// Apple-style frosted glass backdrop blur strength (`0..=100`, `0` = off).
+    pub panel_blur: u8,
     pub font_size: i32,
     pub font_family: String,
     pub font_style: String,
@@ -59,8 +62,8 @@ impl Default for OverlayConfig {
             position: "bottom-center".to_owned(),
             pill_scale: 0.8,
             pill_opacity: 0.95,
-            panel_opacity: 0.78,
-            panel_blur: "soft".to_owned(),
+            panel_opacity: 0.65,
+            panel_blur: 45,
             font_size: 14,
             font_family: "segoe".to_owned(),
             font_style: "regular".to_owned(),
@@ -112,10 +115,7 @@ impl OverlayConfig {
             pill_scale,
             pill_opacity,
             panel_opacity,
-            panel_blur: eqho_core::settings::normalize_overlay_panel_blur(
-                &settings.overlay_panel_blur,
-            )
-            .to_owned(),
+            panel_blur: settings.overlay_panel_blur.clamp(0, 100) as u8,
             font_size: settings.overlay_font_size.clamp(10, 28),
             font_family: eqho_core::settings::normalize_overlay_font_family(
                 &settings.overlay_font_family,
@@ -589,7 +589,7 @@ mod tests {
         assert!((cfg.pill_scale - 1.4).abs() < 1e-9);
         assert!((cfg.pill_opacity - 0.3).abs() < 1e-9);
         assert!((cfg.panel_opacity - 1.0).abs() < 1e-9);
-        assert_eq!(cfg.panel_blur, "soft");
+        assert_eq!(cfg.panel_blur, 45);
         assert_eq!(cfg.font_size, 28);
         assert_eq!(cfg.font_family, "segoe");
         assert_eq!(cfg.font_style, "regular");

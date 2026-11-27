@@ -41,10 +41,10 @@ use eqho_ui::{
     format_active_driver_display, history_trash_days_value, language_code_for_index,
     language_index_for_code, language_warning_text_for_specs, model_short_name,
     onboarding_model_copy_for_key, overlay_font_family_key, overlay_font_style_key,
-    overlay_monitor_key, overlay_panel_blur_key, overlay_position_key, parse_paste_rules_text,
-    parse_replacements_text, render_flag_rgba, split_model_cards, status_summary_title,
-    sync_overlay_settings_to_window, theme_mode_key, ui_scale_value, ui_window_size_for_scale,
-    ui_zoom_factor, volume_duck_key, wordmark_image,
+    overlay_monitor_key, overlay_position_key, parse_paste_rules_text, parse_replacements_text,
+    render_flag_rgba, split_model_cards, status_summary_title, sync_overlay_settings_to_window,
+    theme_mode_key, ui_scale_value, ui_window_size_for_scale, ui_zoom_factor, volume_duck_key,
+    wordmark_image,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
@@ -2582,12 +2582,12 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     {
         let ctrl_w = Rc::clone(ctrl);
         let dash_w = dash.as_weak();
-        dash.on_overlay_panel_blur_changed(move |idx| {
+        dash.on_overlay_panel_blur_changed(move |pct| {
             let c = ctrl_w.borrow();
             c.settings
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .overlay_panel_blur = overlay_panel_blur_key(idx).to_owned();
+                .overlay_panel_blur = pct.clamp(0, 100);
             if let Some(d) = dash_w.upgrade() {
                 d.set_overlay_preset_status("".into());
             }

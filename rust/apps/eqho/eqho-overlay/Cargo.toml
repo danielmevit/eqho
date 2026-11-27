@@ -13,6 +13,8 @@ eqho-core.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows.workspace = true
+windows-core.workspace = true
+windows-numerics.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libloading.workspace = true
