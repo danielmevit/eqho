@@ -131,6 +131,7 @@ const faqLd = {
       }
       .btn.ghost:hover { border-color: var(--muted); }
       .btn.big { padding: 0.95rem 1.7rem; font-size: 1.05rem; }
+      .btn.big .store-logo { display: block; width: 20px; height: 20px; flex: none; }
 
       /* ---------- Hero ---------- */
       header.hero { padding-block: 4rem 3rem; text-align: center; }
@@ -280,7 +281,7 @@ const faqLd = {
           tiny memory use, and complete privacy on your own machine.
         </p>
         <div class="cta-row">
-          <a class="btn big" href={STORE_URL}>Get it on the Microsoft Store</a>
+          <a class="btn big" href={STORE_URL} aria-label="Get Eqho on the Microsoft Store"><img class="store-logo" src="/ms-store.svg" alt="" width="20" height="20" />Microsoft Store</a>
           <a class="btn big ghost" href="#how">How it works</a>
         </div>
         <p class="cta-try">Try it free for 15 days, then buy it once.</p>
