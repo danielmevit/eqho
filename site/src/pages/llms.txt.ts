@@ -4,7 +4,7 @@ import { LEGACY_URL, REPO_URL, STORE_URL, VERSION } from '../lib/site';
 // Generated so the Store link comes from the single STORE_URL constant.
 const body = `# Eqho
 
-> Offline voice-to-text dictation for Windows that types directly into any focused window using local OpenAI Whisper models.
+> Offline dictation for Windows: press Alt + Q in any app, talk, and your words appear at the cursor. Speech recognition runs locally with Whisper models (whisper.cpp) on your graphics card or processor, in 99 languages. Microsoft Store, 15-day free trial, then a one-time purchase.
 
 - Site: https://eqho.damt.xyz/
 - Get it: Microsoft Store (publisher page until the listing is live), ${STORE_URL}

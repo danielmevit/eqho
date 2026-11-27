@@ -1,0 +1,22 @@
+---
+// A real Eqho UI render (2x) with a dark and a light version; only the active theme's file loads.
+// Elevated like a lit object: ring, top highlight, deep shadow and a soft Deep Navy light pool behind it.
+interface Props { name: string; alt: string; class?: string }
+const { name, alt, class: cls = '' } = Astro.props;
+---
+<figure class:list={['shot', cls]}>
+  <div class="frame">
+    <img class="for-dark" src={`/assets/ui/${name}-dark.webp`} alt={alt} width="940" height="560" loading="lazy" decoding="async" />
+    <img class="for-light" src={`/assets/ui/${name}-light.webp`} alt={alt} width="940" height="560" loading="lazy" decoding="async" />
+  </div>
+</figure>
+
+<style>
+  .shot { position: relative; isolation: isolate; margin: 0; inline-size: 100%; max-inline-size: 940px; }
+  .shot::before {
+    content: ''; position: absolute; z-index: -1; inset-block: -12%; inset-inline: -9%;
+    background: var(--shot-pool); pointer-events: none;
+  }
+  .frame { border-radius: 10px; overflow: hidden; background: var(--panel); box-shadow: var(--shot-shadow); }
+  .shot img { inline-size: 100%; aspect-ratio: 940 / 560; }
+</style>

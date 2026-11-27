@@ -1,0 +1,10 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PrivacyPage from '../../components/PrivacyPage.astro';
+import { otherLangPaths, t } from '../../lib/i18n';
+export function getStaticPaths() { return otherLangPaths(); }
+const { lang } = Astro.props;
+---
+<BaseLayout lang={lang} page="privacy" title={t(lang, 'privacy.metaTitle')} description={t(lang, 'privacy.metaDescription')} ogType="article">
+  <PrivacyPage lang={lang} />
+</BaseLayout>

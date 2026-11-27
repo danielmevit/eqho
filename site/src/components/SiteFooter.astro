@@ -1,57 +1,57 @@
 ---
+import Wordmark from './Wordmark.astro';
+import WaveField from './WaveField.astro';
 import { REPO_URL, STORE_URL, SUPPORT_EMAIL } from '../lib/site';
-const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+import { DEFAULT_LANG, pagePath, t, tSplit } from '../lib/i18n';
+interface Props { lang?: string }
+const { lang = DEFAULT_LANG } = Astro.props;
+const [madeA, madeB] = tSplit(lang, 'footer.madeBy');
 ---
-<footer class="site-footer" aria-label="Site">
-  <div class="footer-brand">
-    <a class="brand" href={`${base}/`}>
-      <img src="https://raw.githubusercontent.com/DanielMevit/eqho/main/logo/logo_horizontal_dark.png" alt="Eqho" height="26" />
-    </a>
+<footer class="site-footer" data-wf="rings">
+  <WaveField />
+  <div class="f-brand">
+    <a href={pagePath(lang)} aria-label={t(lang, 'nav.home')}><Wordmark height={22} label="Eqho" /></a>
   </div>
-  <div class="footer-group">
-    <h2 class="footer-head">Get Eqho</h2>
+  <div class="f-group">
+    <h2>{t(lang, 'footer.get')}</h2>
     <ul>
-      <li><a href={STORE_URL}>Microsoft Store</a></li>
-      <li><a href={`${base}/changelog/`}>Changelog</a></li>
-      <li><a href={REPO_URL}>Source code on GitHub</a></li>
+      <li><a href={STORE_URL}>{t(lang, 'footer.store')}</a></li>
+      <li><a href={pagePath(lang, 'changelog')}>{t(lang, 'footer.changelog')}</a></li>
+      <li><a href={REPO_URL}>{t(lang, 'footer.source')}</a></li>
     </ul>
   </div>
-  <div class="footer-group">
-    <h2 class="footer-head">Help</h2>
+  <div class="f-group">
+    <h2>{t(lang, 'footer.help')}</h2>
     <ul>
-      <li><a href={`mailto:${SUPPORT_EMAIL}`}>Support</a></li>
-      <li><a href={`${base}/privacy/`}>Privacy</a></li>
+      <li><a href={`mailto:${SUPPORT_EMAIL}`}>{t(lang, 'footer.support')}</a></li>
+      <li><a href={pagePath(lang, 'privacy')}>{t(lang, 'footer.privacy')}</a></li>
     </ul>
   </div>
-  <div class="footer-group">
-    <h2 class="footer-head">About</h2>
+  <div class="f-group">
+    <h2>{t(lang, 'footer.about')}</h2>
     <ul>
-      <li>Made by <a href="https://damt.xyz">damt.xyz</a></li>
-      <li>© 2026 damt.xyz</li>
+      <li>{madeA}<a href="https://damt.xyz">damt.xyz</a>{madeB}</li>
+      <li>{t(lang, 'footer.copyright')}</li>
     </ul>
   </div>
 </footer>
 
 <style>
-  * { box-sizing: border-box; }
   .site-footer {
-    display: grid; gap: 1.5rem 2rem;
-    grid-template-columns: minmax(160px, 1.4fr) repeat(3, minmax(140px, 1fr));
-    border-top: 1px solid #30363d; background: #0d1117; margin-top: 4rem;
-    padding: 2rem clamp(16px, 4vw, 64px) 2.5rem;
-    color: #8b949e; font-size: 0.9rem; line-height: 1.6;
+    display: grid; gap: 32px 40px;
+    grid-template-columns: minmax(160px, 1.6fr) repeat(3, minmax(140px, 1fr));
+    border-block-start: 1px solid var(--line); background: var(--canvas);
+    padding-block: 48px 56px; padding-inline: var(--pad-x);
+    color: var(--muted); font-size: 0.9375rem;
   }
-  .brand { display: inline-flex; align-items: center; gap: 0.55rem; color: #fff; font-weight: 700; font-size: 1.05rem; text-decoration: none; }
-  .brand img { height: 26px; width: auto; display: block; }
-  .footer-head {
-    margin: 0 0 0.5rem; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.1em;
-    text-transform: uppercase; color: #8b949e;
-  }
-  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
-  a { color: #c9d1d9; text-decoration: none; }
-  a:hover { color: #fff; text-decoration: underline; }
-  @media (max-width: 720px) {
+  .f-brand a { display: inline-block; color: var(--text); }
+  .f-brand :global(svg) { display: block; height: 22px; width: auto; }
+  h2 { font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-block-end: 12px; }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  a { color: var(--text); text-decoration: none; transition: color var(--ease); }
+  .f-group a:hover { color: var(--accent); text-decoration: underline; transition-duration: 0s; }
+  @media (max-width: 760px) {
     .site-footer { grid-template-columns: 1fr 1fr; }
-    .footer-brand { grid-column: 1 / -1; }
+    .f-brand { grid-column: 1 / -1; }
   }
 </style>

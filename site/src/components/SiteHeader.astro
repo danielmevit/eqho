@@ -1,84 +1,194 @@
 ---
+import Wordmark from './Wordmark.astro';
+import Mark from './Mark.astro';
 import { REPO_URL, STORE_URL } from '../lib/site';
-const base = import.meta.env.BASE_URL.replace(/\/$/, '');
-const home = `${base}/`;
+import { DEFAULT_LANG, LANGS, LOCALIZED_PAGES, flagFor, languageEndonym, pagePath, shortTag, t } from '../lib/i18n';
+interface Props { lang?: string; page?: string }
+const { lang = DEFAULT_LANG, page = '' } = Astro.props;
+const langTarget = LOCALIZED_PAGES.includes(page) ? page : '';
+const langItems = LANGS.map((l) => ({ lang: l, name: languageEndonym(l), href: pagePath(l, langTarget) }));
+const home = pagePath(lang);
+const themeNames = { system: t(lang, 'theme.system'), light: t(lang, 'theme.light'), dark: t(lang, 'theme.dark') };
 ---
-<div class="topbar" id="topbar">
-  <div class="wrap">
-    <nav aria-label="Main">
-      <a class="brand" href={home} aria-label="Eqho home">
-        <img src="https://raw.githubusercontent.com/DanielMevit/eqho/main/logo/logo_horizontal_dark.png" alt="Eqho" height="30" />
+<header class="topbar" id="topbar">
+  <nav class="bar" aria-label="Main">
+    <a class="brand" href={home} aria-label={t(lang, 'nav.home')}><Mark size={28} /><span class="brand-word"><Wordmark height={20} /></span></a>
+    <div class="anchors">
+      <a href={`${home}#how`}>{t(lang, 'nav.how')}</a>
+      <a href={`${home}#features`}>{t(lang, 'nav.features')}</a>
+      <a href={`${home}#languages`}>{t(lang, 'nav.languages')}</a>
+      <a href={`${home}#faq`}>{t(lang, 'nav.faq')}</a>
+    </div>
+    <div class="tools">
+        <div class="lang-menu" id="lang-menu">
+          <button class="lang-btn" type="button" id="lang-btn" aria-expanded="false" aria-controls="lang-list"
+            aria-label={`${t(lang, 'nav.language')}: ${languageEndonym(lang)}`}>
+            <span class="lang-long">{languageEndonym(lang)}</span><span class="lang-short">{shortTag(lang)}</span>
+            <svg class="chev" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="lang-pop" id="lang-list" hidden>
+            <p class="lang-title" id="lang-title">{t(lang, 'nav.languageMenu')}</p>
+            <ul aria-labelledby="lang-title">
+              {langItems.map((i) => (
+                <li><a href={i.href} lang={i.lang} hreflang={i.lang} aria-current={i.lang === lang ? 'true' : undefined}><img class="flag" src={flagFor(i.lang)} alt="" width="21" height="14" loading="lazy" /><span>{i.name}</span></a></li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      <a class="btn btn-fill cta ms-only" href={STORE_URL} aria-label={t(lang, 'nav.storeAria')}><img class="ms-logo" src="/assets/brand/ms-store.svg" alt="" width="18" height="18" /><span class="cta-long">{t(lang, 'nav.store')}</span><span class="cta-short">{t(lang, 'nav.storeShort')}</span></a>
+      <span class="icon-btn play-icon play-only" role="img" aria-label={t(lang, 'play.soonAria')}><img src="/assets/brand/google-play.svg" alt="" width="17" height="18" /></span>
+      <a class="icon-btn" href={REPO_URL} aria-label={t(lang, 'nav.github')} title={t(lang, 'nav.github')}>
+        <svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
       </a>
-      <div class="links">
-        <a class="nav-anchor" href={`${home}#how`}>How it works</a>
-        <a class="nav-anchor" href={`${home}#why`}>Why Eqho</a>
-        <a class="nav-anchor" href={`${home}#faq`}>FAQ</a>
-        <a class="nav-cta" href={STORE_URL} aria-label="Get Eqho on the Microsoft Store"><img class="store-logo" src="/ms-store.svg" alt="" width="18" height="18" />Microsoft Store</a>
-        <a class="gh" href={REPO_URL} aria-label="Source code on GitHub" title="Source code on GitHub">
-          <svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        </a>
-      </div>
-    </nav>
-  </div>
-</div>
+      <button class="icon-btn theme-btn" type="button" id="theme-btn" hidden
+        data-label={t(lang, 'theme.label')}
+        data-system={themeNames.system} data-light={themeNames.light} data-dark={themeNames.dark}
+        aria-label={`${t(lang, 'theme.label')}: ${themeNames.system}`} title={`${t(lang, 'theme.label')}: ${themeNames.system}`}>
+        <svg class="ti ti-system" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 3a7 7 0 0 1 0 14z" fill="currentColor"/></svg>
+        <svg class="ti ti-light" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="10" cy="10" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 1.8v2.4M10 15.8v2.4M1.8 10h2.4M15.8 10h2.4M4.2 4.2l1.7 1.7M14.1 14.1l1.7 1.7M4.2 15.8l1.7-1.7M14.1 5.9l1.7-1.7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <svg class="ti ti-dark" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M16.5 12.4A7 7 0 0 1 7.6 3.5a7 7 0 1 0 8.9 8.9z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </nav>
+</header>
 
 <script is:inline>
   (function () {
-    var bar = document.getElementById("topbar");
+    var root = document.documentElement;
+    var btn = document.getElementById('theme-btn');
+    var order = ['system', 'light', 'dark'];
+    function cur() { var v = root.getAttribute('data-theme'); return order.indexOf(v) < 0 ? 'system' : v; }
+    function paint() {
+      var s = cur(); btn.setAttribute('data-state', s);
+      var name = btn.getAttribute('data-label') + ': ' + btn.getAttribute('data-' + s);
+      btn.setAttribute('aria-label', name); btn.setAttribute('title', name);
+    }
+    if (btn) {
+      paint();
+      btn.addEventListener('click', function () {
+        var next = order[(order.indexOf(cur()) + 1) % order.length];
+        root.setAttribute('data-theme', next);
+        try { if (next === 'system') localStorage.removeItem('eqho-theme'); else localStorage.setItem('eqho-theme', next); } catch (e) {}
+        paint();
+        document.dispatchEvent(new CustomEvent('eqho-theme'));
+      });
+    }
+    var menu = document.getElementById('lang-menu');
+    if (menu) {
+      var lb = document.getElementById('lang-btn'), pop = document.getElementById('lang-list');
+      var links = function () { return Array.prototype.slice.call(pop.querySelectorAll('a')); };
+      var setOpen = function (open, focusBtn) {
+        pop.hidden = !open; lb.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) { var cur = pop.querySelector('[aria-current]') || links()[0]; cur && cur.focus(); }
+        else if (focusBtn) lb.focus();
+      };
+      lb.addEventListener('click', function () { setOpen(pop.hidden); });
+      document.addEventListener('click', function (e) { if (!pop.hidden && !menu.contains(e.target)) setOpen(false); });
+      menu.addEventListener('keydown', function (e) {
+        if (pop.hidden) return;
+        if (e.key === 'Escape') { e.preventDefault(); setOpen(false, true); return; }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          var l = links(), i = l.indexOf(document.activeElement);
+          i = e.key === 'ArrowDown' ? (i + 1) % l.length : (i - 1 + l.length) % l.length;
+          l[i].focus();
+        }
+      });
+      menu.addEventListener('focusout', function (e) { if (!pop.hidden && e.relatedTarget && !menu.contains(e.relatedTarget)) setOpen(false); });
+    }
+    var bar = document.getElementById('topbar');
     if (!bar) return;
-    var last = window.pageYOffset || 0;
-    var ticking = false;
+    var last = window.pageYOffset || 0, ticking = false;
     function update() {
       var y = window.pageYOffset || 0;
-      bar.classList.toggle("is-pinned", y > 4);
-      // near the top, or moving up -> show; moving down past the bar -> hide.
-      if (y <= bar.offsetHeight || y < last - 2) bar.classList.remove("is-hidden");
-      else if (y > last + 2) bar.classList.add("is-hidden");
-      last = y;
-      ticking = false;
+      bar.classList.toggle('is-pinned', y > 4);
+      if (y > last && y > 120 && !bar.contains(document.activeElement)) bar.classList.add('is-hidden');
+      else if (y < last || y <= 120) bar.classList.remove('is-hidden');
+      last = y; ticking = false;
     }
-    window.addEventListener("scroll", function () {
+    window.addEventListener('scroll', function () {
       if (!ticking) { ticking = true; window.requestAnimationFrame(update); }
     }, { passive: true });
+    bar.addEventListener('focusin', function () { bar.classList.remove('is-hidden'); });
   })();
 </script>
 
 <style>
-  * { box-sizing: border-box; }
   .topbar {
-    position: sticky; top: 0; z-index: 50;
-    background: #0d1117;
-    transition: transform 0.28s ease;
+    position: sticky; inset-block-start: 0; z-index: 50;
+    background: var(--canvas); border-block-end: 1px solid transparent;
+    transition: transform 0.2s ease-out, border-color var(--ease);
   }
   .topbar.is-hidden { transform: translateY(-100%); }
-  .topbar.is-pinned { border-bottom: 1px solid #30363d; }
-  .wrap { width: 100%; padding: 0 clamp(16px, 4vw, 64px); }
-  nav { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 0; gap: 1rem; }
-  .brand {
-    display: flex; align-items: center; gap: 0.6rem; flex: none;
-    font-weight: 700; color: #fff; text-decoration: none; font-size: 1.15rem;
+  .topbar.is-pinned { border-block-end-color: var(--line); }
+  .bar { display: flex; align-items: center; gap: 24px; min-height: 64px; padding-inline: var(--pad-x); }
+  .brand { display: inline-flex; align-items: center; gap: 10px; flex: none; padding-block: 6px; color: var(--text); border-radius: 6px; }
+  .brand :global(svg) { display: block; width: auto; }
+  .brand-word { display: inline-flex; }
+  .brand-word :global(svg) { height: 20px; }
+  .anchors { display: flex; gap: 4px; margin-inline-end: auto; }
+  .anchors a {
+    color: var(--muted); text-decoration: none; font-size: 0.9375rem; font-weight: 500; white-space: nowrap;
+    padding-block: 6px; padding-inline: 10px; border-radius: 4px; transition: color var(--ease), background-color var(--ease);
   }
-  .brand img { height: 30px; width: auto; display: block; }
-  .links { display: flex; align-items: center; gap: 1.2rem; min-width: 0; }
-  .nav-anchor { color: #8b949e; text-decoration: none; font-weight: 500; font-size: 0.95rem; white-space: nowrap; }
-  .nav-anchor:hover { color: #fff; }
-  .nav-cta {
-    display: inline-flex; align-items: center; white-space: nowrap;
-    background: #1f6feb; color: #fff; padding: 0.55rem 1.1rem; border-radius: 999px;
-    font-weight: 600; font-size: 0.92rem; text-decoration: none;
-    transition: background .12s ease;
+  .anchors a:hover { color: var(--text); background: var(--hover); transition-duration: 0s; }
+  .tools { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; }
+  .icon-btn {
+    display: inline-grid; place-items: center; inline-size: 36px; block-size: 36px; flex: none;
+    border: 1px solid var(--line-ctl); border-radius: 9px; background: var(--btn2); color: var(--muted); cursor: pointer; padding: 0;
+    transition: color var(--ease), background-color var(--ease), border-color var(--ease);
   }
-  .nav-cta:hover { background: #1a5fd0; }
-  .nav-cta { gap: 8px; }
-  .store-logo { display: block; width: 18px; height: 18px; flex: none; }
-  .gh {
-    display: inline-grid; place-items: center; width: 38px; height: 38px; flex: none;
-    border-radius: 50%; color: #c9d1d9; border: 1px solid #30363d;
+  .icon-btn:hover { color: var(--text); background: var(--btn2-hover); transition-duration: 0s; }
+  .ti { display: none; }
+  .theme-btn:not([data-state]) .ti-system, .theme-btn[data-state="system"] .ti-system,
+  .theme-btn[data-state="light"] .ti-light, .theme-btn[data-state="dark"] .ti-dark { display: block; }
+  .tools { min-width: 0; }
+  .cta { min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    min-height: 36px; padding-block: 6px; padding-inline: 12px 14px; gap: 8px; font-size: 0.875rem; white-space: nowrap; }
+  .cta-short { display: none; }
+
+  .lang-menu { position: relative; }
+  .lang-btn {
+    display: inline-flex; align-items: center; gap: 8px; block-size: 36px; padding-inline: 10px;
+    border: 1px solid var(--line-ctl); border-radius: 9px; background: var(--btn2); color: var(--text);
+    font: inherit; font-size: 0.875rem; font-weight: 500; cursor: pointer; white-space: nowrap;
+    transition: background-color var(--ease), border-color var(--ease);
   }
-  .gh:hover { color: #fff; border-color: #8b949e; }
-  @media (max-width: 860px) { .nav-anchor { display: none; } }
-  @media (max-width: 480px) {
-    .links { gap: 0.6rem; }
+  .lang-btn:hover { background: var(--btn2-hover); transition-duration: 0s; }
+  .chev { color: var(--muted); transition: transform var(--ease); }
+  .lang-btn[aria-expanded="true"] .chev { transform: rotate(180deg); }
+  .lang-short { display: none; }
+  .lang-pop {
+    position: absolute; inset-block-start: calc(100% + 6px); inset-inline-end: 0; z-index: 60;
+    min-inline-size: 220px; max-inline-size: calc(100vw - 32px); max-block-size: min(70vh, 520px); overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--line-ctl); border-radius: 10px; padding: 6px;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 18px 48px -12px rgba(0, 0, 0, 0.7);
   }
-  @media (prefers-reduced-motion: reduce) { .topbar, .nav-cta { transition: none; } }
+  .lang-pop[hidden] { display: none; }
+  .theme-btn[hidden] { display: none !important; }
+  @media (max-width: 640px) {
+    .lang-pop { position: fixed; inset-block-start: 60px; inset-inline: 16px; min-inline-size: 0; max-inline-size: none; }
+  }
+  .lang-title { padding-block: 6px; padding-inline: 10px; font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .lang-pop ul { list-style: none; margin: 0; padding: 0; columns: 2 150px; column-gap: 4px; }
+  .lang-pop a {
+    display: flex; align-items: center; gap: 10px; padding-block: 6px; padding-inline: 10px; border-radius: 6px;
+    color: var(--text); text-decoration: none; font-size: 0.9375rem; break-inside: avoid;
+    transition: background-color var(--ease);
+  }
+  .lang-pop a:hover { background: var(--hover); transition-duration: 0s; }
+  .lang-pop a[aria-current] { color: var(--accent); font-weight: 600; }
+  .flag { inline-size: 21px; block-size: 14px; flex: none; border-radius: 2px; }
+  @media (max-width: 860px) { .anchors { display: none; } }
+  @media (max-width: 559px) { .brand-word { display: none; } }
+  @media (max-width: 559px) {
+    .bar { gap: 12px; }
+    .cta-long { display: none; }
+    .cta-short { display: inline; }
+    .cta > span { overflow: hidden; text-overflow: ellipsis; }
+    .lang-long { display: none; }
+    .lang-short { display: inline; }
+    .lang-btn { padding-inline: 10px 8px; }
+    .tools { gap: 6px; }
+  }
 </style>

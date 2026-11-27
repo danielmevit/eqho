@@ -1,0 +1,10 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import HomePage from '../../components/HomePage.astro';
+import { otherLangPaths, t } from '../../lib/i18n';
+export function getStaticPaths() { return otherLangPaths(); }
+const { lang } = Astro.props;
+---
+<BaseLayout lang={lang} page="" title={t(lang, 'meta.title')} description={t(lang, 'meta.description')}>
+  <HomePage lang={lang} />
+</BaseLayout>

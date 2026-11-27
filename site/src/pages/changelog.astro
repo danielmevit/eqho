@@ -1,7 +1,6 @@
 ---
 const title = "Changelog | Eqho";
-import SiteHeader from '../components/SiteHeader.astro';
-import SiteFooter from '../components/SiteFooter.astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
 const description = "Version history for Eqho, the offline voice-to-text dictation app for Windows. Every release, what changed, and when.";
 
 // Newest first. Add new releases at the top.
@@ -54,82 +53,28 @@ const releases = [
   { v: "0.1.0", d: "2026-03-29", notes: `Initial release — the full dictation pipeline: system tray, global hotkey, live overlay, text injection, faster-whisper on-device transcription, and 13 languages.` },
 ];
 ---
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{title}</title>
-    <meta name="description" content={description} />
-    <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/DanielMevit/eqho/main/assets/logo_32_dark.png" media="(prefers-color-scheme: light)" />
-    <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/DanielMevit/eqho/main/assets/logo_32_white.png" media="(prefers-color-scheme: dark)" />
-    <link
-      rel="alternate"
-      type="text/plain"
-      href="https://eqho.damt.xyz/llms.txt"
-      title="LLM Documentation"
-    />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <meta property="og:title" content={title} />
-    <meta property="og:description" content={description} />
-    <meta property="og:type" content="website" />
-    <link rel="canonical" href="https://eqho.damt.xyz/changelog/" />
-    <meta property="og:url" content="https://eqho.damt.xyz/changelog/" />
-    <style>
-      :root {
-        --color-bg: #0d1117;
-        --color-card-bg: #161b22;
-        --color-text: #c9d1d9;
-        --color-heading: #ffffff;
-        --color-blue: #58a6ff;
-        --color-muted: #8b949e;
-        --color-border: #30363d;
-      }
-      * { box-sizing: border-box; }
-      body {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        background-color: var(--color-bg);
-        color: var(--color-text);
-        line-height: 1.6;
-        margin: 0;
-        -webkit-font-smoothing: antialiased;
-      }
-      main { max-width: 820px; margin: 2.5rem auto 0; padding: 0 clamp(16px, 4vw, 64px); box-sizing: content-box; }
-      a { color: var(--color-blue); text-decoration: none; }
-      a:hover { text-decoration: underline; }
-      h1 { color: var(--color-heading); font-size: 2.5rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 0.25rem; }
-      .lede { color: var(--color-muted); margin: 0 0 3rem; }
-      .release { padding: 1.75rem 0; border-top: 1px solid var(--color-border); display: grid; grid-template-columns: 130px 1fr; gap: 1.5rem; }
-      .release:first-of-type { border-top: none; }
-      .rel-head { display: flex; flex-direction: column; gap: 0.15rem; }
-      .rel-v { color: var(--color-blue); font-weight: 600; font-size: 1.15rem; }
-      .rel-d { color: var(--color-muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
-      .rel-notes { margin: 0; }
-      @media (max-width: 620px) {
-        .release { grid-template-columns: 1fr; gap: 0.4rem; }
-        h1 { font-size: 2rem; }
-      }
-    </style>
-  </head>
-  <body>
-    <SiteHeader />
-    <main>
-      <h1>Changelog</h1>
+<BaseLayout title={title} description={description} page="changelog">
+  <div class="doc">
+      <header class="doc-head">
+        <h1>Changelog</h1>
       <p class="lede">Every Eqho release, what changed, and when. Newest first. Full details live in <a href="https://github.com/DanielMevit/eqho/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
+      </header>
 
       {releases.map((r) => (
-        <article class="release">
+        <article class="release doc-sec">
           <div class="rel-head">
             <span class="rel-v">{r.v}</span>
             <time class="rel-d" datetime={r.d}>{r.d}</time>
           </div>
-          <p class="rel-notes">{r.notes}</p>
+          <p class="rel-notes body">{r.notes}</p>
         </article>
       ))}
-    </main>
+  </div>
+</BaseLayout>
 
-    <SiteFooter />
-  </body>
-</html>
+<style>
+  .rel-head { display: flex; flex-direction: column; gap: 2px; }
+  .rel-v { font-weight: 620; font-size: 1.25rem; letter-spacing: -0.01em; }
+  .rel-d { color: var(--muted); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+  @media (min-width: 900px) { .release.doc-sec { grid-template-columns: minmax(140px, 12rem) minmax(0, 72ch); } }
+</style>

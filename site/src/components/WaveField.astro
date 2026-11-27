@@ -1,0 +1,22 @@
+---
+// Background field for a band (see src/scripts/wavefield.ts). Put it inside an element with
+// data-wf="active|calm|rings".
+---
+<canvas class="wf" aria-hidden="true"></canvas>
+<script>import '../scripts/wavefield.ts';</script>
+
+<style>
+  :global([data-wf]) { position: relative; isolation: isolate; }
+  :global([data-wf] > :not(.wf)) { position: relative; z-index: 1; }
+  .wf {
+    position: absolute; inset: 0; z-index: -1; inline-size: 100%; block-size: 100%;
+    pointer-events: none; opacity: 0; display: block;
+  }
+  :global(.wf-on) > .wf { opacity: 1; }
+  :global(.wf-fallback) {
+    background-image: radial-gradient(60% 55% at 72% 62%, rgba(26, 72, 155, 0.22), transparent 70%);
+  }
+  /* Light theme is not tuned yet: keep the bands plain there. */
+  :global(:root[data-theme="light"]) .wf { display: none; }
+  @media (prefers-color-scheme: light) { :global(:root[data-theme="system"]) .wf { display: none; } }
+</style>

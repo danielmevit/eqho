@@ -1,0 +1,256 @@
+---
+import '@fontsource-variable/inter';
+import SiteHeader from '../components/SiteHeader.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+import { DEFAULT_LANG, LANGS, LOCALIZED_PAGES, SITE, dir, ogLocaleFor, pagePath, t } from '../lib/i18n';
+
+const KEYWORDS = 'speech to text, voice to text, dictation software, offline speech recognition, dictation app, voice typing for Windows, OpenAI Whisper app, whisper.cpp GUI, Rust dictation app, Vulkan speech to text, AMD GPU dictation, AMD Radeon voice to text, Intel Arc dictation, cross-vendor GPU transcription, private speech to text, local voice recognition, no-cloud transcription';
+
+interface Props {
+  lang?: string;
+  title: string;
+  description: string;
+  /** '' (home), 'privacy' or 'changelog' (English only). */
+  page: string;
+  ogType?: string;
+}
+const { lang = DEFAULT_LANG, title, description, page, ogType = 'website' } = Astro.props;
+const localized = LOCALIZED_PAGES.includes(page);
+const canonical = SITE + pagePath(lang, page);
+const alternates = (localized ? LANGS : [DEFAULT_LANG]).map((l) => ({ lang: l, href: SITE + pagePath(l, page) }));
+const keywords = page === '' ? KEYWORDS : undefined;
+const ogImage = `${SITE}/assets/og-eqho.png`;
+---
+<!doctype html>
+<html lang={lang} dir={dir(lang)} data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {keywords && <meta name="keywords" content={keywords} />}
+    <meta name="author" content="Daniel Mevit" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="canonical" href={canonical} />
+    {alternates.map((a) => <link rel="alternate" hreflang={a.lang} href={a.href} />)}
+    <link rel="alternate" hreflang="x-default" href={SITE + pagePath(DEFAULT_LANG, page)} />
+    <link rel="alternate" type="text/plain" href={`${SITE}/llms.txt`} title="LLM Documentation" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/logo_32_dark.png" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/assets/logo_64_dark.png" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/logo_32_white.png" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/assets/logo_64_white.png" media="(prefers-color-scheme: dark)" />
+
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content={ogType} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:site_name" content="Eqho" />
+    <meta property="og:locale" content={ogLocaleFor(lang)} />
+    {alternates.filter((a) => a.lang !== lang).map((a) => <meta property="og:locale:alternate" content={ogLocaleFor(a.lang)} />)}
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={t(lang, 'meta.ogAlt')} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content={t(lang, 'meta.ogAlt')} />
+
+    <script is:inline>
+      (function () {
+        var v = null;
+        try { v = localStorage.getItem('eqho-theme'); } catch (e) {}
+        // Dark only for now (light theme comes later): stored choices are ignored.
+      })();
+    </script>
+    <slot name="head" />
+  </head>
+  <body>
+    <a class="skip" href="#main">{t(lang, 'nav.skip')}</a>
+    <SiteHeader lang={lang} page={page} />
+    <main id="main" tabindex="-1">
+      <slot />
+    </main>
+    <SiteFooter lang={lang} />
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    color-scheme: dark;
+    --canvas: #0B0B0E;
+    --surface: #0F0F13;
+    --panel: #17171B;
+    --win: #121215;
+    --raised: #25252C;
+    --hover: #26262C;
+    --line: #26262E;
+    --line-ctl: #26262E;
+    --text: #F5F6F8;
+    --muted: #A1A1AA;
+    --accent: #58A6FF;
+    --btn: #1A489B;
+    --btn-hover: #2457B3;
+    --btn-text: #FFFFFF;
+    --btn2: #1E1E22;
+    --btn2-hover: #26262C;
+    --wm-1: #029cff;
+    --wm-2: #0062b1;
+    --shot-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 30px 80px -20px rgba(0, 0, 0, 0.75), 0 12px 24px -12px rgba(0, 0, 0, 0.6);
+    --shot-pool: radial-gradient(closest-side, rgba(26, 72, 155, 0.28), rgba(26, 72, 155, 0.10) 55%, transparent);
+    --pad-x: clamp(16px, 4vw, 64px);
+    --pad-y: clamp(48px, 6vw, 96px);
+    --ease: 0.12s ease-out;
+    --font: "Segoe UI Variable Text", "Segoe UI", "Inter Variable", system-ui, sans-serif;
+    --font-display: "Segoe UI Variable Display", "Segoe UI", "Inter Variable", system-ui, sans-serif;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --canvas: #F5F6F8;
+    --surface: #FFFFFF;
+    --panel: #FFFFFF;
+    --raised: #EDEEF1;
+    --btn2: #FFFFFF;
+    --btn2-hover: #E4E6EA;
+    --shot-pool: none;
+    --hover: #E4E6EA;
+    --line: #D4D6DC;
+    --line-ctl: #C6C9D0;
+    --text: #16181D;
+    --muted: #57606A;
+    --accent: #0969DA;
+    --btn: #0969DA;
+    --btn-hover: #0860C7;
+    --btn-text: #FFFFFF;
+    --wm-1: #0062b1;
+    --wm-2: #029cff;
+    --shot-shadow: 0 1px 2px rgba(22, 24, 29, 0.06), 0 8px 24px rgba(22, 24, 29, 0.08);
+  }
+  @media (prefers-color-scheme: light) {
+    :root[data-theme="system"] {
+      color-scheme: light;
+      --canvas: #F5F6F8;
+      --surface: #FFFFFF;
+      --panel: #FFFFFF;
+    --raised: #EDEEF1;
+    --btn2: #FFFFFF;
+    --btn2-hover: #E4E6EA;
+    --shot-pool: none;
+      --hover: #E4E6EA;
+      --line: #D4D6DC;
+      --line-ctl: #C6C9D0;
+      --text: #16181D;
+      --muted: #57606A;
+      --accent: #0969DA;
+      --btn: #0969DA;
+      --btn-hover: #0860C7;
+      --btn-text: #FFFFFF;
+      --wm-1: #0062b1;
+      --wm-2: #029cff;
+      --shot-shadow: 0 1px 2px rgba(22, 24, 29, 0.06), 0 8px 24px rgba(22, 24, 29, 0.08);
+    }
+  }
+
+  /* Theme-specific assets: .for-dark / .for-light. Hidden ones are lazy, so they never download. */
+  .for-light { display: none !important; }
+  :root[data-theme="light"] .for-light { display: block !important; }
+  :root[data-theme="light"] .for-dark { display: none !important; }
+  @media (prefers-color-scheme: light) {
+    :root[data-theme="system"] .for-light { display: block !important; }
+    :root[data-theme="system"] .for-dark { display: none !important; }
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-padding-block-start: 80px; }
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 1rem;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: clip;
+  }
+  em, i { font-style: normal; }
+  /* Long words (German compounds, URLs) wrap instead of widening the page. */
+  p, li, dd, dt, h1, h2, h3, summary, figcaption, .btn { overflow-wrap: anywhere; }
+  h1, h2, h3 { font-family: var(--font-display); font-weight: 620; letter-spacing: -0.02em; line-height: 1.15; margin: 0; overflow-wrap: break-word; text-wrap: balance; }
+  p { margin: 0; }
+  img { max-width: 100%; height: auto; display: block; }
+  a { color: var(--accent); text-underline-offset: 0.18em; }
+  a:hover { text-decoration-thickness: 2px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  main:focus { outline: none; }
+  ::selection { background: var(--btn); color: #fff; }
+
+  .skip {
+    position: absolute; inset-inline-start: var(--pad-x); inset-block-start: -100px; z-index: 100;
+    background: var(--btn); color: var(--btn-text); padding: 8px 14px; border-radius: 4px; text-decoration: none; font-weight: 600;
+  }
+  .skip:focus { inset-block-start: 8px; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 40px; padding-block: 8px; padding-inline: 18px;
+    border-radius: 9px; border: 1px solid transparent;
+    font: inherit; font-size: 0.9375rem; font-weight: 600; line-height: 1.25; text-align: center;
+    text-decoration: none; cursor: pointer;
+    transition: background-color var(--ease), border-color var(--ease), color var(--ease);
+  }
+  .btn-fill { background: var(--btn); color: var(--btn-text); }
+  .btn-fill:hover { background: var(--btn-hover); transition-duration: 0s; }
+  .btn-line { background: var(--btn2); color: var(--text); border-color: var(--line-ctl); }
+  .btn-line:hover { background: var(--btn2-hover); transition-duration: 0s; }
+  .btn .ms-logo { inline-size: 18px; block-size: 18px; flex: none; }
+  /* Phones: Google Play (coming soon, not a link) instead of the Microsoft Store buttons. */
+  .play-chip { background: var(--btn2); color: var(--muted); border-color: var(--line-ctl); cursor: default; font-weight: 500; }
+  .play-chip img, .play-icon img { inline-size: 17px; block-size: 18px; flex: none; }
+  .play-icon { cursor: default; }
+  .play-only { display: none !important; }
+  @media (max-width: 559px) {
+    .ms-only { display: none !important; }
+    .play-only { display: inline-flex !important; }
+    .play-icon.play-only { display: inline-grid !important; }
+  }
+
+  .label {
+    display: block; margin-block-end: 10px;
+    font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+  }
+  .muted { color: var(--muted); }
+
+  kbd {
+    display: inline-block; font: inherit; font-size: 0.875em; font-weight: 600; line-height: 1.2;
+    padding-block: 2px 3px; padding-inline: 6px; margin-inline: 1px;
+    border: 1px solid var(--line-ctl); border-block-end-width: 2px; border-radius: 4px;
+    background: var(--raised); color: var(--text); white-space: nowrap;
+  }
+
+  /* Long-form pages (privacy, changelog) */
+  .doc { padding-block: clamp(40px, 6vw, 88px) var(--pad-y); padding-inline: var(--pad-x); }
+  .doc-head { max-width: 72ch; margin-block-end: clamp(32px, 5vw, 56px); }
+  .doc h1 { font-size: clamp(2.2rem, 4.5vw, 3.4rem); margin-block-end: 16px; }
+  .doc .lede { color: var(--muted); font-size: 1.0625rem; max-width: 66ch; }
+  .doc-sec {
+    display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px 48px;
+    border-block-start: 1px solid var(--line); padding-block: 32px;
+  }
+  @media (min-width: 900px) { .doc-sec { grid-template-columns: minmax(200px, 18rem) minmax(0, 68ch); } }
+  .doc-sec h2 { font-size: 1.125rem; letter-spacing: -0.01em; }
+  .doc-sec .body > * + * { margin-block-start: 12px; }
+  .doc-sec ul { margin: 0; padding-inline-start: 1.2rem; }
+  .doc-sec li + li { margin-block-start: 8px; }
+  .doc code {
+    font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 0.875em;
+    background: var(--raised); border: 1px solid var(--line); border-radius: 4px; padding-inline: 5px; overflow-wrap: anywhere;
+  }
+  .doc strong { font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+  }
+</style>

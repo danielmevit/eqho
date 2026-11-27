@@ -1,0 +1,478 @@
+---
+import Shot from './Shot.astro';
+import WaveField from './WaveField.astro';
+import { LEGACY_URL, STORE_URL, VERSION } from '../lib/site';
+import { pagePath, shortTag, t, tSplit } from '../lib/i18n';
+
+interface Props { lang: string }
+const { lang } = Astro.props;
+
+// "Alt + Q" in the copy is shown as keys; the text itself stays in en.json.
+const HOTKEY = 'Alt + Q';
+function keyParts(s: string): { text: string; key: boolean }[] {
+  const out: { text: string; key: boolean }[] = [];
+  s.split(HOTKEY).forEach((part, i) => {
+    if (i > 0) out.push({ text: HOTKEY, key: true });
+    if (part) out.push({ text: part, key: false });
+  });
+  return out;
+}
+
+// i18n-keys: how.s1.title how.s1.body how.s2.title how.s2.body how.s3.title how.s3.body
+const steps = [1, 2, 3].map((n) => ({ n, title: t(lang, `how.s${n}.title`), body: t(lang, `how.s${n}.body`) }));
+// i18n-keys: private.p1.title private.p1.body private.p2.title private.p2.body private.p3.title private.p3.body
+const points = [1, 2, 3].map((n) => ({ title: t(lang, `private.p${n}.title`), body: t(lang, `private.p${n}.body`) }));
+// i18n-keys: speed.stat1.value speed.stat1.label speed.stat2.value speed.stat2.label speed.stat3.value speed.stat3.label
+const stats = [1, 2, 3].map((n) => ({ value: t(lang, `speed.stat${n}.value`), label: t(lang, `speed.stat${n}.label`) }));
+// i18n-keys: details.d1.title details.d1.body details.d2.title details.d2.body details.d3.title details.d3.body details.d4.title details.d4.body
+// i18n-keys: details.d5.title details.d5.body details.d6.title details.d6.body details.d7.title details.d7.body details.d8.title details.d8.body
+const details = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ title: t(lang, `details.d${n}.title`), body: t(lang, `details.d${n}.body`) }));
+
+const TUNED: [string, string][] = [
+  ['en', 'English'], ['es', 'Español'], ['zh', '中文'], ['ja', '日本語'], ['ko', '한국어'], ['vi', 'Tiếng Việt'],
+  ['ar', 'العربية'], ['uk', 'Українська'], ['fr', 'Français'], ['de', 'Deutsch'], ['pt', 'Português'],
+  ['ru', 'Русский'], ['it', 'Italiano'],
+];
+const STRONG: [string, string][] = [
+  ['nl', 'Nederlands'], ['pl', 'Polski'], ['tr', 'Türkçe'], ['sv', 'Svenska'], ['da', 'Dansk'], ['no', 'Norsk'],
+  ['fi', 'Suomi'], ['cs', 'Čeština'], ['ro', 'Română'], ['hu', 'Magyar'], ['el', 'Ελληνικά'], ['bg', 'Български'],
+  ['hr', 'Hrvatski'], ['sk', 'Slovenčina'], ['ca', 'Català'], ['hi', 'हिन्दी'], ['id', 'Bahasa Indonesia'],
+  ['ms', 'Bahasa Melayu'], ['th', 'ไทย'], ['he', 'עברית'],
+];
+const names = new Intl.DisplayNames([lang], { type: 'language' });
+const chips = (list: [string, string][]) =>
+  list.map(([code, endo]) => {
+    const local = names.of(code) ?? '';
+    return { code, endo, local: local && local !== endo ? local : '', rtl: code === 'ar' || code === 'he' };
+  });
+const groups = [
+  { title: t(lang, 'langs.tuned'), items: chips(TUNED) },
+  { title: t(lang, 'langs.strong'), items: chips(STRONG) },
+];
+
+// i18n-keys: faq.q1 faq.a1 faq.q2 faq.a2 faq.q3 faq.a3 faq.q4 faq.a4 faq.q5 faq.a5 faq.q6 faq.a6 faq.q7 faq.a7 faq.q8 faq.a8
+const LINKS: Record<number, { key: string; href: string }> = {
+  2: { key: 'faq.a2Link', href: pagePath(lang, 'privacy') },
+  7: { key: 'faq.a7Link', href: LEGACY_URL },
+};
+const faq = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => {
+  const link = LINKS[n];
+  const [a, b] = tSplit(lang, `faq.a${n}`);
+  const linkText = link ? (n === 2 ? t(lang, 'faq.a2Link') : t(lang, 'faq.a7Link')) : '';
+  return {
+    q: t(lang, `faq.q${n}`),
+    a, b, link: link ? { text: linkText, href: link.href } : null,
+    plain: t(lang, `faq.a${n}`, { link: linkText }),
+  };
+});
+
+const [otherA, otherB] = tSplit(lang, 'start.other');
+const demoKeys = t(lang, 'hero.demoKey').split('+').map((k) => k.trim());
+
+const appLd = (description: string) => ({
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Eqho',
+  applicationCategory: 'UtilitiesApplication',
+  operatingSystem: 'Windows 10, Windows 11',
+  description,
+  url: `https://eqho.damt.xyz${pagePath(lang)}`,
+  downloadUrl: STORE_URL,
+  installUrl: STORE_URL,
+  softwareVersion: VERSION,
+  author: { '@type': 'Person', name: 'Daniel Mevit', url: 'https://github.com/danielmevit' },
+  publisher: { '@type': 'Organization', name: 'damt.xyz', url: 'https://damt.xyz' },
+  license: 'https://www.gnu.org/licenses/agpl-3.0.html',
+  keywords: 'speech to text, voice typing, offline dictation, OpenAI Whisper, whisper.cpp, Rust dictation app, Vulkan speech to text, AMD GPU dictation, cross-vendor GPU transcription, private speech to text, local voice recognition',
+});
+const faqLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faq.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.plain } })),
+};
+---
+<script type="application/ld+json" set:html={JSON.stringify(appLd(t(lang, 'meta.description')))} />
+<script type="application/ld+json" set:html={JSON.stringify(faqLd)} />
+
+<!-- 1. Hero -->
+<section class="band hero" data-wf="active">
+  <WaveField />
+  <div class="hero-text">
+    <h1>{t(lang, 'hero.title1')}<br /><span class="accent">{t(lang, 'hero.title2')}</span></h1>
+    <p class="lede">{keyParts(t(lang, 'hero.lede')).map((p) => (p.key ? <kbd>{p.text}</kbd> : p.text))}</p>
+    <div class="cta-row">
+      <a class="btn btn-fill ms-only" href={STORE_URL} aria-label={t(lang, 'nav.storeAria')}><img class="ms-logo" src="/assets/brand/ms-store.svg" alt="" width="18" height="18" />{t(lang, 'hero.cta')}</a>
+      <span class="btn play-chip play-only" role="img" aria-label={t(lang, 'play.soonAria')}><img src="/assets/brand/google-play.svg" alt="" width="17" height="18" /><span aria-hidden="true">{t(lang, 'play.soon')}</span></span>
+      <a class="btn btn-line" href="#how">{t(lang, 'hero.ctaSecondary')}</a>
+    </div>
+    <p class="trial ms-only">{t(lang, 'hero.trial')}</p>
+    <p class="meta">{t(lang, 'hero.meta', { version: VERSION })}</p>
+  </div>
+
+  <div class="stage" role="img" aria-label={t(lang, 'hero.demoLabel')} data-wf-anchor id="demo">
+    <div class="window" aria-hidden="true">
+      <div class="win-bar">
+        <svg class="notes-ico" viewBox="0 0 16 16" width="16" height="16"><rect x="1.5" y="1.5" width="13" height="13" rx="3.5" fill="#E0A63A"/><rect x="4.25" y="3.75" width="7.5" height="8.5" rx="1" fill="#FFF8E8"/><path d="M5.6 6h4.8M5.6 8h4.8M5.6 10h3" stroke="#B07A1C" stroke-width="0.9" stroke-linecap="round"/></svg>
+        <span>{t(lang, 'hero.demoApp')} · {t(lang, 'hero.demoTitle')}</span>
+      </div>
+      <div class="win-body">
+        <span class="ghost">{t(lang, 'hero.demoText')}</span>
+        <span class="note" id="note" data-text={t(lang, 'hero.demoText')} data-lang={lang}>{t(lang, 'hero.demoText')}<span class="caret"></span></span>
+      </div>
+    </div>
+    <div class="overlay" id="overlay" aria-hidden="true">
+      <div class="pill" data-wf-centre>
+        <picture class="for-dark">
+          <source media="(prefers-reduced-motion: reduce)" srcset="/assets/pill/pill-dark-still.webp" />
+          <img src="/assets/pill/pill-dark.webp" alt="" width="840" height="153" loading="lazy" decoding="async" />
+        </picture>
+        <picture class="for-light">
+          <source media="(prefers-reduced-motion: reduce)" srcset="/assets/pill/pill-light-still.webp" />
+          <img src="/assets/pill/pill-light.webp" alt="" width="840" height="153" loading="lazy" decoding="async" />
+        </picture>
+      </div>
+      <div class="underbar">
+        <span class="ub-btn ub-muted">✕</span>
+        <span class="ub-div"></span>
+        <span class="ub-timer" id="ub-timer">0:00</span>
+        <span class="ub-chip"><span>{shortTag(lang)}</span><svg class="ub-chev" viewBox="0 0 12 12" width="10" height="10"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span class="ub-chip mode">{t(lang, 'hero.demoMode')}</span>
+        <span class="ub-btn ub-pin-on"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2.5L13.5 6.5L11.5 8.5L10.5 11.5L4.5 5.5L7.5 4.5L9.5 2.5Z"/><path d="M7.5 8.5L3 13"/></svg></span>
+        <span class="ub-done">✓</span>
+      </div>
+    </div>
+    <div class="keytoast" id="keytoast" aria-hidden="true">{demoKeys.map((k, i) => (<>{i > 0 && <span class="plus">+</span>}<kbd>{k}</kbd></>))}</div>
+  </div>
+</section>
+
+<!-- 2. How it works -->
+<section class="band" id="how" aria-labelledby="how-h">
+  <div class="head">
+    <span class="label">{t(lang, 'how.label')}</span>
+    <h2 id="how-h">{t(lang, 'how.title')}</h2>
+    <p class="sub">{t(lang, 'how.lede')}</p>
+  </div>
+  <ol class="steps">
+    {steps.map((s) => (
+      <li>
+        <span class="num" aria-hidden="true">{s.n}</span>
+        <h3>{keyParts(s.title).map((p) => (p.key ? <kbd>{p.text}</kbd> : p.text))}</h3>
+        <p class="muted">{keyParts(s.body).map((p) => (p.key ? <kbd>{p.text}</kbd> : p.text))}</p>
+      </li>
+    ))}
+  </ol>
+</section>
+
+<!-- 3. Batch or Live -->
+<section class="band split" id="features" aria-labelledby="features-h">
+  <div class="split-text">
+    <span class="label">{t(lang, 'delivery.label')}</span>
+    <h2 id="features-h">{t(lang, 'delivery.title')}</h2>
+    <p class="sub">{t(lang, 'delivery.body')}</p>
+  </div>
+  <Shot name="ui-general" alt={t(lang, 'delivery.shotAlt')} />
+</section>
+
+<!-- 4. Privacy -->
+<section class="band alt two" aria-labelledby="private-h">
+  <div class="head">
+    <span class="label">{t(lang, 'private.label')}</span>
+    <h2 id="private-h">{t(lang, 'private.title')}</h2>
+    <p class="sub">{t(lang, 'private.body')}</p>
+    <p class="more"><a href={pagePath(lang, 'privacy')}>{t(lang, 'private.link')}</a></p>
+  </div>
+  <dl class="points">
+    {points.map((p) => (
+      <div>
+        <dt>{p.title}</dt>
+        <dd>{p.body}</dd>
+      </div>
+    ))}
+  </dl>
+</section>
+
+<!-- 5. Speed -->
+<section class="band split mirror" aria-labelledby="speed-h">
+  <div class="split-text">
+    <span class="label">{t(lang, 'speed.label')}</span>
+    <h2 id="speed-h">{t(lang, 'speed.title')}</h2>
+    <p class="sub">{t(lang, 'speed.body')}</p>
+    <dl class="stats">
+      {stats.map((s) => (
+        <div>
+          <dt>{s.label}</dt>
+          <dd dir="auto">{s.value}</dd>
+        </div>
+      ))}
+    </dl>
+  </div>
+  <Shot name="ui-models" alt={t(lang, 'speed.shotAlt')} />
+</section>
+
+<!-- 6. Languages -->
+<section class="band alt" id="languages" aria-labelledby="langs-h">
+  <div class="head">
+    <span class="label">{t(lang, 'langs.label')}</span>
+    <h2 id="langs-h">{t(lang, 'langs.title')}</h2>
+    <p class="sub">{t(lang, 'langs.body')}</p>
+  </div>
+  <div class="lang-groups">
+    {groups.map((g) => (
+      <div class="lang-group">
+        <h3>{g.title} <span class="count">{g.items.length}</span></h3>
+        <ul class="chips">
+          {g.items.map((c) => (
+            <li>
+              <img class="flag" src={`/assets/flags/${c.code}.svg`} alt="" width="21" height="14" loading="lazy" decoding="async" />
+              <span lang={c.code} dir={c.rtl ? 'rtl' : undefined}>{c.endo}</span>
+              {c.local && <span class="local">{c.local}</span>}
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))}
+    <div class="lang-group">
+      <h3>{t(lang, 'langs.experimental')} <span class="count">66</span></h3>
+      <p class="muted">{t(lang, 'langs.experimentalBody')}</p>
+    </div>
+  </div>
+</section>
+
+<!-- 7. Details -->
+<section class="band" aria-labelledby="details-h">
+  <div class="head">
+    <span class="label">{t(lang, 'details.label')}</span>
+    <h2 id="details-h">{t(lang, 'details.title')}</h2>
+  </div>
+  <ul class="details">
+    {details.map((d) => (
+      <li>
+        <h3>{d.title}</h3>
+        <p class="muted">{d.body}</p>
+      </li>
+    ))}
+  </ul>
+  <Shot name="ui-history" alt={t(lang, 'details.shotAlt')} class="wide" />
+</section>
+
+<!-- 8. Get Eqho -->
+<section class="band alt get two" id="get" aria-labelledby="get-h" data-wf="calm">
+  <WaveField />
+  <div class="get-head">
+  <span class="label">{t(lang, 'start.label')}</span>
+  <h2 id="get-h">{t(lang, 'start.title')}</h2>
+  </div>
+  <div class="get-body">
+  <p class="sub">{t(lang, 'start.body')}</p>
+  <div class="cta-row">
+    <a class="btn btn-fill ms-only" href={STORE_URL} aria-label={t(lang, 'nav.storeAria')}><img class="ms-logo" src="/assets/brand/ms-store.svg" alt="" width="18" height="18" />{t(lang, 'start.cta')}</a>
+      <span class="btn play-chip play-only" role="img" aria-label={t(lang, 'play.soonAria')}><img src="/assets/brand/google-play.svg" alt="" width="17" height="18" /><span aria-hidden="true">{t(lang, 'play.soon')}</span></span>
+  </div>
+  <p class="req">{t(lang, 'start.req')}</p>
+  <p class="req">{otherA}<a href={LEGACY_URL}>{t(lang, 'start.otherLink')}</a>{otherB}</p>
+  </div>
+</section>
+
+<!-- 9. FAQ -->
+<section class="band faq two" id="faq" aria-labelledby="faq-h">
+  <div class="head">
+    <span class="label">{t(lang, 'faq.label')}</span>
+    <h2 id="faq-h">{t(lang, 'faq.title')}</h2>
+  </div>
+  <div class="faq-list">
+    {faq.map((f) => (
+      <details>
+        <summary><span>{f.q}</span><span class="pm" aria-hidden="true"></span></summary>
+        <p>{f.a}{f.link && <a href={f.link.href}>{f.link.text}</a>}{f.b}</p>
+      </details>
+    ))}
+  </div>
+</section>
+
+<script>import '../scripts/demo.ts';</script>
+
+<style>
+  .band {
+    padding-block: var(--pad-y); padding-inline: var(--pad-x);
+    background: var(--canvas); border-block-start: 1px solid var(--line); overflow-x: clip;
+  }
+  .band.alt { background: var(--surface); }
+  .accent { color: var(--accent); }
+  .head { max-width: 68ch; margin-block-end: clamp(28px, 4vw, 48px); }
+  h2 { font-size: clamp(1.9rem, 3.6vw, 2.9rem); }
+  .sub { margin-block-start: 12px; color: var(--muted); font-size: 1.0625rem; max-width: 64ch; }
+  .more { margin-block-start: 16px; font-weight: 600; }
+
+  /* Hero */
+  .hero {
+    border-block-start: 0;
+    display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(48px, 6vw, 88px); align-items: center;
+    padding-block: clamp(40px, 6vw, 88px) clamp(40px, 5vw, 80px);
+  }
+  @media (min-width: 1024px) { .hero { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); } }
+  .hero h1 { text-wrap: wrap; font-size: clamp(2.6rem, 6vw, 5rem); font-weight: 640; letter-spacing: -0.035em; line-height: 1.04; }
+  .hero .lede { margin-block-start: 24px; font-size: clamp(1.0625rem, 1.4vw, 1.1875rem); color: var(--muted); max-width: 52ch; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-block-start: 28px; }
+  @media (max-width: 479px) { .cta-row .btn { inline-size: 100%; } }
+  .trial { margin-block-start: 14px; font-size: 0.9375rem; color: var(--text); }
+  .meta { margin-block-start: 6px; font-size: 0.875rem; color: var(--muted); }
+
+  .stage { position: relative; isolation: isolate; padding-block-end: clamp(64px, 7vw, 84px); }
+  .stage::before {
+    content: ''; position: absolute; z-index: -1; inset-block: -14% 0; inset-inline: -10%;
+    background: var(--shot-pool); pointer-events: none;
+  }
+  .window { background: var(--win, var(--panel)); border-radius: 10px; overflow: hidden; box-shadow: var(--shot-shadow); }
+  .win-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding-block: 9px; padding-inline: 14px; font-size: 0.8125rem; color: var(--muted);
+    border-block-end: 1px solid var(--line); white-space: nowrap; overflow: hidden;
+  }
+  .win-bar > span { overflow: hidden; text-overflow: ellipsis; }
+  .notes-ico { flex: none; }
+  .win-body { overflow-wrap: anywhere;
+    display: grid; padding-block: clamp(22px, 3vw, 32px) clamp(72px, 8vw, 96px); padding-inline: clamp(20px, 3vw, 32px);
+    font-size: clamp(1.0625rem, 1.5vw, 1.25rem); line-height: 1.6; color: var(--text);
+  }
+  .win-body > span { grid-area: 1 / 1; }
+  .ghost { visibility: hidden; }
+  :global(.caret) {
+    display: inline-block; inline-size: 2px; block-size: 1.1em; margin-inline-start: 1px;
+    vertical-align: -0.17em; background: var(--accent); animation: caret 1.05s steps(1) infinite;
+  }
+  @keyframes caret { 50% { opacity: 0; } }
+  :global(.ph) { animation: ph-in 0.12s ease-out both; }
+  @keyframes ph-in { from { opacity: 0; } }
+
+  /* Pill centred on the window's bottom edge, the under-pill bar pinned below it. */
+  .overlay {
+    position: absolute; inset-inline: 0; inset-block-end: 0; margin-inline: auto;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    inline-size: min(84%, 440px);
+    transition: opacity 0.2s ease-out, transform 0.18s ease-out;
+  }
+  .live .overlay { opacity: 0; transform: scale(0.92); }
+  .live.pill-on .overlay { opacity: 1; transform: none; transition: opacity 0.18s ease-out, transform 0.18s ease-out; }
+  .pill { inline-size: 100%; }
+  .pill img { inline-size: 100%; aspect-ratio: 840 / 153; filter: drop-shadow(0 14px 28px rgba(4, 12, 30, 0.6)); }
+  .underbar {
+    display: inline-flex; align-items: center; gap: 4px; block-size: 34px; padding-inline: 5px;
+    border-radius: 999px; background: rgba(22, 22, 26, 0.94); border: 1px solid rgba(62, 62, 72, 0.92);
+    box-shadow: 0 12px 30px rgba(4, 10, 24, 0.5); color: #F5F6F8; font-size: 13px; line-height: 1; white-space: nowrap;
+  }
+  .ub-btn { inline-size: 24px; block-size: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; }
+  .ub-muted { color: #9898A2; }
+  .ub-pin-on { color: #58A6FF; }
+  .ub-div { inline-size: 1px; block-size: 14px; background: rgba(58, 58, 66, 0.85); }
+  .ub-timer { color: #9898A2; font-variant-numeric: tabular-nums; padding-inline: 5px; min-inline-size: 3.2ch; }
+  .ub-chip { display: inline-flex; align-items: center; gap: 4px; block-size: 24px; padding-inline: 8px; border-radius: 999px; color: #F5F6F8; }
+  .ub-chip.mode { color: #58A6FF; }
+  .ub-chev { color: #9898A2; }
+  .ub-done { inline-size: 30px; block-size: 24px; border-radius: 999px; background: #1A489B; color: #FFF; display: grid; place-items: center; font-size: 13px; font-weight: 600; }
+
+  /* Keycap toast near the stage's lower start corner. */
+  .keytoast {
+    position: absolute; inset-inline-start: 14px; inset-block-end: calc(clamp(64px, 7vw, 84px) + 56px);
+    display: none; align-items: center; gap: 6px; padding-block: 6px; padding-inline: 8px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.7); font-size: 0.8125rem; color: var(--muted);
+    opacity: 0; transition: opacity 0.15s ease-out;
+  }
+  .live .keytoast { display: inline-flex; }
+  .live.toast-on .keytoast { opacity: 1; }
+  .keytoast kbd { transition: transform 0.08s ease-out, background-color 0.08s ease-out; }
+  .toast-press .keytoast kbd { transform: translateY(1px); background: var(--btn); border-color: var(--btn); color: #fff; }
+
+  /* Steps */
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; }
+  @media (min-width: 820px) { .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(24px, 4vw, 64px); } }
+  .steps li { border-block-start: 1px solid var(--line-ctl); padding-block-start: 24px; }
+  .num {
+    display: block; font-size: clamp(3rem, 5vw, 4.5rem); font-weight: 250; line-height: 1;
+    letter-spacing: -0.04em; color: var(--accent); margin-block-end: 24px; font-variant-numeric: tabular-nums;
+  }
+  .steps h3, .details h3, .lang-group h3 { font-size: 1.125rem; letter-spacing: -0.01em; line-height: 1.35; }
+  .steps p { margin-block-start: 10px; max-width: 46ch; }
+
+  /* Split rows */
+  .split { display: grid; grid-template-columns: minmax(0, 1fr); gap: clamp(36px, 5vw, 80px); align-items: center; }
+  @media (min-width: 1024px) {
+    .split { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+    .split.mirror { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); }
+    .split.mirror .split-text { order: 2; }
+  }
+  .split :global(.shot) { justify-self: center; }
+
+  /* Privacy points */
+  .points { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 clamp(24px, 4vw, 64px); }
+  @media (min-width: 820px) { .points { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .points > div { border-block-start: 1px solid var(--line); padding-block: 20px; }
+  .points dt { font-weight: 600; }
+  .points dd { margin: 6px 0 0; color: var(--muted); }
+
+  /* Stats */
+  .stats { margin: 40px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+  .stats > div { display: flex; flex-direction: column-reverse; justify-content: flex-end; border-block-start: 1px solid var(--line); padding-block-start: 16px; }
+  .stats dd { margin: 0; font-size: clamp(1.75rem, 3vw, 2.5rem); font-weight: 560; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; unicode-bidi: isolate; }
+  .stats dt { margin-block-start: 6px; font-size: 0.875rem; color: var(--muted); line-height: 1.45; }
+  @media (max-width: 520px) { .stats { grid-template-columns: minmax(0, 1fr); gap: 0; } .stats > div { padding-block: 14px; } }
+
+  /* Languages */
+  .lang-groups { display: grid; gap: 40px; }
+  .lang-group h3 { margin-block-end: 14px; }
+  .count { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; margin-inline-start: 4px; }
+  .chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips li {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--line-ctl); border-radius: 8px; padding-block: 6px; padding-inline: 9px 11px;
+    font-size: 0.9375rem; background: var(--panel);
+  }
+  .chips .flag { inline-size: 21px; block-size: 14px; flex: none; border-radius: 2px; }
+  .local { color: var(--muted); font-size: 0.8125rem; }
+  .lang-group p { max-width: 64ch; }
+
+  /* Details */
+  .details {
+    list-style: none; margin: 0; padding: 0;
+    display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 clamp(24px, 3vw, 48px);
+  }
+  @media (min-width: 640px) { .details { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (min-width: 1100px) { .details { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .details li { border-block-start: 1px solid var(--line); padding-block: 20px 28px; }
+  .details p { margin-block-start: 8px; }
+  .band :global(.shot.wide) { margin-block-start: clamp(32px, 5vw, 64px); }
+
+  /* Get */
+  .get h2 { font-size: clamp(2.2rem, 5vw, 4rem); max-width: 22ch; letter-spacing: -0.03em; }
+  .req { margin-block-start: 12px; font-size: 0.9375rem; color: var(--muted); max-width: 72ch; }
+  .get .cta-row + .req { margin-block-start: 20px; }
+
+  /* Two-column bands (privacy, get, FAQ) */
+  @media (min-width: 1024px) {
+    .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(40px, 6vw, 96px); align-items: start; }
+    .two > .head { margin-block-end: 0; }
+    .two .points { grid-template-columns: minmax(0, 1fr); }
+    .two .points > div:last-child { border-block-end: 1px solid var(--line); }
+    .get .sub:first-child { margin-block-start: 0; }
+    .faq.two { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+    .faq.two > .head { position: sticky; inset-block-start: 88px; }
+  }
+  .get .get-body > .sub:first-child { margin-block-start: 12px; }
+  @media (min-width: 1024px) { .get .get-body > .sub:first-child { margin-block-start: 0; } .get-body .cta-row { margin-block-start: 24px; } }
+
+  /* FAQ */
+  .faq-list { max-width: 72ch; border-block-end: 1px solid var(--line); }
+  .faq-list details { border-block-start: 1px solid var(--line); }
+  .faq-list summary {
+    display: flex; align-items: center; justify-content: space-between; gap: 24px;
+    padding-block: 20px; cursor: pointer; list-style: none; font-size: 1.0625rem; font-weight: 600;
+    transition: color var(--ease);
+  }
+  .faq-list summary::-webkit-details-marker { display: none; }
+  .faq-list summary:hover { color: var(--accent); transition-duration: 0s; }
+  .pm { position: relative; flex: none; inline-size: 14px; block-size: 14px; color: var(--muted); }
+  .pm::before, .pm::after { content: ''; position: absolute; inset-inline-start: 0; inset-block-start: 6px; inline-size: 14px; block-size: 2px; background: currentColor; border-radius: 1px; }
+  .pm::after { transform: rotate(90deg); transition: transform var(--ease); }
+  details[open] .pm::after { transform: rotate(0deg); }
+  .faq-list details p { padding-block-end: 22px; color: var(--muted); max-width: 66ch; }
+</style>

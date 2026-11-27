@@ -1,0 +1,51 @@
+---
+import { SUPPORT_EMAIL } from '../lib/site';
+import { ANALYTICS_OPT_IN } from '../lib/features';
+import { t, tRich } from '../lib/i18n';
+interface Props { lang: string }
+const { lang } = Astro.props;
+const mail = { link: { href: `mailto:${SUPPORT_EMAIL}`, text: SUPPORT_EMAIL } };
+// Each block is [kind, key]; kind p = paragraph, ul = list of keys.
+type Block = ['p', string] | ['ul', string[]];
+// i18n-keys: privacy.mic.title privacy.mic.p1 privacy.mic.p2
+// i18n-keys: privacy.files.title privacy.files.p1 privacy.files.li1 privacy.files.li2 privacy.files.li3 privacy.files.li4 privacy.files.li5 privacy.files.p2
+// i18n-keys: privacy.network.title privacy.network.intro privacy.network.introNoAnalytics privacy.network.li1 privacy.network.li2 privacy.network.analytics
+// i18n-keys: privacy.clipboard.title privacy.clipboard.p1 privacy.ai.title privacy.ai.p1 privacy.ai.p2 privacy.ai.p3
+// i18n-keys: privacy.site.title privacy.site.p1 privacy.site.p2
+const sections: { id: string; blocks: Block[] }[] = [
+  { id: 'mic', blocks: [['p', 'p1'], ['p', 'p2']] },
+  { id: 'files', blocks: [['p', 'p1'], ['ul', ['li1', 'li2', 'li3', 'li4', 'li5']], ['p', 'p2']] },
+  {
+    id: 'network',
+    blocks: [
+      ['p', ANALYTICS_OPT_IN ? 'intro' : 'introNoAnalytics'],
+      ['ul', ANALYTICS_OPT_IN ? ['li1', 'li2', 'analytics'] : ['li1', 'li2']],
+    ],
+  },
+  { id: 'clipboard', blocks: [['p', 'p1']] },
+  { id: 'ai', blocks: [['p', 'p1'], ['p', 'p2'], ['p', 'p3']] },
+  { id: 'site', blocks: [['p', 'p1'], ['p', 'p2']] },
+];
+const r = (id: string, k: string) => tRich(lang, `privacy.${id}.${k}`, mail);
+---
+<div class="doc">
+  <header class="doc-head">
+    <h1>{t(lang, 'privacy.title')}</h1>
+    <p class="lede">{t(lang, 'privacy.lede')}</p>
+  </header>
+  {sections.map((s) => (
+    <section class="doc-sec">
+      <h2>{t(lang, `privacy.${s.id}.title`)}</h2>
+      <div class="body">
+        {s.blocks.map((b) =>
+          b[0] === 'p' ? <p set:html={r(s.id, b[1])} /> : <ul>{b[1].map((k) => <li set:html={r(s.id, k)} />)}</ul>
+        )}
+      </div>
+    </section>
+  ))}
+  <p class="updated muted">{t(lang, 'privacy.updated')}</p>
+</div>
+
+<style>
+  .updated { border-block-start: 1px solid var(--line); padding-block-start: 24px; font-size: 0.875rem; }
+</style>
