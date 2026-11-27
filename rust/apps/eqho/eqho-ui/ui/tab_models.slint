@@ -29,9 +29,9 @@ component ModelStatusIcon inherits Rectangle {
         : root.has-error ? "Download failed — click to retry"
         : "Download model";
 
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
+    width: 28px * Theme.scale;
+    height: 28px * Theme.scale;
+    border-radius: 8px * Theme.scale;
     border-width: 0px;
     background: root.is-downloading ? Theme.accent-muted
         : root.has-error ? (touch.has-hover ? (Theme.dark ? #F43F5E30 : #DC262622) : (Theme.dark ? #F43F5E1C : #DC262614))
@@ -155,34 +155,92 @@ component ModelCard inherits Rectangle {
         spacing: Theme.space-8;
 
         HorizontalLayout {
-            min-height: 28px;
+            min-height: 28px * Theme.scale;
             spacing: Theme.space-8;
             alignment: space-between;
 
-            Text {
-                text: root.item.name;
-                font-size: Theme.font-size-base;
-                font-weight: 600;
-                color: Theme.text;
+            HorizontalLayout {
                 horizontal-stretch: 1;
-                wrap: word-wrap;
-                vertical-alignment: center;
+                spacing: 6px * Theme.scale;
+                alignment: start;
+
+                Text {
+                    text: root.item.name;
+                    font-size: Theme.font-size-base;
+                    font-weight: 600;
+                    color: Theme.text;
+                    horizontal-stretch: 0;
+                    vertical-alignment: center;
+                }
+
+                // Subtle Eqho-blue sparkle badge right next to the title for PC-recommended models;
+                // hovering displays "Recommended for this PC" without cluttering the card body.
+                if root.item.recommendation != "" : VerticalLayout {
+                    horizontal-stretch: 0;
+                    alignment: center;
+                    rec-badge := Rectangle {
+                        width: 20px * Theme.scale;
+                        height: 20px * Theme.scale;
+                        border-radius: 6px * Theme.scale;
+                        background: rec-touch.has-hover ? Theme.accent-muted : transparent;
+                        accessible-role: text;
+                        accessible-label: root.item.recommendation;
+
+                        PhIcon {
+                            glyph: Icons.sparkle;
+                            size: 14px;
+                            icon-color: Theme.accent-text;
+                        }
+
+                        rec-touch := TouchArea {
+                            changed has-hover => {
+                                if (self.has-hover) {
+                                    HoverTooltip.text = root.item.recommendation;
+                                    HoverTooltip.anchor-x = rec-badge.absolute-position.x;
+                                    HoverTooltip.anchor-y = rec-badge.absolute-position.y;
+                                    HoverTooltip.anchor-w = rec-badge.width;
+                                    HoverTooltip.anchor-h = rec-badge.height;
+                                    HoverTooltip.visible = true;
+                                } else if (HoverTooltip.text == root.item.recommendation) {
+                                    HoverTooltip.visible = false;
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
+            // Active card top-right: signature Eqho waveform icon (distinct from the check-circle
+            // inside the bottom Active pill — zero duplicate checkmarks).
             if root.is-active : VerticalLayout {
                 horizontal-stretch: 0;
                 alignment: center;
-                Rectangle {
-                    width: 28px;
-                    height: 28px;
-                    border-radius: 8px;
+                active-wave := Rectangle {
+                    width: 28px * Theme.scale;
+                    height: 28px * Theme.scale;
+                    border-radius: 8px * Theme.scale;
                     background: Theme.accent-muted;
                     accessible-role: none;
 
                     PhIcon {
-                        glyph: Icons.check-circle;
-                        size: 16px;
+                        glyph: Icons.waveform;
+                        size: 15px;
                         icon-color: Theme.accent-text;
+                    }
+
+                    TouchArea {
+                        changed has-hover => {
+                            if (self.has-hover) {
+                                HoverTooltip.text = "Active speech model";
+                                HoverTooltip.anchor-x = active-wave.absolute-position.x;
+                                HoverTooltip.anchor-y = active-wave.absolute-position.y;
+                                HoverTooltip.anchor-w = active-wave.width;
+                                HoverTooltip.anchor-h = active-wave.height;
+                                HoverTooltip.visible = true;
+                            } else if (HoverTooltip.text == "Active speech model") {
+                                HoverTooltip.visible = false;
+                            }
+                        }
                     }
                 }
             }
@@ -202,13 +260,6 @@ component ModelCard inherits Rectangle {
             text: root.item.detail;
             font-size: Theme.font-size-sm;
             color: Theme.text-muted;
-            wrap: word-wrap;
-        }
-
-        if root.item.recommendation != "" : Text {
-            text: root.item.recommendation;
-            font-size: Theme.font-size-sm;
-            color: Theme.accent-text;
             wrap: word-wrap;
         }
 

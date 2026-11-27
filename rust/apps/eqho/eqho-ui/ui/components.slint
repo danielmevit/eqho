@@ -489,9 +489,9 @@ export component CircleIconButton inherits Rectangle {
     in property <string> tooltip: root.accessible-name;
     callback clicked();
 
-    width: 28px;
-    height: 28px;
-    border-radius: 9px;
+    width: 28px * Theme.scale;
+    height: 28px * Theme.scale;
+    border-radius: 9px * Theme.scale;
     border-width: root.active ? 1px : 0px;
     border-color: root.active ? Theme.border : transparent;
     background: root.active ? Theme.surface-hover
@@ -533,8 +533,8 @@ export component ThemedLineEdit inherits Rectangle {
     in property <length> font-size: Theme.font-size-base;
     callback edited(string);
 
-    height: 32px;
-    border-radius: 9px;
+    height: 32px * Theme.scale;
+    border-radius: 9px * Theme.scale;
     background: Theme.dark ? Theme.surface-tertiary : Theme.surface;
     border-width: 1px;
     border-color: input.has-focus ? Theme.accent-line : Theme.border;
@@ -571,8 +571,8 @@ export component ThemedTextEdit inherits Rectangle {
     in property <length> font-size: Theme.font-size-sm;
     callback edited(string);
 
-    min-height: 64px;
-    border-radius: 9px;
+    min-height: 64px * Theme.scale;
+    border-radius: 9px * Theme.scale;
     background: Theme.surface-tertiary;
     border-width: 1px;
     border-color: input.has-focus ? Theme.accent-line : Theme.border;
@@ -609,8 +609,8 @@ export component EqhoWordmark inherits Rectangle {
     property <color> primary: Theme.dark ? #029cff : #0062b1;
     property <color> secondary: Theme.dark ? #0062b1 : #029cff;
 
-    width: 62px;
-    height: 26.5px;
+    width: 62px * Theme.scale;
+    height: 26.5px * Theme.scale;
     accessible-role: none;
 
     // e, h, o
@@ -684,8 +684,8 @@ export component TopBar inherits Rectangle {
                 drop-shadow-color: Theme.dark ? #00000050 : #00000014;
 
                 HorizontalLayout {
-                    padding: 4px;
-                    spacing: 4px;
+                    padding: 4px * Theme.scale;
+                    spacing: 4px * Theme.scale;
 
                     for nav-item in [
                         { id: "general", label: "General" },
@@ -693,9 +693,9 @@ export component TopBar inherits Rectangle {
                         { id: "history", label: "History" },
                     ] : pill := Rectangle {
                         property <bool> is-active: root.active-tab == nav-item.id;
-                        min-width: 98px;
-                        height: 34px;
-                        border-radius: 17px;
+                        min-width: Math.max(94px * Theme.scale, pill-row.preferred-width);
+                        height: 34px * Theme.scale;
+                        border-radius: 17px * Theme.scale;
                         background: pill.is-active ? Theme.accent
                             : nav-touch.pressed ? Theme.button-outline-pressed
                             : nav-touch.has-hover ? Theme.surface-hover
@@ -709,10 +709,10 @@ export component TopBar inherits Rectangle {
                             root.tab-selected(nav-item.id);
                         }
 
-                        HorizontalLayout {
-                            padding-left: 15px;
-                            padding-right: 15px;
-                            spacing: 6px;
+                        pill-row := HorizontalLayout {
+                            padding-left: 14px * Theme.scale;
+                            padding-right: 14px * Theme.scale;
+                            spacing: 6px * Theme.scale;
                             alignment: center;
 
                             // Unified Phosphor icon shown ONLY on the active tab (GatherOS style;
@@ -753,9 +753,9 @@ export component TopBar inherits Rectangle {
 
         // Right: smaller, calmer utility icons (Guide/Tour, Theme, Settings popup)
         HorizontalLayout {
-            width: 120px;
+            width: 120px * Theme.scale;
             alignment: end;
-            spacing: 4px;
+            spacing: 4px * Theme.scale;
 
             VerticalLayout {
                 alignment: center;
@@ -1103,8 +1103,8 @@ export component FlagDropdown inherits Rectangle {
         popup.show();
     }
 
-    height: 32px;
-    border-radius: 9px;
+    height: 32px * Theme.scale;
+    border-radius: 9px * Theme.scale;
     border-width: 1px;
     border-color: focus.has-focus ? Theme.accent-line : (touch.has-hover && root.enabled) ? Theme.text-muted : Theme.border;
     background: !root.enabled ? Theme.surface-tertiary

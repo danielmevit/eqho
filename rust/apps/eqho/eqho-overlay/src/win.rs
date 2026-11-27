@@ -18,7 +18,8 @@ use windows::Win32::Graphics::Gdi::{
     BLENDFUNCTION, CLIP_DEFAULT_PRECIS, CreateCompatibleDC, CreateDIBSection, CreateFontW,
     DEFAULT_CHARSET, DEFAULT_PITCH, DIB_RGB_COLORS, DRAW_TEXT_FORMAT, DT_CALCRECT, DT_CENTER,
     DT_END_ELLIPSIS, DT_LEFT, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER, DT_WORDBREAK, DeleteDC,
-    DeleteObject, DrawTextW, FF_SWISS, GdiFlush, GetDC, GetDeviceCaps, GetMonitorInfoW, HBITMAP,
+    DeleteObject, DrawTextW, FF_MODERN, FF_ROMAN, FF_SWISS, GdiFlush, GetDC, GetDeviceCaps,
+    GetMonitorInfoW, HBITMAP,
     HDC, HFONT, HGDIOBJ, HMONITOR, LOGPIXELSY, MONITOR_DEFAULTTOPRIMARY, MONITOR_DEFAULTTONEAREST,
     MONITORINFO, MonitorFromPoint, MonitorFromWindow, OUT_DEFAULT_PRECIS, ReleaseDC, SelectObject,
     SetBkMode, SetTextColor, TRANSPARENT,
@@ -74,12 +75,10 @@ struct WindowCompositionAttribData {
 
 const WCA_ACCENT_POLICY: u32 = 19;
 const ACCENT_DISABLED: u32 = 0;
+const ACCENT_ENABLE_BLURBEHIND: u32 = 3;
 const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
 
-/// Enable (or disable when `tint_alpha == 0`) Windows 10/11 Acrylic frosted blur dynamically via
-/// `user32.dll`, giving floating glass panels strong backdrop blur at normal opacities and clean
-/// pure floating text at 100% see-through (`panel_opacity == 0.0`).
-fn apply_acrylic_blur_behind(hwnd: HWND, dark: bool, tint_alpha: u8) {
+fn set_window_accent_policy(hwnd: HWND, mut policy: AccentPolicy) {
     let user32_name: Vec<u16> = "user32.dll\0".encode_utf16().collect();
     // SAFETY: Resolving `SetWindowCompositionAttribute` from already-loaded `user32.dll`.
     let Ok(hmod) = (unsafe { GetModuleHandleW(PCWSTR(user32_name.as_ptr())) }) else {
@@ -93,7 +92,21 @@ fn apply_acrylic_blur_behind(hwnd: HWND, dark: bool, tint_alpha: u8) {
     type SetWcaFn = unsafe extern "system" fn(HWND, *mut WindowCompositionAttribData) -> i32;
     // SAFETY: Function pointer signature matches `SetWindowCompositionAttribute`.
     let set_wca: SetWcaFn = unsafe { std::mem::transmute(proc_ptr) };
-    let mut policy = if tint_alpha == 0 {
+    let mut data = WindowCompositionAttribData {
+        attrib: WCA_ACCENT_POLICY,
+        pv_data: (&mut policy as *mut AccentPolicy).cast::<c_void>(),
+        cb_data: std::mem::size_of::<AccentPolicy>(),
+    };
+    // SAFETY: `hwnd` and `data` are valid for the duration of the call.
+    unsafe {
+        let _ = set_wca(hwnd, &mut data);
+    }
+}
+
+/// Enable (or disable when `tint_alpha == 0`) Windows 10/11 Acrylic frosted blur dynamically via
+/// `user32.dll` for floating popup / recovery glass cards.
+fn apply_acrylic_blur_behind(hwnd: HWND, dark: bool, tint_alpha: u8) {
+    let policy = if tint_alpha == 0 {
         AccentPolicy {
             accent_state: ACCENT_DISABLED,
             accent_flags: 0,
@@ -111,14 +124,43 @@ fn apply_acrylic_blur_behind(hwnd: HWND, dark: bool, tint_alpha: u8) {
             animation_id: 0,
         }
     };
-    let mut data = WindowCompositionAttribData {
-        attrib: WCA_ACCENT_POLICY,
-        pv_data: (&mut policy as *mut AccentPolicy).cast::<c_void>(),
-        cb_data: std::mem::size_of::<AccentPolicy>(),
-    };
-    // SAFETY: `hwnd` and `data` are valid for the duration of the call.
-    unsafe {
-        let _ = set_wca(hwnd, &mut data);
+    set_window_accent_policy(hwnd, policy);
+}
+
+/// Apply user-selected backdrop blur (`"off"` / `"soft"` / `"frosted"`) to the transcription
+/// text box ONLY (never the pill). Disables blur cleanly at `100%` see-through (`panel_opacity <= 0.01`).
+fn apply_panel_blur_behind(hwnd: HWND, dark: bool, blur_mode: &str, panel_opacity: f64) {
+    let opacity = (panel_opacity as f32).clamp(0.0, 1.0);
+    if opacity <= 0.01 || blur_mode == "off" {
+        set_window_accent_policy(
+            hwnd,
+            AccentPolicy {
+                accent_state: ACCENT_DISABLED,
+                accent_flags: 0,
+                gradient_color: 0,
+                animation_id: 0,
+            },
+        );
+        return;
+    }
+    match blur_mode {
+        "frosted" => {
+            let tint = panel_acrylic_tint_alpha(panel_opacity);
+            apply_acrylic_blur_behind(hwnd, dark, tint);
+        }
+        _ => {
+            // `"soft"` uses Windows DWM BlurBehind without Acrylic's heavy milky opacity floor,
+            // so `panel_opacity` smoothly controls tint transparency across 0%–95%.
+            set_window_accent_policy(
+                hwnd,
+                AccentPolicy {
+                    accent_state: ACCENT_ENABLE_BLURBEHIND,
+                    accent_flags: 0,
+                    gradient_color: 0,
+                    animation_id: 0,
+                },
+            );
+        }
     }
 }
 
@@ -127,7 +169,7 @@ fn panel_acrylic_tint_alpha(panel_opacity: f64) -> u8 {
     if opacity <= 0.01 {
         0
     } else {
-        (opacity * 168.0).round().clamp(1.0, 168.0) as u8
+        (opacity.powf(1.25) * 148.0).round().clamp(1.0, 148.0) as u8
     }
 }
 
@@ -582,6 +624,8 @@ struct OverlayState {
     session_start: Instant,
     font: Option<HFONT>,
     font_size: i32,
+    font_family: String,
+    font_style: String,
 
     // Under-pill bar & language menu state
     visibility: UnderbarVisibility,
@@ -642,7 +686,11 @@ impl OverlayState {
     }
 
     fn ensure_font(&mut self) -> Option<HFONT> {
-        if self.font.is_some() && self.font_size == self.config.font_size {
+        if self.font.is_some()
+            && self.font_size == self.config.font_size
+            && self.font_family == self.config.font_family
+            && self.font_style == self.config.font_style
+        {
             return self.font;
         }
         if let Some(old) = self.font.take() {
@@ -660,7 +708,21 @@ impl OverlayState {
             let _ = ReleaseDC(None, hdc);
         }
         let height = -((self.config.font_size * dpi) / 72);
-        let face: Vec<u16> = "Segoe UI\0".encode_utf16().collect();
+        let (face_str, family_flags) = match self.config.font_family.as_str() {
+            "bahnschrift" => ("Bahnschrift\0", FF_SWISS.0),
+            "arial" => ("Arial\0", FF_SWISS.0),
+            "verdana" => ("Verdana\0", FF_SWISS.0),
+            "georgia" => ("Georgia\0", FF_ROMAN.0),
+            "consolas" => ("Consolas\0", FF_MODERN.0),
+            _ => ("Segoe UI\0", FF_SWISS.0),
+        };
+        let (weight, italic) = match self.config.font_style.as_str() {
+            "bold" => (700, 0),
+            "italic" => (400, 1),
+            "bold-italic" => (700, 1),
+            _ => (400, 0),
+        };
+        let face: Vec<u16> = face_str.encode_utf16().collect();
         // SAFETY: Creating a GDI logical font for panel text measurement and painting.
         let font = unsafe {
             CreateFontW(
@@ -668,19 +730,21 @@ impl OverlayState {
                 0,
                 0,
                 0,
-                400, // FW_NORMAL
-                0,
+                weight,
+                italic,
                 0,
                 0,
                 DEFAULT_CHARSET,
                 OUT_DEFAULT_PRECIS,
                 CLIP_DEFAULT_PRECIS,
                 ANTIALIASED_QUALITY,
-                (DEFAULT_PITCH.0 | FF_SWISS.0) as u32,
+                (DEFAULT_PITCH.0 | family_flags) as u32,
                 PCWSTR(face.as_ptr()),
             )
         };
         self.font_size = self.config.font_size;
+        self.font_family = self.config.font_family.clone();
+        self.font_style = self.config.font_style.clone();
         self.font = Some(font);
         self.font
     }
@@ -1258,10 +1322,15 @@ impl OverlayState {
         let was_enabled = self.config.enabled;
         let theme_changed = self.config.dark_theme != cfg.dark_theme;
         let panel_opacity_changed = (self.config.panel_opacity - cfg.panel_opacity).abs() > 1e-3;
+        let panel_blur_changed = self.config.panel_blur != cfg.panel_blur;
         self.config = cfg;
-        if theme_changed || panel_opacity_changed {
-            let panel_tint = panel_acrylic_tint_alpha(self.config.panel_opacity);
-            apply_acrylic_blur_behind(self.panel_hwnd, self.config.dark_theme, panel_tint);
+        if theme_changed || panel_opacity_changed || panel_blur_changed {
+            apply_panel_blur_behind(
+                self.panel_hwnd,
+                self.config.dark_theme,
+                &self.config.panel_blur,
+                self.config.panel_opacity,
+            );
         }
         if theme_changed {
             apply_acrylic_blur_behind(self.popup_hwnd, self.config.dark_theme, 0xB8);
@@ -1420,12 +1489,16 @@ impl OverlayState {
         let h = self.panel_rect.height.max(1);
         let dark = self.config.dark_theme;
 
-        // Scale background and border alpha smoothly from 0 (100% see-through, Acrylic disabled)
-        // up to full opacity over Windows 11 Acrylic blur, while keeping text glyphs 100% opaque.
+        // Scale background and border alpha smoothly from 0 (100% see-through) up to full opacity
+        // according to the selected text-box blur mode (`off` / `soft` / `frosted`), while keeping
+        // text glyphs 100% opaque (with a gentle subtitle drop-shadow when nearly transparent).
         let opacity = (self.config.panel_opacity as f32).clamp(0.0, 1.0);
-        let bg_alpha = (opacity * if dark { 176.0 } else { 190.0 })
-            .round()
-            .clamp(0.0, 255.0) as u8;
+        let max_bg_alpha: f32 = match self.config.panel_blur.as_str() {
+            "off" => if dark { 232.0 } else { 244.0 },
+            "frosted" => if dark { 176.0 } else { 190.0 },
+            _ => if dark { 196.0 } else { 210.0 },
+        };
+        let bg_alpha = (opacity * max_bg_alpha).round().clamp(0.0, 255.0) as u8;
         let border_alpha = (opacity * if dark { 44.0 } else { 36.0 })
             .round()
             .clamp(0.0, 255.0) as u8;
@@ -1462,6 +1535,27 @@ impl OverlayState {
         {
             let text_w = w.saturating_sub((2 * PANEL_PADDING_X) as u32).max(1);
             let text_h = h.saturating_sub((2 * PANEL_PADDING_Y) as u32).max(1);
+            if opacity < 0.35 {
+                let shadow_alpha = (((0.35 - opacity) / 0.35) * 145.0)
+                    .round()
+                    .clamp(0.0, 145.0) as u8;
+                if shadow_alpha > 0 {
+                    let shadow_color = if dark {
+                        Rgba::new(0x00, 0x00, 0x00, shadow_alpha)
+                    } else {
+                        Rgba::new(0xFF, 0xFF, 0xFF, shadow_alpha)
+                    };
+                    let shadow_rect =
+                        LocalRect::new(PANEL_PADDING_X, PANEL_PADDING_Y + 1, text_w, text_h);
+                    self.text_mask.draw_wrapped_text_into_canvas(
+                        &mut self.panel_canvas,
+                        &self.panel_text,
+                        shadow_rect,
+                        font,
+                        shadow_color,
+                    );
+                }
+            }
             let text_rect = LocalRect::new(PANEL_PADDING_X, PANEL_PADDING_Y, text_w, text_h);
             self.text_mask.draw_wrapped_text_into_canvas(
                 &mut self.panel_canvas,
@@ -2714,10 +2808,11 @@ fn run_overlay_thread(
     apply_win11_round_corners(panel_hwnd);
     apply_win11_round_corners(popup_hwnd);
     apply_win11_round_corners(recovery_hwnd);
-    apply_acrylic_blur_behind(
+    apply_panel_blur_behind(
         panel_hwnd,
         config.dark_theme,
-        panel_acrylic_tint_alpha(config.panel_opacity),
+        &config.panel_blur,
+        config.panel_opacity,
     );
     apply_acrylic_blur_behind(popup_hwnd, config.dark_theme, 0xB8);
     apply_acrylic_blur_behind(recovery_hwnd, config.dark_theme, 0xA8);
@@ -2765,6 +2860,8 @@ fn run_overlay_thread(
         session_start: now,
         font: None,
         font_size: 0,
+        font_family: String::new(),
+        font_style: String::new(),
         visibility,
         bar_shown: false,
         bar_layout,

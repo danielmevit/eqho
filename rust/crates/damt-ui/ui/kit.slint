@@ -13,8 +13,8 @@ export component Button inherits Rectangle {
     in property <bool> enabled: true;
     in property <length> font-size: Theme.font-size-label;
     in property <int> font-weight: 400;
-    in property <length> padding-x: kind == ButtonKind.accent ? 12px : kind == ButtonKind.outline ? 10px : 8px;
-    in property <length> padding-y: 6px;
+    in property <length> padding-x: (kind == ButtonKind.accent ? 12px : kind == ButtonKind.outline ? 10px : 8px) * Theme.scale;
+    in property <length> padding-y: 6px * Theme.scale;
     in property <length> fixed-width: 0px;
     in property <length> fixed-height: 0px;
     in property <string> accessible-name: root.text;
@@ -29,7 +29,7 @@ export component Button inherits Rectangle {
     horizontal-stretch: 0;
     vertical-stretch: 0;
 
-    border-radius: 9px;
+    border-radius: 9px * Theme.scale;
     border-width: root.kind == ButtonKind.outline ? 1px : 0px;
     border-color: Theme.border;
     background: root.kind == ButtonKind.accent
@@ -94,16 +94,16 @@ export component CloseButton inherits Rectangle {
     out property <bool> has-hover: touch.has-hover;
     callback clicked();
     callback hover-changed(bool);
-    width: 28px;
-    height: 28px;
-    border-radius: 9px;
+    width: 28px * Theme.scale;
+    height: 28px * Theme.scale;
+    border-radius: 9px * Theme.scale;
     background: touch.pressed ? Theme.button-outline-pressed : touch.has-hover ? Theme.surface-hover : transparent;
     accessible-role: button;
     accessible-label: root.accessible-name;
     accessible-action-default => { if (root.enabled) { root.clicked(); } }
     Path {
-        width: 10px;
-        height: 10px;
+        width: 10px * Theme.scale;
+        height: 10px * Theme.scale;
         commands: "M0 0 L10 10 M10 0 L0 10";
         viewbox-width: 10;
         viewbox-height: 10;
@@ -245,8 +245,8 @@ export component Toggle inherits Rectangle {
     in property <string> accessible-name;
     callback toggled(bool);
 
-    width: 40px;
-    height: 20px;
+    width: 40px * Theme.scale;
+    height: 20px * Theme.scale;
     horizontal-stretch: 0;
     vertical-stretch: 0;
     opacity: root.enabled ? 1.0 : 0.4;
@@ -281,11 +281,11 @@ export component Toggle inherits Rectangle {
     }
 
     knob := Rectangle {
-        width: 10px;
-        height: 10px;
-        y: 5px;
-        x: root.checked ? root.width - 15px : 5px;
-        border-radius: 5px;
+        width: 10px * Theme.scale;
+        height: 10px * Theme.scale;
+        y: 5px * Theme.scale;
+        x: root.checked ? root.width - 15px * Theme.scale : 5px * Theme.scale;
+        border-radius: 5px * Theme.scale;
         background: root.checked ? Theme.on-accent : root.off-tone;
         animate x { duration: 120ms; easing: ease-out; }
     }
@@ -524,7 +524,7 @@ export component TabList inherits Rectangle {
     callback picked(int);
 
     min-height: Math.max(34px * Theme.scale, lay.preferred-height);
-    border-radius: 17px;
+    border-radius: self.height / 2;
     border-width: 1px;
     border-color: Theme.dark ? #303038 : Theme.border-subtle;
     background: Theme.dark ? #232329 : Theme.bg;
@@ -538,14 +538,14 @@ export component TabList inherits Rectangle {
     }
 
     lay := HorizontalLayout {
-        padding: 3px;
-        spacing: 3px;
+        padding: 3px * Theme.scale;
+        spacing: 3px * Theme.scale;
         for item[i] in root.items : Rectangle {
             // Equal segments: no preferred width, so the layout splits the row evenly.
             preferred-width: 0px;
             horizontal-stretch: 1;
-            min-height: 26px;
-            border-radius: 14px;
+            min-height: 26px * Theme.scale;
+            border-radius: self.height / 2;
             background: i == root.selected
                 ? (seg.pressed ? Theme.button-accent-pressed : seg.has-hover ? Theme.button-accent-hover : Theme.accent)
                 : seg.pressed ? Theme.button-outline-pressed
@@ -559,10 +559,10 @@ export component TabList inherits Rectangle {
             accessible-item-count: root.items.length;
             accessible-action-default => { root.pick(i); }
             HorizontalLayout {
-                padding-left: 8px;
-                padding-right: 8px;
-                padding-top: 4px;
-                padding-bottom: 4px;
+                padding-left: 8px * Theme.scale;
+                padding-right: 8px * Theme.scale;
+                padding-top: 4px * Theme.scale;
+                padding-bottom: 4px * Theme.scale;
                 Text {
                     text: item;
                     font-size: Theme.font-size-label;
@@ -787,8 +787,8 @@ export component Dropdown inherits Rectangle {
     public function open() { if (root.enabled) { popup.show(); } }
 
     property <string> current-value: root.current-index >= 0 && root.current-index < root.model.length ? root.model[root.current-index] : "";
-    property <length> row-h: 28px;
-    property <length> pad: 4px;
+    property <length> row-h: 28px * Theme.scale;
+    property <length> pad: 4px * Theme.scale;
     property <length> content-h: root.model.length * root.row-h + 2 * root.pad;
     property <length> cap: Math.min(root.content-h, root.max-rows * root.row-h + 2 * root.pad);
     property <length> space-below: root.window-height - root.absolute-position.y - root.height - 2px - 8px;
@@ -799,10 +799,10 @@ export component Dropdown inherits Rectangle {
     property <int> hl: root.current-index;
     property <length> scroll-y: 0px;
 
-    min-width: Math.max(140px, val.preferred-width + 36px);
-    height: 32px;
+    min-width: Math.max(140px * Theme.scale, val.preferred-width + 36px * Theme.scale);
+    height: 32px * Theme.scale;
     horizontal-stretch: 0;
-    border-radius: 9px;
+    border-radius: 9px * Theme.scale;
     border-width: 1px;
     border-color: (touch.has-hover && root.enabled) ? Theme.text-muted : Theme.border;
     background: touch.pressed ? Theme.button-outline-pressed : (touch.has-hover && root.enabled) ? Theme.surface-hover : Theme.dark ? #25252C : Theme.surface;

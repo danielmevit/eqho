@@ -32,6 +32,171 @@ pub const OVERLAY_POSITIONS: [&str; 6] = [
 
 pub const OVERLAY_MONITORS: [&str; 3] = ["active", "cursor", "primary"];
 
+pub const OVERLAY_PANEL_BLUR_MODES: [&str; 3] = ["off", "soft", "frosted"];
+
+pub const OVERLAY_FONT_FAMILIES: [&str; 6] = [
+    "segoe",
+    "bahnschrift",
+    "arial",
+    "verdana",
+    "georgia",
+    "consolas",
+];
+
+pub const OVERLAY_FONT_STYLES: [&str; 4] = ["regular", "bold", "italic", "bold-italic"];
+
+/// Normalize a text-box blur mode string (`"off"`, `"soft"`, `"frosted"`).
+pub fn normalize_overlay_panel_blur(raw: &str) -> &'static str {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "off" | "none" | "0" => "off",
+        "frosted" | "acrylic" | "strong" | "high" => "frosted",
+        _ => "soft",
+    }
+}
+
+/// Normalize an overlay text font family key into one of [`OVERLAY_FONT_FAMILIES`].
+pub fn normalize_overlay_font_family(raw: &str) -> &'static str {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "bahnschrift" | "din" => "bahnschrift",
+        "arial" | "helvetica" => "arial",
+        "verdana" => "verdana",
+        "georgia" | "serif" => "georgia",
+        "consolas" | "mono" | "monospace" => "consolas",
+        _ => "segoe",
+    }
+}
+
+/// Normalize an overlay text font style key into one of [`OVERLAY_FONT_STYLES`].
+pub fn normalize_overlay_font_style(raw: &str) -> &'static str {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "bold" => "bold",
+        "italic" | "oblique" => "italic",
+        "bold-italic" | "bold italic" | "bold_italic" => "bold-italic",
+        _ => "regular",
+    }
+}
+
+/// Snapshot of overlay appearance & behavior settings used for presets and custom saved presets.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OverlayPreset {
+    pub overlay_enabled: bool,
+    pub overlay_show_text: bool,
+    pub overlay_show_level: bool,
+    pub overlay_controls_enabled: bool,
+    pub overlay_controls_pinned: bool,
+    pub overlay_monitor: String,
+    pub overlay_position: String,
+    pub overlay_pill_scale: f64,
+    pub overlay_opacity: f64,
+    pub overlay_panel_opacity: f64,
+    pub overlay_panel_blur: String,
+    pub overlay_font_size: i32,
+    pub overlay_font_family: String,
+    pub overlay_font_style: String,
+}
+
+impl Default for OverlayPreset {
+    fn default() -> Self {
+        Self {
+            overlay_enabled: true,
+            overlay_show_text: true,
+            overlay_show_level: true,
+            overlay_controls_enabled: true,
+            overlay_controls_pinned: false,
+            overlay_monitor: "active".to_owned(),
+            overlay_position: "bottom-center".to_owned(),
+            overlay_pill_scale: 0.8,
+            overlay_opacity: 0.95,
+            overlay_panel_opacity: 0.78,
+            overlay_panel_blur: "soft".to_owned(),
+            overlay_font_size: 14,
+            overlay_font_family: "segoe".to_owned(),
+            overlay_font_style: "regular".to_owned(),
+        }
+    }
+}
+
+impl OverlayPreset {
+    /// Clamp numeric ranges and normalize enum strings in place.
+    #[must_use]
+    pub fn sanitized(mut self) -> Self {
+        let m = self.overlay_monitor.trim().to_ascii_lowercase();
+        self.overlay_monitor = if OVERLAY_MONITORS.contains(&m.as_str()) {
+            m
+        } else {
+            "active".to_owned()
+        };
+        let p = self.overlay_position.trim().to_ascii_lowercase();
+        self.overlay_position = if OVERLAY_POSITIONS.contains(&p.as_str()) {
+            p
+        } else {
+            "bottom-center".to_owned()
+        };
+        self.overlay_pill_scale = if self.overlay_pill_scale.is_finite() {
+            self.overlay_pill_scale.clamp(0.6, 1.4)
+        } else {
+            0.8
+        };
+        self.overlay_opacity = if self.overlay_opacity.is_finite() {
+            self.overlay_opacity.clamp(0.3, 1.0)
+        } else {
+            0.95
+        };
+        self.overlay_panel_opacity = if self.overlay_panel_opacity.is_finite() {
+            self.overlay_panel_opacity.clamp(0.0, 1.0)
+        } else {
+            0.78
+        };
+        self.overlay_panel_blur = normalize_overlay_panel_blur(&self.overlay_panel_blur).to_owned();
+        self.overlay_font_size = self.overlay_font_size.clamp(10, 28);
+        self.overlay_font_family =
+            normalize_overlay_font_family(&self.overlay_font_family).to_owned();
+        self.overlay_font_style =
+            normalize_overlay_font_style(&self.overlay_font_style).to_owned();
+        self
+    }
+
+    /// Look up a built-in overlay preset (`"default"`, `"glass"`, `"subtitles"`, `"compact"`).
+    #[must_use]
+    pub fn builtin(key: &str) -> Option<Self> {
+        match key.trim().to_ascii_lowercase().as_str() {
+            "default" => Some(Self::default()),
+            "glass" => Some(Self {
+                overlay_pill_scale: 0.8,
+                overlay_opacity: 0.90,
+                overlay_panel_opacity: 0.55,
+                overlay_panel_blur: "frosted".to_owned(),
+                overlay_font_size: 15,
+                overlay_font_family: "segoe".to_owned(),
+                overlay_font_style: "regular".to_owned(),
+                ..Self::default()
+            }),
+            "subtitles" => Some(Self {
+                overlay_pill_scale: 0.7,
+                overlay_opacity: 0.95,
+                overlay_panel_opacity: 0.0,
+                overlay_panel_blur: "off".to_owned(),
+                overlay_font_size: 18,
+                overlay_font_family: "verdana".to_owned(),
+                overlay_font_style: "bold".to_owned(),
+                ..Self::default()
+            }),
+            "compact" => Some(Self {
+                overlay_pill_scale: 0.6,
+                overlay_opacity: 0.95,
+                overlay_panel_opacity: 0.85,
+                overlay_panel_blur: "off".to_owned(),
+                overlay_font_size: 12,
+                overlay_font_family: "consolas".to_owned(),
+                overlay_font_style: "regular".to_owned(),
+                ..Self::default()
+            }),
+            _ => None,
+        }
+    }
+}
+
 pub const VOLUME_DUCK_OPTIONS: [(&str, Option<f32>); 5] = [
     ("off", None),
     ("50%", Some(0.5)),
@@ -223,10 +388,14 @@ pub struct Settings {
     pub overlay_monitor: String,
     pub overlay_opacity: f64,
     pub overlay_font_size: i32,
+    pub overlay_font_family: String,
+    pub overlay_font_style: String,
     pub overlay_position: String,
     pub overlay_show_level: bool,
     pub overlay_pill_scale: f64,
     pub overlay_panel_opacity: f64,
+    pub overlay_panel_blur: String,
+    pub overlay_custom_preset: Option<OverlayPreset>,
     pub volume_duck: String,
     pub start_with_windows: bool,
     pub theme: String,
@@ -274,10 +443,14 @@ impl Default for Settings {
             overlay_monitor: "active".to_owned(),
             overlay_opacity: 0.95,
             overlay_font_size: 14,
+            overlay_font_family: "segoe".to_owned(),
+            overlay_font_style: "regular".to_owned(),
             overlay_position: "bottom-center".to_owned(),
             overlay_show_level: true,
             overlay_pill_scale: 0.8,
             overlay_panel_opacity: 0.78,
+            overlay_panel_blur: "soft".to_owned(),
+            overlay_custom_preset: None,
             volume_duck: "off".to_owned(),
             start_with_windows: false,
             theme: "dark".to_owned(),
@@ -400,6 +573,14 @@ impl Settings {
         if let Some(v) = obj.get("overlay_font_size") {
             s.overlay_font_size = coerce_i32(v, s.overlay_font_size);
         }
+        if let Some(v) = obj.get("overlay_font_family") {
+            let fam = coerce_string(v, &s.overlay_font_family);
+            s.overlay_font_family = normalize_overlay_font_family(&fam).to_owned();
+        }
+        if let Some(v) = obj.get("overlay_font_style") {
+            let sty = coerce_string(v, &s.overlay_font_style);
+            s.overlay_font_style = normalize_overlay_font_style(&sty).to_owned();
+        }
         if let Some(v) = obj.get("overlay_position") {
             s.overlay_position = coerce_string(v, &s.overlay_position);
         }
@@ -413,6 +594,16 @@ impl Settings {
             s.overlay_panel_opacity = coerce_f64(v, s.overlay_panel_opacity);
         } else if obj.contains_key("overlay_opacity") {
             s.overlay_panel_opacity = s.overlay_opacity;
+        }
+        if let Some(v) = obj.get("overlay_panel_blur") {
+            let blur = coerce_string(v, &s.overlay_panel_blur);
+            s.overlay_panel_blur = normalize_overlay_panel_blur(&blur).to_owned();
+        }
+        if let Some(v) = obj.get("overlay_custom_preset")
+            && !v.is_null()
+            && let Ok(preset) = serde_json::from_value::<OverlayPreset>(v.clone())
+        {
+            s.overlay_custom_preset = Some(preset.sanitized());
         }
         if let Some(v) = obj.get("volume_duck") {
             s.volume_duck = coerce_string(v, &s.volume_duck);
@@ -532,9 +723,94 @@ impl Settings {
         self.overlay_pill_scale = self.overlay_pill_scale.clamp(0.6, 1.4);
         self.overlay_opacity = self.overlay_opacity.clamp(0.3, 1.0);
         self.overlay_panel_opacity = self.overlay_panel_opacity.clamp(0.0, 1.0);
+        self.overlay_panel_blur = normalize_overlay_panel_blur(&self.overlay_panel_blur).to_owned();
+        self.overlay_font_size = self.overlay_font_size.clamp(10, 28);
+        self.overlay_font_family =
+            normalize_overlay_font_family(&self.overlay_font_family).to_owned();
+        self.overlay_font_style =
+            normalize_overlay_font_style(&self.overlay_font_style).to_owned();
+        if let Some(custom) = self.overlay_custom_preset.take() {
+            self.overlay_custom_preset = Some(custom.sanitized());
+        }
         self.vad_sensitivity = self.vad_sensitivity.clamp(0.5, 2.0);
         self.ui_scale = self.ui_scale.clamp(1.0, 2.0);
         self.history_trash_days = self.history_trash_days.clamp(0, 365);
+    }
+
+    /// Capture the current overlay settings into a sanitized [`OverlayPreset`].
+    #[must_use]
+    pub fn capture_overlay_preset(&self) -> OverlayPreset {
+        OverlayPreset {
+            overlay_enabled: self.overlay_enabled,
+            overlay_show_text: self.overlay_show_text,
+            overlay_show_level: self.overlay_show_level,
+            overlay_controls_enabled: self.overlay_controls_enabled,
+            overlay_controls_pinned: self.overlay_controls_pinned,
+            overlay_monitor: self.overlay_monitor.clone(),
+            overlay_position: self.overlay_position.clone(),
+            overlay_pill_scale: self.overlay_pill_scale,
+            overlay_opacity: self.overlay_opacity,
+            overlay_panel_opacity: self.overlay_panel_opacity,
+            overlay_panel_blur: self.overlay_panel_blur.clone(),
+            overlay_font_size: self.overlay_font_size,
+            overlay_font_family: self.overlay_font_family.clone(),
+            overlay_font_style: self.overlay_font_style.clone(),
+        }
+        .sanitized()
+    }
+
+    /// Apply a full [`OverlayPreset`] snapshot (used for restoring the user's saved custom preset
+    /// or resetting all overlay controls to defaults).
+    pub fn apply_overlay_preset(&mut self, preset: &OverlayPreset) {
+        let p = preset.clone().sanitized();
+        self.overlay_enabled = p.overlay_enabled;
+        self.overlay_show_text = p.overlay_show_text;
+        self.overlay_show_level = p.overlay_show_level;
+        self.overlay_controls_enabled = p.overlay_controls_enabled;
+        self.overlay_controls_pinned = p.overlay_controls_pinned;
+        self.overlay_monitor = p.overlay_monitor;
+        self.overlay_position = p.overlay_position;
+        self.overlay_pill_scale = p.overlay_pill_scale;
+        self.overlay_opacity = p.overlay_opacity;
+        self.overlay_panel_opacity = p.overlay_panel_opacity;
+        self.overlay_panel_blur = p.overlay_panel_blur;
+        self.overlay_font_size = p.overlay_font_size;
+        self.overlay_font_family = p.overlay_font_family;
+        self.overlay_font_style = p.overlay_font_style;
+    }
+
+    /// Apply a built-in overlay preset (`"default"`, `"glass"`, `"subtitles"`, `"compact"`).
+    /// `"default"` resets every overlay field; visual style presets keep the user's screen
+    /// position & display monitor intact while updating visual styling.
+    pub fn apply_builtin_overlay_preset(&mut self, key: &str) -> bool {
+        let normalized = key.trim().to_ascii_lowercase();
+        let Some(preset) = OverlayPreset::builtin(&normalized) else {
+            return false;
+        };
+        if normalized == "default" {
+            self.apply_overlay_preset(&preset);
+        } else {
+            self.overlay_enabled = true;
+            self.overlay_show_text = true;
+            self.overlay_pill_scale = preset.overlay_pill_scale;
+            self.overlay_opacity = preset.overlay_opacity;
+            self.overlay_panel_opacity = preset.overlay_panel_opacity;
+            self.overlay_panel_blur = preset.overlay_panel_blur;
+            self.overlay_font_size = preset.overlay_font_size;
+            self.overlay_font_family = preset.overlay_font_family;
+            self.overlay_font_style = preset.overlay_font_style;
+        }
+        true
+    }
+
+    /// Snapshot current overlay settings into `overlay_custom_preset`.
+    pub fn save_custom_overlay_preset(&mut self) {
+        self.overlay_custom_preset = Some(self.capture_overlay_preset());
+    }
+
+    /// Reset all overlay settings to factory defaults (preserving any saved custom preset).
+    pub fn reset_overlay_defaults(&mut self) {
+        self.apply_overlay_preset(&OverlayPreset::default());
     }
 
     /// Atomically save settings to `path` via a temp file in the same directory,
@@ -1175,6 +1451,57 @@ mod tests {
             reloaded.analytics_distinct_id,
             "550e8400-e29b-41d4-a716-446655440000"
         );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn overlay_blur_fonts_presets_and_reset_defaults_roundtrip() {
+        let dir = temp_dir("overlay_presets");
+        let path = dir.join("settings.json");
+
+        let mut s = Settings::default();
+        assert_eq!(s.overlay_panel_blur, "soft");
+        assert_eq!(s.overlay_font_family, "segoe");
+        assert_eq!(s.overlay_font_style, "regular");
+        assert!(s.overlay_custom_preset.is_none());
+
+        s.overlay_position = "top-right".to_owned();
+        s.overlay_monitor = "cursor".to_owned();
+        s.overlay_panel_opacity = 0.0;
+        s.overlay_panel_blur = "off".to_owned();
+        s.overlay_font_family = "consolas".to_owned();
+        s.overlay_font_style = "bold-italic".to_owned();
+        s.overlay_font_size = 20;
+        s.save_custom_overlay_preset();
+        assert!(s.overlay_custom_preset.is_some());
+
+        // Built-in visual preset keeps user's position & monitor while updating style.
+        assert!(s.apply_builtin_overlay_preset("glass"));
+        assert_eq!(s.overlay_position, "top-right");
+        assert_eq!(s.overlay_monitor, "cursor");
+        assert_eq!(s.overlay_panel_blur, "frosted");
+        assert_eq!(s.overlay_font_size, 15);
+
+        // Reset to defaults resets everything (including position & monitor) while keeping saved custom preset.
+        s.reset_overlay_defaults();
+        assert_eq!(s.overlay_position, "bottom-center");
+        assert_eq!(s.overlay_monitor, "active");
+        assert_eq!(s.overlay_panel_blur, "soft");
+        assert_eq!(s.overlay_font_family, "segoe");
+        assert_eq!(s.overlay_font_style, "regular");
+        assert!(s.overlay_custom_preset.is_some());
+
+        // Restoring saved custom preset brings back all custom fields.
+        let custom = s.overlay_custom_preset.clone().unwrap();
+        s.apply_overlay_preset(&custom);
+        assert_eq!(s.overlay_position, "top-right");
+        assert_eq!(s.overlay_font_family, "consolas");
+        assert_eq!(s.overlay_font_style, "bold-italic");
+        assert_eq!(s.overlay_font_size, 20);
+
+        s.save_to_path(&path).unwrap();
+        let reloaded = Settings::load_from_path(&path);
+        assert_eq!(reloaded, s);
         let _ = fs::remove_dir_all(&dir);
     }
 

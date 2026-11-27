@@ -13,12 +13,12 @@ component TrashButton inherits Rectangle {
 
     property <string> label-text: root.count > 0 ? "Recently Deleted (" + root.count + ")" : "Recently Deleted";
 
-    min-width: content.preferred-width + 20px;
-    min-height: 31px;
+    min-width: content.preferred-width + 20px * Theme.scale;
+    min-height: 31px * Theme.scale;
     max-height: self.min-height;
     horizontal-stretch: 0;
     vertical-stretch: 0;
-    border-radius: 9px;
+    border-radius: 9px * Theme.scale;
     border-width: 1px;
     border-color: Theme.border;
     background: touch.pressed ? Theme.button-outline-pressed
@@ -360,11 +360,18 @@ export component HistoryTab inherits Rectangle {
                             }
                         }
 
-                        Text {
+                        // Read-only TextInput so users can highlight & Ctrl+C any portion of a
+                        // transcript without making local history editable.
+                        TextInput {
                             text: row.text;
+                            read-only: true;
                             font-size: Theme.font-size-base;
                             color: Theme.text;
+                            selection-background-color: Theme.accent-selected;
+                            selection-foreground-color: Theme.text;
+                            single-line: false;
                             wrap: word-wrap;
+                            accessible-label: "Transcript text";
                         }
                     }
 

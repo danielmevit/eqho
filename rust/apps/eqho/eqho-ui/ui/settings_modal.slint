@@ -10,8 +10,8 @@ component ModalSidebarItem inherits Rectangle {
     in property <bool> selected: false;
     callback clicked();
 
-    height: 32px;
-    border-radius: 8px;
+    height: 32px * Theme.scale;
+    border-radius: 8px * Theme.scale;
     background: root.selected ? (Theme.dark ? #282830 : Theme.surface-hover)
         : touch.pressed ? Theme.button-outline-pressed
         : touch.has-hover ? (Theme.dark ? #1E1E24 : Theme.surface-tertiary)
@@ -23,16 +23,16 @@ component ModalSidebarItem inherits Rectangle {
     accessible-action-default => { root.clicked(); }
 
     HorizontalLayout {
-        padding-left: 10px;
-        padding-right: 10px;
-        spacing: 9px;
+        padding-left: 10px * Theme.scale;
+        padding-right: 10px * Theme.scale;
+        spacing: 9px * Theme.scale;
         alignment: start;
 
         VerticalLayout {
             alignment: center;
             PhIcon {
                 glyph: root.glyph;
-                size: 16px;
+                size: 16px * Theme.scale;
                 icon-color: root.selected ? Theme.text : Theme.text-muted;
             }
         }
@@ -104,7 +104,12 @@ export component SettingsModal inherits Rectangle {
     in-out property <int> overlay-pill-scale-pct: 80;
     in-out property <int> overlay-see-through-pct: 5;
     in-out property <int> overlay-panel-see-through-pct: 22;
+    in-out property <int> overlay-panel-blur-index: 1;
     in-out property <int> overlay-font-size: 14;
+    in-out property <int> overlay-font-family-index: 0;
+    in-out property <int> overlay-font-style-index: 0;
+    in-out property <bool> overlay-has-custom-preset: false;
+    in-out property <string> overlay-preset-status: "";
 
     in property <string> app-version: "0.9.5";
     in property <string> active-engine-display: "whisper.cpp 1.8.4";
@@ -141,7 +146,13 @@ export component SettingsModal inherits Rectangle {
     callback overlay-pill-scale-changed(int);
     callback overlay-see-through-changed(int);
     callback overlay-panel-see-through-changed(int);
+    callback overlay-panel-blur-changed(int);
     callback overlay-font-size-changed(int);
+    callback overlay-font-family-selected(int);
+    callback overlay-font-style-changed(int);
+    callback overlay-apply-preset(string);
+    callback overlay-save-custom-preset();
+    callback overlay-reset-defaults();
     callback open-url(string);
     callback buy-clicked();
     callback start-onboarding();
@@ -218,7 +229,7 @@ export component SettingsModal inherits Rectangle {
 
             // Left Icon-Tab Sidebar (GatherOS 05-settings-account.png style)
             Rectangle {
-                width: Math.min(230px, Math.max(156px, 176px * Theme.scale));
+                width: Math.min(260px, Math.max(156px, 184px * Theme.scale));
                 horizontal-stretch: 0;
                 background: Theme.dark ? #121215 : Theme.bg;
 
@@ -492,6 +503,85 @@ export component SettingsModal inherits Rectangle {
                             }
 
                             SettingsGroup {
+                                HorizontalLayout {
+                                    alignment: space-between;
+                                    spacing: Theme.space-8;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 2px;
+                                        Text {
+                                            text: "Presets";
+                                            font-size: Theme.font-size-base;
+                                            font-weight: 500;
+                                            color: Theme.text;
+                                        }
+                                        Text {
+                                            text: "Switch style in one click, save your own preset, or reset to default";
+                                            font-size: Theme.font-size-sm;
+                                            color: Theme.text-muted;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                    if root.overlay-preset-status != "" : Text {
+                                        text: root.overlay-preset-status;
+                                        font-size: Theme.font-size-xs;
+                                        font-weight: 600;
+                                        color: Theme.accent-text;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                                HorizontalLayout {
+                                    spacing: Theme.space-8;
+                                    Button {
+                                        horizontal-stretch: 1;
+                                        text: "Default";
+                                        kind: ButtonKind.outline;
+                                        clicked => { root.overlay-apply-preset("default"); }
+                                    }
+                                    Button {
+                                        horizontal-stretch: 1;
+                                        text: "Glass";
+                                        kind: ButtonKind.outline;
+                                        clicked => { root.overlay-apply-preset("glass"); }
+                                    }
+                                    Button {
+                                        horizontal-stretch: 1;
+                                        text: "Subtitles";
+                                        kind: ButtonKind.outline;
+                                        clicked => { root.overlay-apply-preset("subtitles"); }
+                                    }
+                                    Button {
+                                        horizontal-stretch: 1;
+                                        text: "Compact";
+                                        kind: ButtonKind.outline;
+                                        clicked => { root.overlay-apply-preset("compact"); }
+                                    }
+                                }
+                                HorizontalLayout {
+                                    spacing: Theme.space-8;
+                                    Button {
+                                        horizontal-stretch: 1;
+                                        text: "My Preset";
+                                        kind: root.overlay-has-custom-preset ? ButtonKind.accent : ButtonKind.outline;
+                                        enabled: root.overlay-has-custom-preset;
+                                        clicked => { root.overlay-apply-preset("custom"); }
+                                    }
+                                    Button {
+                                        horizontal-stretch: 1;
+                                        text: "Save Preset";
+                                        kind: ButtonKind.outline;
+                                        clicked => { root.overlay-save-custom-preset(); }
+                                    }
+                                    Button {
+                                        horizontal-stretch: 1;
+                                        text: "Reset to Default";
+                                        kind: ButtonKind.outline;
+                                        clicked => { root.overlay-reset-defaults(); }
+                                    }
+                                }
+                            }
+
+                            SettingsGroup {
                                 CompactRow {
                                     label: "Show Overlay";
                                     help: "Show floating pill while dictating";
@@ -594,6 +684,17 @@ export component SettingsModal inherits Rectangle {
                                     step: 5;
                                     edited(v) => { root.overlay-panel-see-through-changed(v); }
                                 }
+                                StackedSettingRow {
+                                    label: "Text Box Blur";
+                                    help: "Backdrop blur behind the text box only (not the pill)";
+                                    TabList {
+                                        items: ["Off", "Soft", "Frosted"];
+                                        selected <=> root.overlay-panel-blur-index;
+                                        accessible-name: "Text Box Blur";
+                                        picked(i) => { root.overlay-panel-blur-changed(i); }
+                                    }
+                                }
+                                Rectangle { height: 1px; background: Theme.border-subtle; }
                                 Slider {
                                     label: "Text Size";
                                     value-text: root.overlay-font-size + "px";
@@ -602,6 +703,27 @@ export component SettingsModal inherits Rectangle {
                                     maximum: 28;
                                     step: 1;
                                     edited(v) => { root.overlay-font-size-changed(v); }
+                                }
+                                StackedSettingRow {
+                                    label: "Text Font";
+                                    help: "Font family used in the floating text box";
+                                    Dropdown {
+                                        model: ["Segoe UI", "Bahnschrift", "Arial", "Verdana", "Georgia", "Consolas"];
+                                        current-index <=> root.overlay-font-family-index;
+                                        window-height: root.window-height;
+                                        accessible-name: "Text Font";
+                                        selected(i) => { root.overlay-font-family-selected(i); }
+                                    }
+                                }
+                                StackedSettingRow {
+                                    label: "Text Style";
+                                    help: "Weight and slant of the overlay text";
+                                    TabList {
+                                        items: ["Regular", "Bold", "Italic", "Bold Italic"];
+                                        selected <=> root.overlay-font-style-index;
+                                        accessible-name: "Text Style";
+                                        picked(i) => { root.overlay-font-style-changed(i); }
+                                    }
                                 }
                             }
                         }

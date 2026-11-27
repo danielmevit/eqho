@@ -127,8 +127,8 @@ export component GeneralTab inherits Rectangle {
                     label: "Global Hotkey";
                     help: "Press to activate/deactivate dictation";
                     Rectangle {
-                        height: 36px;
-                        border-radius: 9px;
+                        height: 36px * Theme.scale;
+                        border-radius: 9px * Theme.scale;
                         background: root.hotkey-capturing ? Theme.accent-muted : Theme.surface-tertiary;
                         border-width: 1px;
                         border-color: root.hotkey-capturing ? Theme.accent-line : Theme.border;
@@ -331,8 +331,8 @@ export component GeneralTab inherits Rectangle {
                     label: "Global Hotkey";
                     help: "Press to activate/deactivate dictation";
                     Rectangle {
-                        height: 36px;
-                        border-radius: 9px;
+                        height: 36px * Theme.scale;
+                        border-radius: 9px * Theme.scale;
                         background: root.hotkey-capturing ? Theme.accent-muted : Theme.surface-tertiary;
                         border-width: 1px;
                         border-color: root.hotkey-capturing ? Theme.accent-line : Theme.border;

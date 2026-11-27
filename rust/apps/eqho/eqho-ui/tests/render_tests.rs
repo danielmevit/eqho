@@ -10,7 +10,7 @@ use eqho_core::settings::Settings;
 use eqho_ui::{
     DashboardWindow, HoverTooltip, Theme, apply_settings_to_window, blur_snapshot,
     blur_snapshot_strong, build_history_rows, build_model_cards, format_active_driver_display,
-    split_model_cards, wordmark_image,
+    split_model_cards, ui_window_size_for_scale, ui_zoom_factor, wordmark_image,
 };
 use slint::platform::software_renderer::{
     MinimalSoftwareWindow, PremultipliedRgbaColor, RepaintBufferType,
@@ -522,6 +522,49 @@ fn software_renders_dark_and_light_frames_at_wide_and_narrow_sizes() {
         940,
         560,
     );
+
+    // 6b. UI Zoom responsiveness matrix (100%, 125%, 150%, 200% on General + Settings -> Overlay)
+    win.set_store_build(false);
+    win.set_onboarding_active(false);
+    win.set_active_tab("general".into());
+    win.set_logo_image(wordmark_image(true));
+    for (tag, ui_scale) in [
+        ("100", 1.0_f64),
+        ("125", 1.25_f64),
+        ("150", 1.5_f64),
+        ("200", 2.0_f64),
+    ] {
+        let (w, h) = ui_window_size_for_scale(ui_scale);
+        let (wu, hu) = (w as u32, h as u32);
+        win.global::<Theme>().set_scale(ui_zoom_factor(ui_scale));
+        win.set_settings_open(false);
+        let frame = render_dashboard_rgba(&window_adapter, &win, wu, hu, true);
+        assert_non_uniform_and_valid_png(&frame, wu, hu);
+        maybe_save_png(
+            dump_dir.as_ref(),
+            &format!("15_zoom_{tag}_general_dark_{wu}x{hu}"),
+            &frame,
+            wu,
+            hu,
+        );
+        if tag == "150" || tag == "200" {
+            win.set_settings_open(true);
+            win.set_settings_section("overlay".into());
+            win.set_overlay_has_custom_preset(true);
+            win.set_overlay_preset_status("Preset saved".into());
+            let overlay_frame = render_dashboard_rgba(&window_adapter, &win, wu, hu, true);
+            assert_non_uniform_and_valid_png(&overlay_frame, wu, hu);
+            maybe_save_png(
+                dump_dir.as_ref(),
+                &format!("16_zoom_{tag}_settings_overlay_dark_{wu}x{hu}"),
+                &overlay_frame,
+                wu,
+                hu,
+            );
+            win.set_settings_open(false);
+        }
+    }
+    win.global::<Theme>().set_scale(1.0);
 
     // 7. Real high-resolution iridescent floating pills straight from `eqho_core::pillfx`
     //    (used in Microsoft Store listing slides & Poster Art so the real shader is showcased).

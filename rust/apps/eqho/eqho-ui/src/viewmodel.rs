@@ -4,12 +4,15 @@ use std::collections::BTreeMap;
 
 use eqho_core::history::{TranscriptEntry, format_timestamp_local, local_day_ordinal};
 use eqho_core::modelpick::{
-    HardwareClass, HardwareSpecs, HardwareTier, recommend_model_for_specs,
+    HardwareClass, HardwareSpecs, HardwareTier, recommend_english_model_for_specs,
+    recommend_model_for_specs, recommend_multilingual_model_for_specs,
 };
 use eqho_core::modelstore::{MODELS, model_info};
 use eqho_core::settings::{
-    HISTORY_TRASH_OPTIONS, LANGUAGE_TIERS, OVERLAY_MONITORS, OVERLAY_POSITIONS, Settings,
-    VOLUME_DUCK_OPTIONS, is_english_only_model, supported_language_name,
+    HISTORY_TRASH_OPTIONS, LANGUAGE_TIERS, OVERLAY_FONT_FAMILIES, OVERLAY_FONT_STYLES,
+    OVERLAY_MONITORS, OVERLAY_PANEL_BLUR_MODES, OVERLAY_POSITIONS, Settings, VOLUME_DUCK_OPTIONS,
+    is_english_only_model, normalize_overlay_font_family, normalize_overlay_font_style,
+    normalize_overlay_panel_blur, supported_language_name,
 };
 use slint::{ComponentHandle, ModelRc, VecModel};
 
@@ -95,9 +98,10 @@ pub fn build_model_cards_for_specs(
     download_detail: &str,
     error_key: Option<&str>,
     specs: HardwareSpecs,
-    lang: &str,
+    _lang: &str,
 ) -> Vec<ModelCardItem> {
-    let recommended = recommend_model_for_specs(specs, lang);
+    let rec_en = recommend_english_model_for_specs(specs);
+    let rec_ml = recommend_multilingual_model_for_specs(specs);
     MODELS
         .iter()
         .map(|m| {
@@ -140,7 +144,12 @@ pub fn build_model_cards_for_specs(
             } else {
                 format!("{lang_kind} · {}", model_size_label(m.size_mb))
             };
-            let recommendation = if m.key == recommended {
+            let is_recommended = if m.english_only {
+                rec_en == Some(m.key)
+            } else {
+                m.key == rec_ml
+            };
+            let recommendation = if is_recommended {
                 "Recommended for this PC"
             } else {
                 ""
@@ -566,6 +575,72 @@ pub fn overlay_monitor_key(idx: i32) -> &'static str {
         .unwrap_or("active")
 }
 
+pub fn overlay_panel_blur_index(mode: &str) -> i32 {
+    let norm = normalize_overlay_panel_blur(mode);
+    OVERLAY_PANEL_BLUR_MODES
+        .iter()
+        .position(|&m| m == norm)
+        .unwrap_or(1) as i32
+}
+
+pub fn overlay_panel_blur_key(idx: i32) -> &'static str {
+    OVERLAY_PANEL_BLUR_MODES
+        .get(idx.max(0) as usize)
+        .copied()
+        .unwrap_or("soft")
+}
+
+pub fn overlay_font_family_index(family: &str) -> i32 {
+    let norm = normalize_overlay_font_family(family);
+    OVERLAY_FONT_FAMILIES
+        .iter()
+        .position(|&f| f == norm)
+        .unwrap_or(0) as i32
+}
+
+pub fn overlay_font_family_key(idx: i32) -> &'static str {
+    OVERLAY_FONT_FAMILIES
+        .get(idx.max(0) as usize)
+        .copied()
+        .unwrap_or("segoe")
+}
+
+pub fn overlay_font_style_index(style: &str) -> i32 {
+    let norm = normalize_overlay_font_style(style);
+    OVERLAY_FONT_STYLES
+        .iter()
+        .position(|&s| s == norm)
+        .unwrap_or(0) as i32
+}
+
+pub fn overlay_font_style_key(idx: i32) -> &'static str {
+    OVERLAY_FONT_STYLES
+        .get(idx.max(0) as usize)
+        .copied()
+        .unwrap_or("regular")
+}
+
+/// Sync all Overlay Settings modal controls on `DashboardWindow` from `Settings`.
+pub fn sync_overlay_settings_to_window(window: &DashboardWindow, settings: &Settings) {
+    window.set_overlay_enabled(settings.overlay_enabled);
+    window.set_overlay_show_text(settings.overlay_show_text);
+    window.set_overlay_show_level(settings.overlay_show_level);
+    window.set_overlay_controls_enabled(settings.overlay_controls_enabled);
+    window.set_overlay_controls_pinned(settings.overlay_controls_pinned);
+    window.set_overlay_monitor_index(overlay_monitor_index(&settings.overlay_monitor));
+    window.set_overlay_position_index(overlay_position_index(&settings.overlay_position));
+    window.set_overlay_pill_scale_pct((settings.overlay_pill_scale * 100.0).round() as i32);
+    window.set_overlay_see_through_pct(((1.0 - settings.overlay_opacity) * 100.0).round() as i32);
+    window.set_overlay_panel_see_through_pct(
+        ((1.0 - settings.overlay_panel_opacity) * 100.0).round() as i32,
+    );
+    window.set_overlay_panel_blur_index(overlay_panel_blur_index(&settings.overlay_panel_blur));
+    window.set_overlay_font_size(settings.overlay_font_size);
+    window.set_overlay_font_family_index(overlay_font_family_index(&settings.overlay_font_family));
+    window.set_overlay_font_style_index(overlay_font_style_index(&settings.overlay_font_style));
+    window.set_overlay_has_custom_preset(settings.overlay_custom_preset.is_some());
+}
+
 pub fn volume_duck_index(opt: &str) -> i32 {
     VOLUME_DUCK_OPTIONS
         .iter()
@@ -615,22 +690,29 @@ pub fn ui_scale_value(idx: i32) -> f64 {
         .unwrap_or(1.25)
 }
 
-/// Convert `Settings::ui_scale` (`1.0..=2.0`, default `1.25`) into the `Theme.scale` multiplier
-/// relative to the `125%` baseline (`100% -> 0.80`, `125% -> 1.00`, `150% -> 1.20`, `175% -> 1.40`, `200% -> 1.60`).
+/// Convert `Settings::ui_scale` (`1.0..=2.0`, default `1.25`) into a balanced `Theme.scale`
+/// multiplier relative to the `125%` baseline (`100% -> 0.88`, `125% -> 1.00`, `150% -> 1.12`,
+/// `175% -> 1.24`, `200% -> 1.38`) so every control stays crisp and proportional across zooms.
 #[must_use]
 pub fn ui_zoom_factor(scale: f64) -> f32 {
     if !scale.is_finite() {
         return 1.0;
     }
-    ((scale / 1.25).clamp(0.8, 1.6)) as f32
+    match ui_scale_index(scale) {
+        0 => 0.88,
+        1 => 1.00,
+        2 => 1.12,
+        3 => 1.24,
+        _ => 1.38,
+    }
 }
 
 /// Recommended logical `(width, height)` for the dashboard window at a given `Settings::ui_scale`.
 #[must_use]
 pub fn ui_window_size_for_scale(scale: f64) -> (f32, f32) {
     let factor = ui_zoom_factor(scale);
-    let w = (940.0 * factor).clamp(760.0, 1440.0).round();
-    let h = (560.0 * factor).clamp(480.0, 880.0).round();
+    let w = (940.0 * factor).clamp(800.0, 1340.0).round();
+    let h = (560.0 * factor).clamp(500.0, 820.0).round();
     (w, h)
 }
 
@@ -806,19 +888,7 @@ pub fn apply_settings_to_window_with_specs(
     window.set_autostart_label("Start at login".into());
     window.set_analytics_enabled(settings.analytics_enabled);
 
-    window.set_overlay_enabled(settings.overlay_enabled);
-    window.set_overlay_show_text(settings.overlay_show_text);
-    window.set_overlay_show_level(settings.overlay_show_level);
-    window.set_overlay_controls_enabled(settings.overlay_controls_enabled);
-    window.set_overlay_controls_pinned(settings.overlay_controls_pinned);
-    window.set_overlay_monitor_index(overlay_monitor_index(&settings.overlay_monitor));
-    window.set_overlay_position_index(overlay_position_index(&settings.overlay_position));
-    window.set_overlay_pill_scale_pct((settings.overlay_pill_scale * 100.0).round() as i32);
-    window.set_overlay_see_through_pct(((1.0 - settings.overlay_opacity) * 100.0).round() as i32);
-    window.set_overlay_panel_see_through_pct(
-        ((1.0 - settings.overlay_panel_opacity) * 100.0).round() as i32,
-    );
-    window.set_overlay_font_size(settings.overlay_font_size);
+    sync_overlay_settings_to_window(window, settings);
 
     window.set_onboarding_active(!settings.onboarding_done);
     window.set_onboarding_duck_mute(settings.volume_duck == "mute");
@@ -887,7 +957,7 @@ mod tests {
 
     #[test]
     fn model_card_recommended_badge_tracks_real_pc_specs_globally() {
-        let cases = [
+        let cases: [(HardwareSpecs, &str, Option<&str>, &str, &str); 5] = [
             (
                 HardwareSpecs {
                     gpu_vram_mb: 12 * 1024,
@@ -896,6 +966,21 @@ mod tests {
                     available_ram_mb: Some(16 * 1024),
                 },
                 "en",
+                Some("distil-large-v3"),
+                "large-v3-turbo",
+                "distil-large-v3",
+            ),
+            // 6 GB RTX 3060 Laptop reports ~5968 MiB dedicated VRAM and must still get GpuHigh recs.
+            (
+                HardwareSpecs {
+                    gpu_vram_mb: 5968,
+                    cpu_threads: 16,
+                    cpu_fast_simd: true,
+                    available_ram_mb: Some(16 * 1024),
+                },
+                "en",
+                Some("distil-large-v3"),
+                "large-v3-turbo",
                 "distil-large-v3",
             ),
             (
@@ -906,6 +991,8 @@ mod tests {
                     available_ram_mb: Some(8 * 1024),
                 },
                 "en",
+                Some("distil-medium.en"),
+                "large-v3-turbo-q5",
                 "large-v3-turbo-q5",
             ),
             (
@@ -916,6 +1003,8 @@ mod tests {
                     available_ram_mb: Some(16 * 1024),
                 },
                 "en",
+                Some("small.en-q5"),
+                "small-q5",
                 "small.en-q5",
             ),
             (
@@ -926,11 +1015,13 @@ mod tests {
                     available_ram_mb: Some(3072),
                 },
                 "en",
+                None,
+                "base-q5",
                 "base-q5",
             ),
         ];
 
-        for (specs, lang, expected_key) in cases {
+        for (specs, lang, expected_en, expected_ml, expected_onb) in cases {
             let cards = build_model_cards_for_specs(
                 "small.en-q5",
                 &[],
@@ -942,17 +1033,25 @@ mod tests {
                 specs,
                 lang,
             );
-            let rec_cards: Vec<_> = cards
+            let (en_cards, ml_cards) = split_model_cards(cards);
+            let rec_en: Vec<_> = en_cards
                 .iter()
                 .filter(|c| !c.recommendation.is_empty())
+                .map(|c| c.key.as_str())
                 .collect();
-            assert_eq!(rec_cards.len(), 1);
-            assert_eq!(rec_cards[0].key.as_str(), expected_key);
+            let rec_ml: Vec<_> = ml_cards
+                .iter()
+                .filter(|c| !c.recommendation.is_empty())
+                .map(|c| c.key.as_str())
+                .collect();
+            assert_eq!(rec_en.first().copied(), expected_en);
+            assert_eq!(rec_en.len(), usize::from(expected_en.is_some()));
+            assert_eq!(rec_ml, vec![expected_ml]);
 
             let onboarding = build_onboarding_model_options_for_specs(specs, lang, "", &[]);
             let rec_onb: Vec<_> = onboarding.iter().filter(|o| o.is_recommended).collect();
             assert_eq!(rec_onb.len(), 1);
-            assert_eq!(rec_onb[0].key.as_str(), expected_key);
+            assert_eq!(rec_onb[0].key.as_str(), expected_onb);
         }
 
         let summary = hardware_summary_for_specs(

@@ -41,7 +41,9 @@ pub struct HardwareSpecs {
     pub available_ram_mb: Option<u64>,
 }
 
-const GPU_HIGH_MIN_VRAM_MB: u64 = 6 * 1024;
+// Real 6 GB discrete GPUs (e.g. RTX 3060 Laptop 6 GB) report ~5968–6023 MiB via DXGI/Vulkan due
+// to driver reservations, so use 5.5 GiB (5632 MiB) as the 6 GB class threshold.
+const GPU_HIGH_MIN_VRAM_MB: u64 = 5632;
 const GPU_MID_MIN_VRAM_MB: u64 = 3 * 1024;
 const GPU_ENTRY_MIN_VRAM_MB: u64 = 2 * 1024;
 const GPU_HIGH_MIN_RAM_MB: u64 = 3584; // 3.5 GiB
@@ -105,11 +107,34 @@ impl HardwareSpecs {
     }
 }
 
+/// Recommend the best English-optimized model key for real probed [`HardwareSpecs`], or `None`
+/// on ultra-light CPUs where only the 60 MB multilingual `base-q5` fits comfortably.
+#[must_use]
+pub fn recommend_english_model_for_specs(specs: HardwareSpecs) -> Option<&'static str> {
+    match specs.tier() {
+        HardwareTier::GpuHigh => Some("distil-large-v3"),
+        HardwareTier::GpuMid => Some("distil-medium.en"),
+        HardwareTier::GpuEntry | HardwareTier::CpuFast => Some("small.en-q5"),
+        HardwareTier::CpuLight => None,
+    }
+}
+
+/// Recommend the best multilingual model key for real probed [`HardwareSpecs`].
+#[must_use]
+pub fn recommend_multilingual_model_for_specs(specs: HardwareSpecs) -> &'static str {
+    match specs.tier() {
+        HardwareTier::GpuHigh => "large-v3-turbo",
+        HardwareTier::GpuMid => "large-v3-turbo-q5",
+        HardwareTier::GpuEntry | HardwareTier::CpuFast => "small-q5",
+        HardwareTier::CpuLight => "base-q5",
+    }
+}
+
 /// Recommend the best speech model key for real probed [`HardwareSpecs`] and target language.
 ///
 /// Global cross-platform rule (Windows, macOS, Linux):
-/// - `GpuHigh` (>= 6 GiB VRAM, >= 3.5 GiB RAM): `distil-large-v3` (EN) / `large-v3-turbo` (multi)
-/// - `GpuMid` (3–6 GiB VRAM, e.g. 4 GB laptop GPU or 8 GB Apple Silicon): `large-v3-turbo-q5`
+/// - `GpuHigh` (>= 5.5 GiB reported / 6 GB+ GPU, >= 3.5 GiB RAM): `distil-large-v3` (EN) / `large-v3-turbo` (multi)
+/// - `GpuMid` (3–5.5 GiB VRAM, e.g. 4 GB laptop GPU or 8 GB Apple Silicon): `large-v3-turbo-q5`
 /// - `GpuEntry` (2–3 GiB VRAM): `small.en-q5` (EN) / `small-q5` (multi)
 /// - `CpuFast` (>= 4 threads, AVX2/ARM64, >= 2 GiB RAM, incl. laptop iGPUs): `small.en-q5` / `small-q5`
 /// - `CpuLight` (older non-AVX2 CPU, < 4 threads, or < 2 GiB free RAM): `base-q5`
@@ -157,6 +182,23 @@ mod tests {
 
     #[test]
     fn recommends_models_across_all_pc_spec_tiers() {
+        // High-VRAM discrete GPU (RTX 3060 6 GB Laptop reports ~5968 MiB via DXGI)
+        let rtx_3060_laptop = HardwareSpecs {
+            gpu_vram_mb: 5968,
+            cpu_threads: 16,
+            cpu_fast_simd: true,
+            available_ram_mb: Some(12 * 1024),
+        };
+        assert_eq!(rtx_3060_laptop.tier(), HardwareTier::GpuHigh);
+        assert_eq!(
+            recommend_english_model_for_specs(rtx_3060_laptop),
+            Some("distil-large-v3")
+        );
+        assert_eq!(
+            recommend_multilingual_model_for_specs(rtx_3060_laptop),
+            "large-v3-turbo"
+        );
+
         // High-VRAM discrete GPU (RTX 3060 12 GB) or 16 GB Apple Silicon (~11 GB Metal)
         let high_gpu = HardwareSpecs {
             gpu_vram_mb: 12 * 1024,

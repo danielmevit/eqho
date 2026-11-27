@@ -618,8 +618,26 @@ struct TextDrawCmd<'a> {
     wrapped: bool,
 }
 
+fn panel_pango_font_desc(family: &str, style: &str, font_px: u32) -> String {
+    let pango_family = match family {
+        "bahnschrift" => "Ubuntu, Sans",
+        "arial" => "Arial, Liberation Sans, Sans",
+        "verdana" => "Verdana, DejaVu Sans, Sans",
+        "georgia" => "Georgia, DejaVu Serif, Serif",
+        "consolas" => "Consolas, DejaVu Sans Mono, Monospace",
+        _ => "Sans",
+    };
+    let pango_style = match style {
+        "bold" => " Bold",
+        "italic" => " Italic",
+        "bold-italic" => " Bold Italic",
+        _ => "",
+    };
+    format!("{pango_family}{pango_style} {font_px}px")
+}
+
 /// Measure wrapped UTF-8 text inside `max_width_px` logical pixels using Pango.
-fn measure_wrapped_text(text: &str, font_px: u32, max_width_px: i32) -> (i32, i32) {
+fn measure_wrapped_text(text: &str, font_desc: &str, font_px: u32, max_width_px: i32) -> (i32, i32) {
     let fallback = || {
         let chars = text.chars().count().max(1) as i32;
         let char_w = ((font_px as f32) * 0.56).max(6.0) as i32;
@@ -632,7 +650,7 @@ fn measure_wrapped_text(text: &str, font_px: u32, max_width_px: i32) -> (i32, i3
     let Some(pc) = PangoCairoApi::load() else {
         return fallback();
     };
-    let Ok(font_cstr) = CString::new(format!("Sans {font_px}px")) else {
+    let Ok(font_cstr) = CString::new(font_desc) else {
         return fallback();
     };
     // SAFETY: Draws nothing; uses a 4-byte 1×1 ARGB surface solely to measure Pango layout extents.
@@ -675,6 +693,17 @@ fn draw_pango_texts(
     alpha_mul: f32,
     cmds: &[TextDrawCmd<'_>],
 ) {
+    draw_pango_texts_with_font(phys, logical_w, logical_h, alpha_mul, None, cmds);
+}
+
+fn draw_pango_texts_with_font(
+    phys: &mut PremulCanvas,
+    logical_w: u32,
+    logical_h: u32,
+    alpha_mul: f32,
+    font_desc_override: Option<&str>,
+    cmds: &[TextDrawCmd<'_>],
+) {
     if cmds.is_empty() || phys.width == 0 || phys.height == 0 || logical_w == 0 || logical_h == 0 {
         return;
     }
@@ -704,7 +733,15 @@ fn draw_pango_texts(
             if cmd.text.is_empty() || cmd.rect.width == 0 || cmd.rect.height == 0 {
                 continue;
             }
-            let Ok(font_cstr) = CString::new(format!("Sans {}px", cmd.font_px)) else {
+            let desc_owned;
+            let desc_str = match font_desc_override {
+                Some(custom) => custom,
+                None => {
+                    desc_owned = format!("Sans {}px", cmd.font_px);
+                    &desc_owned
+                }
+            };
+            let Ok(font_cstr) = CString::new(desc_str) else {
                 continue;
             };
             let layout = (pc.pango_cairo_create_layout)(cr);
@@ -1585,8 +1622,10 @@ impl LinuxOverlayState {
 
     fn layout_and_show_panel(&mut self) {
         let font_px = self.panel_font_px();
+        let font_desc =
+            panel_pango_font_desc(&self.config.font_family, &self.config.font_style, font_px);
         let max_text_w = (PANEL_MAX_W as i32 - 2 * PANEL_PADDING_X).max(1);
-        let (text_w, text_h) = measure_wrapped_text(&self.panel_text, font_px, max_text_w);
+        let (text_w, text_h) = measure_wrapped_text(&self.panel_text, &font_desc, font_px, max_text_w);
 
         let panel_w = (text_w + 2 * PANEL_PADDING_X)
             .max(self.pill_rect.width as i32)
@@ -1672,15 +1711,45 @@ impl LinuxOverlayState {
             let text_w = lw.saturating_sub((2 * PANEL_PADDING_X) as u32).max(1);
             let text_h = lh.saturating_sub((2 * PANEL_PADDING_Y) as u32).max(1);
             let font_px = self.panel_font_px();
-            let cmds = [TextDrawCmd {
+            let font_desc =
+                panel_pango_font_desc(&self.config.font_family, &self.config.font_style, font_px);
+            let mut cmds = Vec::with_capacity(2);
+            if opacity < 0.35 {
+                let shadow_alpha = (((0.35 - opacity) / 0.35) * 145.0)
+                    .round()
+                    .clamp(0.0, 145.0) as u8;
+                if shadow_alpha > 0 {
+                    let shadow_color = if dark {
+                        Rgba::new(0x00, 0x00, 0x00, shadow_alpha)
+                    } else {
+                        Rgba::new(0xFF, 0xFF, 0xFF, shadow_alpha)
+                    };
+                    cmds.push(TextDrawCmd {
+                        text: &self.panel_text,
+                        rect: LocalRect::new(PANEL_PADDING_X, PANEL_PADDING_Y + 1, text_w, text_h),
+                        font_px,
+                        color: shadow_color,
+                        align: TextAlign::Left,
+                        wrapped: true,
+                    });
+                }
+            }
+            cmds.push(TextDrawCmd {
                 text: &self.panel_text,
                 rect: LocalRect::new(PANEL_PADDING_X, PANEL_PADDING_Y, text_w, text_h),
                 font_px,
                 color: fg_color,
                 align: TextAlign::Left,
                 wrapped: true,
-            }];
-            draw_pango_texts(&mut self.panel_phys_canvas, lw, lh, fade_f, &cmds);
+            });
+            draw_pango_texts_with_font(
+                &mut self.panel_phys_canvas,
+                lw,
+                lh,
+                fade_f,
+                Some(&font_desc),
+                &cmds,
+            );
         }
 
         // SAFETY: Blits rendered premultiplied-BGRA frame to `panel_win`.
@@ -3283,7 +3352,9 @@ mod tests {
 
     #[test]
     fn measures_wrapped_panel_text_non_empty() {
-        let (w, h) = measure_wrapped_text("Hello Eqho dictation on Linux", 18, 400);
+        let desc = panel_pango_font_desc("consolas", "bold-italic", 18);
+        assert!(desc.contains("Bold Italic 18px"));
+        let (w, h) = measure_wrapped_text("Hello Eqho dictation on Linux", &desc, 18, 400);
         assert!(w > 10 && w <= 400);
         assert!(h >= 12);
     }

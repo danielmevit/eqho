@@ -158,7 +158,12 @@ export component DashboardWindow inherits Window {
     in-out property <int> overlay-pill-scale-pct: 80;
     in-out property <int> overlay-see-through-pct: 5;
     in-out property <int> overlay-panel-see-through-pct: 22;
+    in-out property <int> overlay-panel-blur-index: 1;
     in-out property <int> overlay-font-size: 14;
+    in-out property <int> overlay-font-family-index: 0;
+    in-out property <int> overlay-font-style-index: 0;
+    in-out property <bool> overlay-has-custom-preset: false;
+    in-out property <string> overlay-preset-status: "";
     in property <string> app-version: "0.9.5";
     in-out property <string> active-engine-display: "whisper.cpp 1.8.4";
     in-out property <string> active-driver-display: "Vulkan";
@@ -184,7 +189,13 @@ export component DashboardWindow inherits Window {
     callback overlay-pill-scale-changed(int);
     callback overlay-see-through-changed(int);
     callback overlay-panel-see-through-changed(int);
+    callback overlay-panel-blur-changed(int);
     callback overlay-font-size-changed(int);
+    callback overlay-font-family-selected(int);
+    callback overlay-font-style-changed(int);
+    callback overlay-apply-preset(string);
+    callback overlay-save-custom-preset();
+    callback overlay-reset-defaults();
     callback start-onboarding();
 
     // Onboarding properties & callbacks
@@ -468,7 +479,12 @@ export component DashboardWindow inherits Window {
         overlay-pill-scale-pct <=> root.overlay-pill-scale-pct;
         overlay-see-through-pct <=> root.overlay-see-through-pct;
         overlay-panel-see-through-pct <=> root.overlay-panel-see-through-pct;
+        overlay-panel-blur-index <=> root.overlay-panel-blur-index;
         overlay-font-size <=> root.overlay-font-size;
+        overlay-font-family-index <=> root.overlay-font-family-index;
+        overlay-font-style-index <=> root.overlay-font-style-index;
+        overlay-has-custom-preset <=> root.overlay-has-custom-preset;
+        overlay-preset-status <=> root.overlay-preset-status;
         app-version: root.app-version;
         active-engine-display: root.active-engine-display;
         active-driver-display: root.active-driver-display;
@@ -504,7 +520,13 @@ export component DashboardWindow inherits Window {
         overlay-pill-scale-changed(v) => { root.overlay-pill-scale-changed(v); }
         overlay-see-through-changed(v) => { root.overlay-see-through-changed(v); }
         overlay-panel-see-through-changed(v) => { root.overlay-panel-see-through-changed(v); }
+        overlay-panel-blur-changed(i) => { root.overlay-panel-blur-changed(i); }
         overlay-font-size-changed(v) => { root.overlay-font-size-changed(v); }
+        overlay-font-family-selected(i) => { root.overlay-font-family-selected(i); }
+        overlay-font-style-changed(i) => { root.overlay-font-style-changed(i); }
+        overlay-apply-preset(k) => { root.overlay-apply-preset(k); }
+        overlay-save-custom-preset => { root.overlay-save-custom-preset(); }
+        overlay-reset-defaults => { root.overlay-reset-defaults(); }
         open-url(u) => { root.open-url(u); }
         buy-clicked => { root.buy-clicked(); }
         start-onboarding => { root.start-onboarding(); }

@@ -64,6 +64,7 @@ struct CoordinatorState {
     finishing: bool,
     target_hwnd: WindowHandle,
     target_was_non_paste: bool,
+    focus_lost_mid_session: bool,
     last_external_target: Option<(WindowHandle, Option<String>)>,
     pending_text: Vec<String>,
     live_committed: Vec<String>,
@@ -85,6 +86,7 @@ impl Default for CoordinatorState {
             finishing: false,
             target_hwnd: WindowHandle::NONE,
             target_was_non_paste: false,
+            focus_lost_mid_session: false,
             last_external_target: None,
             pending_text: Vec::new(),
             live_committed: Vec::new(),
@@ -353,7 +355,7 @@ impl DictationCoordinator {
             (text, hwnd, label)
         };
 
-        match self.inner.inject_text_chunk(&text, target_hwnd, &settings) {
+        match self.inner.inject_text_chunk(&text, target_hwnd, &settings, true) {
             Ok(()) => {
                 {
                     let mut st = lock_unpoisoned(&self.inner.state);
@@ -406,6 +408,7 @@ impl CoordinatorInner {
             let non_paste = fg.is_valid() && self.platform.is_non_paste_target(fg);
             st.target_hwnd = fg;
             st.target_was_non_paste = non_paste;
+            st.focus_lost_mid_session = false;
             if fg.is_valid() && !non_paste {
                 let proc_name = self.platform.get_window_process_name(fg);
                 let label = friendly_app_label(proc_name.as_deref());
@@ -939,7 +942,12 @@ impl CoordinatorInner {
                 return;
             }
             st.pending_text.push(text);
-            if is_live && st.running && !st.finishing && !st.target_was_non_paste {
+            if is_live
+                && st.running
+                && !st.finishing
+                && !st.target_was_non_paste
+                && !st.focus_lost_mid_session
+            {
                 let to_flush = std::mem::take(&mut st.pending_text);
                 let prior = st.live_committed.clone();
                 let target_hwnd = st.target_hwnd;
@@ -976,7 +984,7 @@ impl CoordinatorInner {
             st.recovery.store(&combined_so_far);
         }
 
-        match self.inject_text_chunk(&chunk_to_inject, target_hwnd, settings) {
+        match self.inject_text_chunk(&chunk_to_inject, target_hwnd, settings, false) {
             Ok(()) => {
                 let (full_display, finishing) = {
                     let mut st = lock_unpoisoned(&self.state);
@@ -995,30 +1003,39 @@ impl CoordinatorInner {
                 }
             }
             Err(err) => {
-                let recovery_text = {
+                let (unpasted_text, prev_target_label, full_display) = {
                     let mut st = lock_unpoisoned(&self.state);
                     if st.active_session != sid {
                         return;
                     }
+                    if matches!(err, InjectError::FocusRestoreFailed) {
+                        st.focus_lost_mid_session = true;
+                    }
                     // Restore un-injected phrases at the front of pending_text so order is preserved.
                     st.pending_text.splice(0..0, to_flush);
-                    let live_text = st.live_committed.concat();
+                    // Store ONLY the unpasted tail in `recovery` so Paste-to-Previous / Copy
+                    // never re-pastes phrases already inserted earlier in this Live session.
                     let pending_fmt = format_phrase_parts(&st.pending_text, settings);
-                    let combined = if live_text.is_empty() {
-                        pending_fmt
-                    } else if pending_fmt.is_empty() {
-                        live_text
+                    let unpasted = if pending_fmt.is_empty() {
+                        String::new()
                     } else {
-                        let cont = prefix_for_continuation(&st.live_committed, &pending_fmt);
-                        format!("{live_text}{cont}")
+                        prefix_for_continuation(&st.live_committed, &pending_fmt)
                     };
-                    if !combined.is_empty() {
-                        st.recovery.store(&combined);
+                    if !unpasted.is_empty() {
+                        st.recovery.store(unpasted.trim_start());
                     }
-                    combined
+                    let prev_label = st.last_external_target.as_ref().map(|(_, lbl)| {
+                        lbl.clone().unwrap_or_else(|| "previous app".to_owned())
+                    });
+                    let full = combine_display_text(&st.live_committed, &st.pending_text);
+                    (unpasted.trim_start().to_owned(), prev_label, full)
                 };
-                if !recovery_text.is_empty() {
-                    self.ui.on_recovery_available(Some(&recovery_text));
+                self.ui.update_overlay_text(&full_display);
+                if !unpasted_text.is_empty() {
+                    self.ui.on_recovery_available_with_target(
+                        Some(&unpasted_text),
+                        prev_target_label.as_deref(),
+                    );
                 }
                 match err {
                     InjectError::FocusRestoreFailed => {
@@ -1145,6 +1162,7 @@ impl CoordinatorInner {
         text: &str,
         target_hwnd: WindowHandle,
         settings: &Settings,
+        allow_focus_steal: bool,
     ) -> Result<(), InjectError> {
         let mut use_clipboard = settings.auto_paste;
         if target_hwnd.is_valid()
@@ -1173,14 +1191,20 @@ impl CoordinatorInner {
             need_settle = true;
         }
 
-        // Verified focus restore.
+        // Focus check: during normal dictation, if the user explicitly clicked away to a different
+        // window mid-session, never forcibly steal focus back — return `FocusRestoreFailed` so the
+        // floating Recovery Card lets them one-click `Paste to <App>` or `Copy`. Only restore
+        // foreground focus when `allow_focus_steal` is explicitly requested (Paste-to-Previous click).
         if target_hwnd.is_valid() {
             let already_focused = self.platform.get_foreground_window() == target_hwnd;
-            let restored = self.platform.restore_foreground_window(target_hwnd);
-            if !restored && self.platform.get_foreground_window() != target_hwnd {
-                return Err(InjectError::FocusRestoreFailed);
-            }
             if !already_focused {
+                if !allow_focus_steal {
+                    return Err(InjectError::FocusRestoreFailed);
+                }
+                let restored = self.platform.restore_foreground_window(target_hwnd);
+                if !restored && self.platform.get_foreground_window() != target_hwnd {
+                    return Err(InjectError::FocusRestoreFailed);
+                }
                 need_settle = true;
             }
         }
@@ -1213,6 +1237,7 @@ impl CoordinatorInner {
             pending_parts,
             target_hwnd,
             target_was_non_paste,
+            focus_lost_mid_session,
             prev_target_label,
             duration_s,
         ) = {
@@ -1228,8 +1253,18 @@ impl CoordinatorInner {
                 lbl.clone().unwrap_or_else(|| "previous app".to_owned())
             });
             let non_paste = st.target_was_non_paste;
+            let focus_lost = st.focus_lost_mid_session;
             st.target_was_non_paste = false;
-            (live, pending, st.target_hwnd, non_paste, prev_label, dur)
+            st.focus_lost_mid_session = false;
+            (
+                live,
+                pending,
+                st.target_hwnd,
+                non_paste,
+                focus_lost,
+                prev_label,
+                dur,
+            )
         };
 
         let pending_formatted = format_phrase_parts(&pending_parts, &settings);
@@ -1246,28 +1281,42 @@ impl CoordinatorInner {
         };
         let combined_text = format!("{live_text}{pending_chunk}");
 
-        // Always store full session text in LastDictationBuffer BEFORE attempting injection.
-        lock_unpoisoned(&self.state).recovery.store(&combined_text);
+        // Store only the unpasted text in recovery when Live mode already pasted earlier phrases,
+        // or the full dictation when nothing was pasted yet, so Paste-to-Previous / Copy never
+        // duplicates text already inserted into the user's app.
+        let unpasted_for_recovery = if live_text.is_empty() {
+            combined_text.clone()
+        } else {
+            pending_chunk.trim_start().to_owned()
+        };
+        lock_unpoisoned(&self.state)
+            .recovery
+            .store(if unpasted_for_recovery.is_empty() {
+                &combined_text
+            } else {
+                &unpasted_for_recovery
+            });
 
         let mut paste_failed = false;
         let mut committed_text = live_text;
         if !pending_chunk.is_empty() {
-            if target_was_non_paste {
+            let skip_auto_paste = target_was_non_paste || focus_lost_mid_session;
+            if skip_auto_paste {
                 paste_failed = true;
                 committed_text = combined_text;
                 self.ui.on_recovery_available_with_target(
-                    Some(&committed_text),
+                    Some(&unpasted_for_recovery),
                     prev_target_label.as_deref(),
                 );
                 let msg = match prev_target_label.as_deref() {
                     Some(app) => format!(
-                        "No text box focused — saved in Eqho. Click Paste to {app} or Copy."
+                        "Window lost focus — saved in Eqho. Click Paste to {app} or Copy."
                     ),
                     None => "No text box focused — saved in Eqho (Copy Last Dictation).".to_owned(),
                 };
                 self.ui.notify(&msg);
             } else {
-                match self.inject_text_chunk(&pending_chunk, target_hwnd, &settings) {
+                match self.inject_text_chunk(&pending_chunk, target_hwnd, &settings, false) {
                     Ok(()) => {
                         lock_unpoisoned(&self.state).last_injected = pending_chunk.clone();
                         self.ui.on_dictation_committed(&pending_chunk);
@@ -1277,7 +1326,7 @@ impl CoordinatorInner {
                         paste_failed = true;
                         committed_text = combined_text;
                         self.ui.on_recovery_available_with_target(
-                            Some(&committed_text),
+                            Some(&unpasted_for_recovery),
                             prev_target_label.as_deref(),
                         );
                         self.ui.notify(FOCUS_RESTORE_FAILED_TEXT);
@@ -1286,7 +1335,7 @@ impl CoordinatorInner {
                         paste_failed = true;
                         committed_text = combined_text;
                         self.ui.on_recovery_available_with_target(
-                            Some(&committed_text),
+                            Some(&unpasted_for_recovery),
                             prev_target_label.as_deref(),
                         );
                         self.ui.notify(&format!(
@@ -2121,8 +2170,8 @@ mod tests {
 
         // Volume restored to 80%
         assert!(actions.contains(&Action::SetVolume(80)));
-        // Focus restored, private clipboard set, paste sent, previous clipboard restored
-        assert!(actions.contains(&Action::RestoreFocus(42, true)));
+        // Target window stayed focused (no redundant focus-steal), private clipboard set, paste sent, previous clipboard restored
+        assert!(!actions.iter().any(|a| matches!(a, Action::RestoreFocus(_, _))));
         assert!(actions.contains(&Action::SetClipboard {
             text: "Hello world".to_owned(),
             private: true,
@@ -2178,6 +2227,99 @@ mod tests {
             lock_unpoisoned(&ui.notifications)
                 .iter()
                 .any(|m| m.contains("Couldn't return focus"))
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn live_mode_mid_session_click_away_triggers_recovery_for_unpasted_tail_only() {
+        let dir = temp_dir("live_click_away");
+        let settings = Settings {
+            delivery_mode: "live".to_owned(),
+            auto_paste: true,
+            ..Settings::default()
+        };
+        // Note: `restore_succeeds` remains `true` (just like real Windows when user clicks away)!
+        let platform = Arc::new(FakePlatform::new(WindowHandle(42)));
+        let ui = Arc::new(RecordingUi::new());
+        let speech = FakeSpeech::with_responses(vec![
+            Ok(vec![seg("first live sentence")]),
+            Ok(vec![seg("second unpasted tail")]),
+        ]);
+        let hist = TranscriptHistory::with_default_cap(dir.join("history.jsonl"));
+        let coord = DictationCoordinator::new(
+            settings,
+            dir.join("settings.json"),
+            hist,
+            platform.clone(),
+            Box::new(speech),
+            ui.clone(),
+        );
+
+        coord.activate();
+        thread::sleep(Duration::from_millis(40));
+        // Phrase 1 completes while target window 42 is focused -> pasted live.
+        feed_speech_then_silence(&platform, 2, 3);
+        thread::sleep(Duration::from_millis(120));
+
+        // User explicitly clicks away to another window mid-Live-session.
+        *lock_unpoisoned(&platform.foreground) = WindowHandle(999);
+        feed_speech_then_silence(&platform, 2, 3);
+        thread::sleep(Duration::from_millis(120));
+
+        coord.deactivate();
+        wait_until_not_finishing(&coord);
+
+        // First sentence pasted; second sentence was NOT force-pasted into 42 or 999.
+        let pasted_texts: Vec<String> = platform
+            .actions()
+            .into_iter()
+            .filter_map(|a| match a {
+                Action::SetClipboard { text, private: true } => Some(text),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(pasted_texts, vec!["First live sentence".to_owned()]);
+        assert!(
+            !platform
+                .actions()
+                .iter()
+                .any(|a| matches!(a, Action::RestoreFocus(_, _))),
+            "automatic live delivery must not steal focus back after user clicked away"
+        );
+
+        // Recovery holds ONLY the unpasted tail (no duplicate of first sentence), while History keeps the full text.
+        assert_eq!(
+            coord.last_dictation().as_deref(),
+            Some("Second unpasted tail")
+        );
+        assert!(
+            lock_unpoisoned(&ui.recovery_events)
+                .contains(&Some("Second unpasted tail".to_owned()))
+        );
+        let entries = coord.inner.history.read_all();
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].paste_failed);
+        assert_eq!(entries[0].text, "First live sentence Second unpasted tail");
+
+        // Explicit user click on `Paste to <App>` restores focus to 42 and pastes ONLY the tail.
+        assert!(coord.paste_recovery_to_previous_window().is_ok());
+        let actions_after = platform.actions();
+        assert!(actions_after.contains(&Action::RestoreFocus(42, true)));
+        let pasted_after: Vec<String> = actions_after
+            .into_iter()
+            .filter_map(|a| match a {
+                Action::SetClipboard { text, private: true } => Some(text),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            pasted_after,
+            vec![
+                "First live sentence".to_owned(),
+                "Second unpasted tail".to_owned(),
+            ]
         );
 
         let _ = fs::remove_dir_all(&dir);

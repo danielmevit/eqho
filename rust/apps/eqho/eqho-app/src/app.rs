@@ -40,10 +40,11 @@ use eqho_ui::{
     delivery_mode_index, delivery_mode_key, engine_backend_key, filter_history_entries,
     format_active_driver_display, history_trash_days_value, language_code_for_index,
     language_index_for_code, language_warning_text_for_specs, model_short_name,
-    onboarding_model_copy_for_key, overlay_monitor_key, overlay_position_key,
-    parse_paste_rules_text, parse_replacements_text, render_flag_rgba, split_model_cards,
-    status_summary_title, theme_mode_key, ui_scale_value, ui_window_size_for_scale, ui_zoom_factor,
-    volume_duck_key, wordmark_image,
+    onboarding_model_copy_for_key, overlay_font_family_key, overlay_font_style_key,
+    overlay_monitor_key, overlay_panel_blur_key, overlay_position_key, parse_paste_rules_text,
+    parse_replacements_text, render_flag_rgba, split_model_cards, status_summary_title,
+    sync_overlay_settings_to_window, theme_mode_key, ui_scale_value, ui_window_size_for_scale,
+    ui_zoom_factor, volume_duck_key, wordmark_image,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
@@ -2580,12 +2581,137 @@ fn wire_dashboard_callbacks(ctrl: &Rc<RefCell<AppController>>) {
     }
     {
         let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_overlay_panel_blur_changed(move |idx| {
+            let c = ctrl_w.borrow();
+            c.settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .overlay_panel_blur = overlay_panel_blur_key(idx).to_owned();
+            if let Some(d) = dash_w.upgrade() {
+                d.set_overlay_preset_status("".into());
+            }
+            c.save_settings(false);
+            c.apply_theme_and_overlay();
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
         dash.on_overlay_font_size_changed(move |sz| {
             let c = ctrl_w.borrow();
             c.settings
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .overlay_font_size = sz;
+            if let Some(d) = dash_w.upgrade() {
+                d.set_overlay_preset_status("".into());
+            }
+            c.save_settings(false);
+            c.apply_theme_and_overlay();
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_overlay_font_family_selected(move |idx| {
+            let c = ctrl_w.borrow();
+            c.settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .overlay_font_family = overlay_font_family_key(idx).to_owned();
+            if let Some(d) = dash_w.upgrade() {
+                d.set_overlay_preset_status("".into());
+            }
+            c.save_settings(false);
+            c.apply_theme_and_overlay();
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_overlay_font_style_changed(move |idx| {
+            let c = ctrl_w.borrow();
+            c.settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .overlay_font_style = overlay_font_style_key(idx).to_owned();
+            if let Some(d) = dash_w.upgrade() {
+                d.set_overlay_preset_status("".into());
+            }
+            c.save_settings(false);
+            c.apply_theme_and_overlay();
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_overlay_apply_preset(move |key| {
+            let c = ctrl_w.borrow();
+            let (applied, status_msg, updated) = {
+                let mut s = c.settings.lock().unwrap_or_else(|e| e.into_inner());
+                let key_str = key.as_str();
+                if key_str == "custom" {
+                    if let Some(custom) = s.overlay_custom_preset.clone() {
+                        s.apply_overlay_preset(&custom);
+                        (true, "Applied My Preset", s.clone())
+                    } else {
+                        (false, "", s.clone())
+                    }
+                } else if s.apply_builtin_overlay_preset(key_str) {
+                    let msg = match key_str {
+                        "default" => "Applied Default",
+                        "glass" => "Applied Glass",
+                        "subtitles" => "Applied Subtitles",
+                        "compact" => "Applied Compact",
+                        _ => "Preset applied",
+                    };
+                    (true, msg, s.clone())
+                } else {
+                    (false, "", s.clone())
+                }
+            };
+            if applied {
+                if let Some(d) = dash_w.upgrade() {
+                    sync_overlay_settings_to_window(&d, &updated);
+                    d.set_overlay_preset_status(status_msg.into());
+                }
+                c.save_settings(false);
+                c.apply_theme_and_overlay();
+            }
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_overlay_save_custom_preset(move || {
+            let c = ctrl_w.borrow();
+            let updated = {
+                let mut s = c.settings.lock().unwrap_or_else(|e| e.into_inner());
+                s.save_custom_overlay_preset();
+                s.clone()
+            };
+            if let Some(d) = dash_w.upgrade() {
+                sync_overlay_settings_to_window(&d, &updated);
+                d.set_overlay_preset_status("Preset saved".into());
+            }
+            c.save_settings(false);
+        });
+    }
+    {
+        let ctrl_w = Rc::clone(ctrl);
+        let dash_w = dash.as_weak();
+        dash.on_overlay_reset_defaults(move || {
+            let c = ctrl_w.borrow();
+            let updated = {
+                let mut s = c.settings.lock().unwrap_or_else(|e| e.into_inner());
+                s.reset_overlay_defaults();
+                s.clone()
+            };
+            if let Some(d) = dash_w.upgrade() {
+                sync_overlay_settings_to_window(&d, &updated);
+                d.set_overlay_preset_status("Reset to default".into());
+            }
             c.save_settings(false);
             c.apply_theme_and_overlay();
         });

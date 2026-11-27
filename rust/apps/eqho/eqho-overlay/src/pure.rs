@@ -37,7 +37,10 @@ pub struct OverlayConfig {
     pub pill_scale: f64,
     pub pill_opacity: f64,
     pub panel_opacity: f64,
+    pub panel_blur: String,
     pub font_size: i32,
+    pub font_family: String,
+    pub font_style: String,
     pub show_level: bool,
     pub dark_theme: bool,
     pub controls_enabled: bool,
@@ -57,7 +60,10 @@ impl Default for OverlayConfig {
             pill_scale: 0.8,
             pill_opacity: 0.95,
             panel_opacity: 0.78,
+            panel_blur: "soft".to_owned(),
             font_size: 14,
+            font_family: "segoe".to_owned(),
+            font_style: "regular".to_owned(),
             show_level: true,
             dark_theme: true,
             controls_enabled: true,
@@ -106,7 +112,19 @@ impl OverlayConfig {
             pill_scale,
             pill_opacity,
             panel_opacity,
+            panel_blur: eqho_core::settings::normalize_overlay_panel_blur(
+                &settings.overlay_panel_blur,
+            )
+            .to_owned(),
             font_size: settings.overlay_font_size.clamp(10, 28),
+            font_family: eqho_core::settings::normalize_overlay_font_family(
+                &settings.overlay_font_family,
+            )
+            .to_owned(),
+            font_style: eqho_core::settings::normalize_overlay_font_style(
+                &settings.overlay_font_style,
+            )
+            .to_owned(),
             show_level: settings.overlay_show_level,
             dark_theme: resolved_dark,
             controls_enabled: settings.overlay_controls_enabled,
@@ -571,7 +589,10 @@ mod tests {
         assert!((cfg.pill_scale - 1.4).abs() < 1e-9);
         assert!((cfg.pill_opacity - 0.3).abs() < 1e-9);
         assert!((cfg.panel_opacity - 1.0).abs() < 1e-9);
+        assert_eq!(cfg.panel_blur, "soft");
         assert_eq!(cfg.font_size, 28);
+        assert_eq!(cfg.font_family, "segoe");
+        assert_eq!(cfg.font_style, "regular");
         assert!(!cfg.show_level);
         assert!(!cfg.dark_theme);
         assert_eq!(cfg.monitor, "active");
